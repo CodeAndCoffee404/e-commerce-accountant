@@ -22,16 +22,16 @@
 3. Framework Preset определится как **Next.js**. Ничего не меняйте, нажмите **Deploy**.
 4. **Первый деплой упадёт** — переменных окружения ещё нет. Это ожидаемо, идём дальше.
 
-После импорта запишите два адреса, они понадобятся в шаге 2:
+**Готово.** Оба окружения развёрнуты, адреса такие:
 
 ```
-production: https://<project>.vercel.app
-preview:    https://<project>-git-dev-<team>.vercel.app
+production  https://e-commerce-accountant.vercel.app
+preview     https://e-commerce-accountant-git-dev-code-and-coffee1.vercel.app
 ```
 
-Точный preview-адрес появится после первого деплоя ветки `dev`
-(**Deployments** → фильтр по ветке `dev`). Он стабильный и не меняется между деплоями —
-именно поэтому мы работаем через ветку, а не через случайные preview-ссылки.
+Это **стабильные алиасы**, они не меняются между деплоями. Ссылка с хешем вида
+`e-commerce-accountant-bxxnw5cjz-...` указывает на один конкретный деплой и
+после следующего пуша станет неактуальной — для настройки OAuth она не годится.
 
 ### 1.2. База данных Neon — прод
 
@@ -116,8 +116,8 @@ Vercel добавит `BLOB_READ_WRITE_TOKEN`.
 
      ```
      http://localhost:3000/api/auth/callback/google
-     https://<project>-git-dev-<team>.vercel.app/api/auth/callback/google
-     https://<project>.vercel.app/api/auth/callback/google
+     https://e-commerce-accountant-git-dev-code-and-coffee1.vercel.app/api/auth/callback/google
+     https://e-commerce-accountant.vercel.app/api/auth/callback/google
      ```
 
      Адрес должен совпадать посимвольно, иначе Google вернёт `redirect_uri_mismatch`.
@@ -136,7 +136,6 @@ Vercel добавит `BLOB_READ_WRITE_TOKEN`.
 | `DATABASE_URL` от `ea-dev` | Vercel → Storage → `ea-dev` → **Connect** / `.env.local` кнопка | накатить миграции и проверить подключение локально |
 | `GOOGLE_CLIENT_ID` | шаг 2.4 | настроить вход |
 | `GOOGLE_CLIENT_SECRET` | шаг 2.4 | настроить вход |
-| preview- и production-адреса | шаг 1.1 | проверить деплой |
 
 Prod-строку подключения присылать не нужно — она живёт только в Vercel.
 Blob-токен тоже не нужен: он понадобится на этапе 1, к тому моменту Vercel уже подставит его сам.
