@@ -15,6 +15,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 
+import { UserMenu } from "@/components/layout/user-menu";
+import type { CurrentUser } from "@/lib/auth/session";
 import { NAV_ITEMS, type NavItem } from "@/lib/navigation";
 import { useUiStore } from "@/stores/ui-store-provider";
 
@@ -27,7 +29,7 @@ const ICONS: Record<NavItem["icon"], ComponentType> = {
   SettingOutlined,
 };
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, user }: { children: ReactNode; user: CurrentUser }) {
   const pathname = usePathname();
   const collapsed = useUiStore((store) => store.sidebarCollapsed);
   const setCollapsed = useUiStore((store) => store.setSidebarCollapsed);
@@ -97,14 +99,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setCollapsed(!collapsed)}
           />
 
-          <Tooltip title={themeMode === "dark" ? "Switch to light" : "Switch to dark"}>
-            <Button
-              type="text"
-              aria-label="Toggle colour theme"
-              icon={themeMode === "dark" ? <SunOutlined /> : <MoonOutlined />}
-              onClick={toggleTheme}
-            />
-          </Tooltip>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Tooltip title={themeMode === "dark" ? "Switch to light" : "Switch to dark"}>
+              <Button
+                type="text"
+                aria-label="Toggle colour theme"
+                icon={themeMode === "dark" ? <SunOutlined /> : <MoonOutlined />}
+                onClick={toggleTheme}
+              />
+            </Tooltip>
+
+            <UserMenu user={user} />
+          </div>
         </Header>
 
         <Content style={{ padding: 24 }}>{children}</Content>

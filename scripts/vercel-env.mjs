@@ -55,10 +55,15 @@ function parseSecrets(markdown) {
     const value = cells[3].replaceAll("`", "");
 
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) continue;
-    if (!ENVIRONMENTS.includes(environment)) continue;
+    if (environment !== "all" && !ENVIRONMENTS.includes(environment)) continue;
+    // `<…>` marks a value the author still has to fill in.
     if (!value || value.startsWith("<")) continue;
 
-    rows.push({ name, environment, value });
+    // `all` for values that are the same everywhere, so one row cannot drift
+    // from its siblings.
+    const targets = environment === "all" ? ENVIRONMENTS : [environment];
+
+    for (const target of targets) rows.push({ name, environment: target, value });
   }
 
   return rows;
