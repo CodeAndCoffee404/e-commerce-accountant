@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    :root {
+      font-family: Arial, "Helvetica Neue", sans-serif;
+      color: #202124;
+      background: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #ffffff;
+    }
+
+    body {
+      padding: 20px 24px 24px;
+      font-size: 14px;
+    }
+
+    .content {
+      width: 100%;
+    }
+
+    .description {
+      margin: 0 0 18px;
+      color: #5f6368;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: #202124;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 34px 8px 10px;
+      color: #202124;
+      background: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    select:hover:not(:disabled) {
+      border-color: #9aa0a6;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 1px #1a73e8;
+    }
+
+    select:disabled {
+      color: #80868b;
+      background: #f8f9fa;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    button,
+    .button-link {
+      min-height: 36px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font: inherit;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      color: #ffffff;
+      background: #1a73e8;
+    }
+
+    .primary:hover:not(:disabled) {
+      background: #1765cc;
+    }
+
+    .progress {
+      display: none;
+      align-items: center;
+      margin-top: 16px;
+      padding: 12px 14px;
+      color: #174ea6;
+      background: #e8f0fe;
+      border-radius: 6px;
+    }
+
+    .spinner {
+      display: inline-block;
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      margin-right: 9px;
+      border: 2px solid rgba(26, 115, 232, 0.25);
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .result {
+      display: none;
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 6px;
+      line-height: 1.5;
+    }
+
+    .result.success {
+      color: #137333;
+      background: #e6f4ea;
+      border: 1px solid #ceead6;
+    }
+
+    .result.error {
+      color: #a50e0e;
+      background: #fce8e6;
+      border: 1px solid #f6aea9;
+    }
+
+    .result-title {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .result-message {
+      margin: 0;
+      white-space: pre-line;
+    }
+
+    .result-row {
+      margin-top: 5px;
+    }
+
+    .result-label {
+      font-weight: 600;
+    }
+
+    .result-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+
+      .actions,
+      .result-actions {
+        flex-direction: column;
+      }
+
+      button,
+      .button-link {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="content">
+    <p class="description">
+      Select a report type and period. Generated Google Sheets will be placed
+      in a separate report folder.
+    </p>
+
+    <div class="form-group">
+      <label for="reportType">Report type</label>
+      <select id="reportType" disabled>
+        <option value="">Loading report types…</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="period">Period</label>
+      <select id="period" disabled>
+        <option value="">Loading periods…</option>
+      </select>
+    </div>
+
+    <div class="actions">
+      <button id="generateButton" class="primary" type="button" disabled>
+        Generate report
+      </button>
+    </div>
+
+    <div id="progress" class="progress" aria-live="polite">
+      <span class="spinner"></span>
+      <span id="progressText">Generating report…</span>
+    </div>
+
+    <div id="result" class="result" aria-live="polite"></div>
+  </main>
+
+  <script>
+    const reportTypeSelect = document.getElementById("reportType");
+    const periodSelect = document.getElementById("period");
+    const generateButton = document.getElementById("generateButton");
+    const progress = document.getElementById("progress");
+    const progressText = document.getElementById("progressText");
+    const result = document.getElementById("result");
+
+    let processing = false;
+
+    document.addEventListener("DOMContentLoaded", loadGeneratorOptions);
+    reportTypeSelect.addEventListener("change", updateGenerateButton);
+    periodSelect.addEventListener("change", updateGenerateButton);
+    generateButton.addEventListener("click", generateReport);
+
+    function loadGeneratorOptions() {
+      clearResult();
+
+      google.script.run
+        .withSuccessHandler(handleOptionsLoaded)
+        .withFailureHandler(handleOptionsFailure)
+        .getReportGeneratorOptions();
+    }
+
+    function handleOptionsLoaded(response) {
+      if (!response || response.success !== true) {
+        handleOptionsFailure(
+          new Error("The report generator options could not be loaded.")
+        );
+        return;
+      }
+
+      populateSelect(
+        reportTypeSelect,
+        response.reportTypes,
+        "Select a report type",
+        function (item) {
+          return item.value;
+        },
+        function (item) {
+          return item.label;
+        }
+      );
+
+      populateSelect(
+        periodSelect,
+        response.periods,
+        "Select a period",
+        function (item) {
+          return item;
+        },
+        function (item) {
+          return item;
+        }
+      );
+
+      reportTypeSelect.disabled = response.reportTypes.length === 0;
+      periodSelect.disabled = response.periods.length === 0;
+
+      if (response.reportTypes.length === 1) {
+        reportTypeSelect.value = response.reportTypes[0].value;
+      }
+
+      updateGenerateButton();
+
+      if (response.periods.length === 0) {
+        showError("No periods were found in the Raw report database.");
+      }
+    }
+
+    function handleOptionsFailure(error) {
+      reportTypeSelect.innerHTML =
+        '<option value="">Unable to load report types</option>';
+
+      periodSelect.innerHTML =
+        '<option value="">Unable to load periods</option>';
+
+      reportTypeSelect.disabled = true;
+      periodSelect.disabled = true;
+      generateButton.disabled = true;
+
+      showError(
+        getErrorMessage(
+          error,
+          "The report generator options could not be loaded."
+        )
+      );
+    }
+
+    function generateReport() {
+      if (processing) {
+        return;
+      }
+
+      const reportType = reportTypeSelect.value;
+      const period = periodSelect.value;
+
+      if (!reportType) {
+        showError("Please select a report type.");
+        return;
+      }
+
+      if (!period) {
+        showError("Please select a period.");
+        return;
+      }
+
+      clearResult();
+      setProcessing(true);
+
+      progressText.textContent =
+        "Reading the source report and creating Google Sheets…";
+
+      google.script.run
+        .withSuccessHandler(handleGenerationSuccess)
+        .withFailureHandler(handleGenerationFailure)
+        .generateSelectedReport({
+          reportType: reportType,
+          period: period
+        });
+    }
+
+    function handleGenerationSuccess(response) {
+      setProcessing(false);
+
+      if (!response || response.success !== true) {
+        showError(
+          response && response.message
+            ? response.message
+            : "The report could not be generated."
+        );
+        return;
+      }
+
+      renderSuccess(response);
+    }
+
+    function handleGenerationFailure(error) {
+      setProcessing(false);
+
+      showError(
+        getErrorMessage(
+          error,
+          "An unexpected error occurred while generating the report."
+        )
+      );
+    }
+
+    function renderSuccess(response) {
+      clearResult();
+      result.className = "result success";
+
+      const title = document.createElement("h2");
+      title.className = "result-title";
+      title.textContent = "Report successfully created";
+      result.appendChild(title);
+
+      appendResultRow("Report type", response.reportType);
+      appendResultRow("Period", response.period);
+      appendResultRow("Created files", String(response.createdFiles));
+      appendResultRow("Processed rows", String(response.processedRows));
+      appendResultRow(
+        "Skipped rows without currency",
+        String(response.skippedRows)
+      );
+
+      const actions = document.createElement("div");
+      actions.className = "result-actions";
+
+      const folderLink = document.createElement("a");
+      folderLink.className = "button-link primary";
+      folderLink.href = response.folderUrl;
+      folderLink.target = "_blank";
+      folderLink.rel = "noopener noreferrer";
+      folderLink.textContent = "Open report folder";
+
+      actions.appendChild(folderLink);
+      result.appendChild(actions);
+      result.style.display = "block";
+    }
+
+    function appendResultRow(label, value) {
+      const row = document.createElement("div");
+      row.className = "result-row";
+
+      const labelElement = document.createElement("span");
+      labelElement.className = "result-label";
+      labelElement.textContent = label + ": ";
+
+      const valueElement = document.createElement("span");
+      valueElement.textContent = value || "—";
+
+      row.appendChild(labelElement);
+      row.appendChild(valueElement);
+      result.appendChild(row);
+    }
+
+    function showError(message) {
+      clearResult();
+      result.className = "result error";
+
+      const title = document.createElement("h2");
+      title.className = "result-title";
+      title.textContent = "Report not generated";
+
+      const paragraph = document.createElement("p");
+      paragraph.className = "result-message";
+      paragraph.textContent = message;
+
+      result.appendChild(title);
+      result.appendChild(paragraph);
+      result.style.display = "block";
+    }
+
+    function populateSelect(
+      select,
+      items,
+      placeholder,
+      getValue,
+      getLabel
+    ) {
+      select.innerHTML = "";
+
+      const placeholderOption = document.createElement("option");
+      placeholderOption.value = "";
+      placeholderOption.textContent = placeholder;
+      select.appendChild(placeholderOption);
+
+      items.forEach(function (item) {
+        const option = document.createElement("option");
+        option.value = getValue(item);
+        option.textContent = getLabel(item);
+        select.appendChild(option);
+      });
+    }
+
+    function updateGenerateButton() {
+      generateButton.disabled =
+        processing ||
+        !reportTypeSelect.value ||
+        !periodSelect.value;
+    }
+
+    function setProcessing(value) {
+      processing = value;
+      progress.style.display = value ? "flex" : "none";
+      reportTypeSelect.disabled = value;
+      periodSelect.disabled = value;
+      updateGenerateButton();
+    }
+
+    function clearResult() {
+      result.innerHTML = "";
+      result.className = "result";
+      result.style.display = "none";
+    }
+
+    function getErrorMessage(error, fallback) {
+      if (
+        error &&
+        typeof error.message === "string" &&
+        error.message.trim()
+      ) {
+        return error.message.trim();
+      }
+
+      if (typeof error === "string" && error.trim()) {
+        return error.trim();
+      }
+
+      return fallback;
+    }
+  </script>
+</body>
+</html>

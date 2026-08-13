@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    :root {
+      font-family: Arial, "Helvetica Neue", sans-serif;
+      color: #202124;
+      background: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #ffffff;
+    }
+
+    body {
+      padding: 20px 24px 24px;
+      font-size: 14px;
+    }
+
+    .content {
+      width: 100%;
+    }
+
+    .description {
+      margin: 0 0 18px;
+      color: #5f6368;
+      line-height: 1.5;
+    }
+
+    .drop-zone {
+      display: block;
+      padding: 28px 18px;
+      border: 1px dashed #9aa0a6;
+      border-radius: 8px;
+      text-align: center;
+      background: #ffffff;
+      cursor: pointer;
+      transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: #1a73e8;
+      background: #f8fbff;
+    }
+
+    .drop-zone.disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .drop-title {
+      display: block;
+      margin-bottom: 5px;
+      color: #202124;
+      font-weight: 600;
+    }
+
+    .drop-note {
+      display: block;
+      color: #5f6368;
+      font-size: 13px;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    .file-info {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+    }
+
+    .file-name {
+      margin-bottom: 3px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .file-size {
+      color: #5f6368;
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    button {
+      min-height: 36px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      color: #ffffff;
+      background: #1a73e8;
+    }
+
+    .primary:hover:not(:disabled) {
+      background: #1765cc;
+    }
+
+    .secondary {
+      color: #1a73e8;
+      background: #ffffff;
+      border-color: #dadce0;
+    }
+
+    .secondary:hover:not(:disabled) {
+      background: #f8fbff;
+    }
+
+    .progress {
+      display: none;
+      align-items: center;
+      margin-top: 16px;
+      padding: 12px 14px;
+      color: #174ea6;
+      background: #e8f0fe;
+      border-radius: 6px;
+    }
+
+    .spinner {
+      display: inline-block;
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      margin-right: 9px;
+      border: 2px solid rgba(26, 115, 232, 0.25);
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .result {
+      display: none;
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 6px;
+      line-height: 1.5;
+    }
+
+    .result.success {
+      color: #137333;
+      background: #e6f4ea;
+      border: 1px solid #ceead6;
+    }
+
+    .result.warning {
+      color: #7a4f01;
+      background: #fef7e0;
+      border: 1px solid #fdd663;
+    }
+
+    .result.error {
+      color: #a50e0e;
+      background: #fce8e6;
+      border: 1px solid #f6aea9;
+    }
+
+    .result-title {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .result-message {
+      margin: 0 0 10px;
+      white-space: pre-line;
+    }
+
+    .result-row {
+      margin-top: 5px;
+    }
+
+    .result-label {
+      font-weight: 600;
+    }
+
+    .result a {
+      color: inherit;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="content">
+    <p class="description">
+      Выберите один CSV, XLS или XLSX. Максимальный размер файла — 20 МБ.
+    </p>
+
+    <label id="dropZone" class="drop-zone" for="fileInput">
+      <span class="drop-title">Нажмите или перетащите файл сюда</span>
+      <span class="drop-note">Поддерживаются CSV, XLS и XLSX</span>
+    </label>
+
+    <input id="fileInput" type="file" accept=".csv,.xls,.xlsx">
+
+    <div id="fileInfo" class="file-info">
+      <div id="fileName" class="file-name"></div>
+      <div id="fileSize" class="file-size"></div>
+    </div>
+
+    <div class="actions">
+      <button id="uploadButton" class="primary" type="button" disabled>
+        Загрузить и обработать
+      </button>
+
+      <button id="resetButton" class="secondary" type="button" disabled>
+        Выбрать другой файл
+      </button>
+    </div>
+
+    <div id="progress" class="progress">
+      <span class="spinner"></span>
+      <span id="progressText">Обрабатываю файл…</span>
+    </div>
+
+    <div id="result" class="result"></div>
+  </main>
+
+  <script>
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    const ALLOWED_EXTENSIONS = ["csv", "xls", "xlsx"];
+
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const fileInfo = document.getElementById("fileInfo");
+    const fileNameElement = document.getElementById("fileName");
+    const fileSizeElement = document.getElementById("fileSize");
+    const uploadButton = document.getElementById("uploadButton");
+    const resetButton = document.getElementById("resetButton");
+    const progress = document.getElementById("progress");
+    const progressText = document.getElementById("progressText");
+    const result = document.getElementById("result");
+
+    let selectedFile = null;
+    let processing = false;
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+
+      if (file) {
+        selectFile(file);
+      }
+    });
+
+    uploadButton.addEventListener("click", uploadSelectedFile);
+    resetButton.addEventListener("click", resetForm);
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+
+        if (!processing) {
+          dropZone.classList.add("dragover");
+        }
+      });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.remove("dragover");
+      });
+    });
+
+    dropZone.addEventListener("drop", (event) => {
+      if (processing) {
+        return;
+      }
+
+      const files = event.dataTransfer.files;
+
+      if (!files || files.length === 0) {
+        return;
+      }
+
+      if (files.length > 1) {
+        showError("Можно загрузить только один файл за раз.");
+        return;
+      }
+
+      selectFile(files[0]);
+    });
+
+    function selectFile(file) {
+      clearResult();
+
+      const extension = getFileExtension(file.name);
+
+      if (!ALLOWED_EXTENSIONS.includes(extension)) {
+        clearSelectedFile();
+        showError("Файл отклонён. Поддерживаются только CSV, XLS и XLSX.");
+        resetButton.disabled = false;
+        return;
+      }
+
+      if (file.size === 0) {
+        clearSelectedFile();
+        showError("Файл отклонён: файл пуст.");
+        resetButton.disabled = false;
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        clearSelectedFile();
+        showError("Файл отклонён: максимальный размер файла — 20 МБ.");
+        resetButton.disabled = false;
+        return;
+      }
+
+      selectedFile = file;
+      fileNameElement.textContent = file.name;
+      fileSizeElement.textContent = formatFileSize(file.size);
+      fileInfo.style.display = "block";
+      uploadButton.disabled = false;
+      resetButton.disabled = false;
+    }
+
+    function uploadSelectedFile() {
+      if (!selectedFile || processing) {
+        return;
+      }
+
+      setProcessing(true);
+      clearResult();
+      progressText.textContent = "Читаю и загружаю файл…";
+
+      const reader = new FileReader();
+
+      reader.onerror = () => {
+        setProcessing(false);
+        showError("Браузеру не удалось прочитать выбранный файл.");
+      };
+
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "");
+        const separatorPosition = dataUrl.indexOf(",");
+
+        if (separatorPosition === -1) {
+          setProcessing(false);
+          showError("Не удалось подготовить файл к загрузке.");
+          return;
+        }
+
+        const payload = {
+          fileName: selectedFile.name,
+          fileSize: selectedFile.size,
+          mimeType: selectedFile.type || "",
+          base64Data: dataUrl.slice(separatorPosition + 1)
+        };
+
+        progressText.textContent = "Классифицирую и создаю Google Sheet…";
+
+        google.script.run
+          .withSuccessHandler(handleServerResponse)
+          .withFailureHandler(handleServerFailure)
+          .processUploadedFile(payload);
+      };
+
+      reader.readAsDataURL(selectedFile);
+    }
+
+    function handleServerResponse(response) {
+      setProcessing(false);
+
+      if (!response || response.success !== true) {
+        showError(
+          response && response.message
+            ? response.message
+            : "Не удалось обработать файл."
+        );
+        return;
+      }
+
+      renderSuccess(response);
+    }
+
+    function handleServerFailure(error) {
+      setProcessing(false);
+
+      showError(
+        error && error.message
+          ? error.message
+          : "Произошла непредвиденная ошибка."
+      );
+    }
+
+    function renderSuccess(response) {
+      result.className =
+        "result " + (response.warning ? "warning" : "success");
+
+      const title = document.createElement("h2");
+      title.className = "result-title";
+      title.textContent = response.warning
+        ? "Файл сохранён с предупреждением"
+        : "Файл успешно обработан";
+
+      result.appendChild(title);
+
+      if (response.warning) {
+        const warning = document.createElement("p");
+        warning.className = "result-message";
+        warning.textContent = response.warning;
+        result.appendChild(warning);
+      }
+
+      appendResultRow("Type", response.type);
+      appendResultRow("Period", response.period);
+      appendResultRow("Папка", response.destinationFolderName);
+
+      appendLinkRow(
+        "Original file",
+        response.originalFileName,
+        response.originalFileUrl
+      );
+
+      appendLinkRow(
+        "Google Sheet",
+        response.googleSheetName,
+        response.googleSheetUrl
+      );
+
+      appendResultRow("Строка базы", String(response.databaseRow));
+
+      if (response.cleanupWarning) {
+        const warning = document.createElement("p");
+        warning.className = "result-message";
+        warning.style.marginTop = "10px";
+        warning.textContent = response.cleanupWarning;
+        result.appendChild(warning);
+      }
+
+      result.style.display = "block";
+    }
+
+    function appendResultRow(label, value) {
+      const row = document.createElement("div");
+      row.className = "result-row";
+
+      const labelElement = document.createElement("span");
+      labelElement.className = "result-label";
+      labelElement.textContent = label + ": ";
+
+      const valueElement = document.createElement("span");
+      valueElement.textContent = value || "—";
+
+      row.appendChild(labelElement);
+      row.appendChild(valueElement);
+      result.appendChild(row);
+    }
+
+    function appendLinkRow(label, text, url) {
+      const row = document.createElement("div");
+      row.className = "result-row";
+
+      const labelElement = document.createElement("span");
+      labelElement.className = "result-label";
+      labelElement.textContent = label + ": ";
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = text;
+
+      row.appendChild(labelElement);
+      row.appendChild(link);
+      result.appendChild(row);
+    }
+
+    function showError(message) {
+      clearResult();
+      result.className = "result error";
+
+      const title = document.createElement("h2");
+      title.className = "result-title";
+      title.textContent = "Файл не обработан";
+
+      const paragraph = document.createElement("p");
+      paragraph.className = "result-message";
+      paragraph.textContent = message;
+
+      result.appendChild(title);
+      result.appendChild(paragraph);
+      result.style.display = "block";
+    }
+
+    function clearResult() {
+      result.innerHTML = "";
+      result.className = "result";
+      result.style.display = "none";
+    }
+
+    function resetForm() {
+      if (processing) {
+        return;
+      }
+
+      clearSelectedFile();
+      clearResult();
+      resetButton.disabled = true;
+    }
+
+    function clearSelectedFile() {
+      selectedFile = null;
+      fileInput.value = "";
+      fileInfo.style.display = "none";
+      fileNameElement.textContent = "";
+      fileSizeElement.textContent = "";
+      uploadButton.disabled = true;
+    }
+
+    function setProcessing(value) {
+      processing = value;
+      progress.style.display = value ? "flex" : "none";
+      fileInput.disabled = value;
+      uploadButton.disabled = value || !selectedFile;
+      resetButton.disabled = value || !selectedFile;
+      dropZone.classList.toggle("disabled", value);
+    }
+
+    function getFileExtension(fileName) {
+      const match = String(fileName || "")
+        .toLowerCase()
+        .match(/\.([^.]+)$/);
+
+      return match ? match[1] : "";
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) {
+        return bytes + " B";
+      }
+
+      if (bytes < 1024 * 1024) {
+        return (bytes / 1024).toFixed(1) + " KB";
+      }
+
+      return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    }
+  </script>
+</body>
+</html>

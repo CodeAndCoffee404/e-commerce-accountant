@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# реальные выгрузки клиента: содержат персональные данные покупателей
+# (email, имена, адреса, телефоны) — в git не попадают, см. docs/PLAN.md §10
+/docs/legacy-gas/exported-reports/
+
+# keep the template in git
+!.env.example
