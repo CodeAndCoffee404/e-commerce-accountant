@@ -46,3 +46,6 @@ next-env.d.ts
 
 # keep the template in git
 !.env.example
+
+# резервная копия секретов, значения дублируют Vercel
+/docs/secrets.local.md

@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "env:sync": "node scripts/vercel-env.mjs",
     "generate:key": "node -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\""
   },
   "dependencies": {

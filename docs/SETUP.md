@@ -59,12 +59,16 @@ Vercel сам добавит в проект переменные `DATABASE_URL`
 - Region: тот же Frankfurt
 - **Connect to Project** → отметьте **Preview** и **Development**, но **не Production**.
 
-> **Если Vercel ругается на конфликт имён переменных.** Обе базы хотят
-> назваться `DATABASE_URL`. Поскольку они привязаны к разным окружениям,
-> конфликта по сути нет, но интерфейс иногда предупреждает. Тогда задайте
-> второй базе префикс, например `DEV_`, а потом в **Settings → Environment
-> Variables** вручную добавьте `DATABASE_URL` для Preview и Development
-> со значением из `DEV_DATABASE_URL`.
+> **Конфликт имён переменных.** Обе базы хотят назваться `DATABASE_URL`.
+> Vercel не даёт занять имя дважды, даже если окружения разные. Поэтому у
+> `ea-dev` стоит префикс `DEV_` — она отдаёт `DEV_DATABASE_URL` и
+> `DEV_DATABASE_URL_UNPOOLED` в Preview и Development, а свободное имя
+> `DATABASE_URL` достаётся `ea-prod` в Production.
+>
+> Дублировать значение руками не нужно: `src/lib/env.ts` читает
+> `DATABASE_URL`, а если его нет — `DEV_DATABASE_URL`. В каждом окружении
+> присутствует ровно один из двух. Ручная копия рассинхронизировалась бы
+> при первой же смене пароля в Neon.
 
 ### 1.4. Хранилище файлов
 
@@ -82,17 +86,47 @@ Vercel добавит `BLOB_READ_WRITE_TOKEN`.
 
 **Settings → Environment Variables**. Для каждой переменной отмечайте, в каких окружениях она действует.
 
-| Переменная | Production | Preview + Development |
-|---|---|---|
-| `AUTH_SECRET` | `vGiarAVa++BFCBUZGr+9GJevh4+FQz+t6+txZg26gRQ=` | `8gXf/HZ7HLfEOn4WtnY+1QXN6pq1h20DriY5MfJ1QNE=` |
-| `ENCRYPTION_KEY` | `33b85fe1c87c8027de2c4a90faba3bdac57487a68b2e336f38afce988c3ed4b4` | `a0bf235a5763c5b45d8fb6f2c9ff43b59140250bec34b672a67c3bb3719d4db7` |
-| `GOOGLE_CLIENT_ID` | из шага 2 | то же значение |
-| `GOOGLE_CLIENT_SECRET` | из шага 2 | то же значение |
+| Переменная | Production | Preview | Development |
+|---|---|---|---|
+| `AUTH_SECRET` | своё значение | своё значение | своё значение |
+| `ENCRYPTION_KEY` | своё значение | своё значение | своё значение |
+| `GOOGLE_CLIENT_ID` | одно и то же значение из шага 2 | | |
+| `GOOGLE_CLIENT_SECRET` | одно и то же значение из шага 2 | | |
+
+Сами значения — в `docs/secrets.local.md`; этот файл в `.gitignore`, потому что
+секретам не место в репозитории. `AUTH_SECRET` и `ENCRYPTION_KEY` в каждом
+окружении свои: одинаковый `AUTH_SECRET` сделал бы сессионную куку из preview
+действительной и в проде, а одинаковый `ENCRYPTION_KEY` — превратил бы доступ
+к preview в доступ к боевым refresh-токенам Google.
+
+Раскладывает их скрипт, см. раздел «Применение переменных» ниже.
 
 > `ENCRYPTION_KEY` для production менять нельзя после того, как в базе появятся
 > зашифрованные refresh-токены Google — старые записи перестанут читаться.
 
-### 1.6. Ветка для продакшена
+### 1.6. Применение переменных
+
+Руками кликать не нужно. Один раз войдите в CLI:
+
+```bash
+npx vercel login
+```
+
+Дальше всё делает скрипт — он привяжет проект, снесёт ручные копии
+`DATABASE_URL` и `BLOB_READ_WRITE_TOKEN` (их отдают интеграции Neon и Blob),
+и разложит секреты из `docs/secrets.local.md` по трём окружениям:
+
+```bash
+npm run env:sync -- --dry-run   # посмотреть, что будет сделано
+npm run env:sync                # применить
+```
+
+Чтобы добавить переменную, впишите строку в таблицу `docs/secrets.local.md`
+и прогоните скрипт снова. Значения для production и preview он помечает
+Sensitive, для development — нет, иначе `vercel env pull` не сможет наполнить
+локальный `.env.local`.
+
+### 1.7. Ветка для продакшена
 
 **Settings → Git → Production Branch** — должно стоять `main`.
 Тогда `main` уезжает в прод, а `dev` автоматически даёт preview по стабильному адресу.
@@ -134,25 +168,30 @@ Vercel добавит `BLOB_READ_WRITE_TOKEN`.
 
 ## 3. Что прислать мне
 
-| Что | Откуда | Зачем |
-|---|---|---|
-| `DATABASE_URL` от `ea-dev` | Vercel → Storage → `ea-dev` → **Connect** / `.env.local` кнопка | накатить миграции и проверить подключение локально |
-| `GOOGLE_CLIENT_ID` | шаг 2.4 | настроить вход |
-| `GOOGLE_CLIENT_SECRET` | шаг 2.4 | настроить вход |
+| Что | Как |
+|---|---|
+| доступ к Vercel CLI | `npx vercel login` — один раз, дальше всё делаю я |
+| `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` | шаг 2.4, впишите строками в `docs/secrets.local.md` |
 
-Prod-строку подключения присылать не нужно — она живёт только в Vercel.
+Больше ничего присылать не нужно. Строки подключения к базам я возьму сам через
+`npx vercel env pull` — они уже лежат в Vercel и обе помечены не-Sensitive,
+потому что их заводит интеграция Neon. Prod-строка при этом остаётся в
+Production-окружении и локально не появляется.
+
 Blob-токен тоже не нужен: он понадобится на этапе 1, к тому моменту Vercel уже подставит его сам.
-
-> Быстрый способ достать переменные окружения из Vercel к себе:
-> `npx vercel link` и затем `npx vercel env pull .env.local` —
-> подтянет весь набор для Development.
 
 ---
 
 ## 4. Локальная разработка
 
-`.env.local` уже создан, `AUTH_SECRET` и `ENCRYPTION_KEY` в нём заполнены.
-Осталось вписать `DATABASE_URL`, `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET`.
+`.env.local` наполняется из Vercel, руками его править не нужно:
+
+```bash
+npx vercel env pull .env.local
+```
+
+Придут `DEV_DATABASE_URL` (база `ea-dev`), `AUTH_SECRET`, `ENCRYPTION_KEY` и
+ключи Google — всё в development-варианте.
 
 ```bash
 npm run dev            # http://localhost:3000
