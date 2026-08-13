@@ -6,7 +6,6 @@ import { z } from "zod";
  * the build instead of the request that actually needs the value.
  */
 const serverSchema = z.object({
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
   ENCRYPTION_KEY: z
     .string()
@@ -37,21 +36,49 @@ export function serverEnv(): ServerEnv {
   return cached;
 }
 
-/** Individual accessors keep call sites from pulling in unrelated secrets. */
+/**
+ * Connection strings come from two Neon projects wired through the Vercel
+ * marketplace. `ea-prod` is connected to Production without a prefix, while
+ * `ea-dev` is connected to Preview and Development under the `DEV_` prefix,
+ * because two integrations cannot both claim the bare name.
+ *
+ * Only one of the two is ever present in a given environment, so a fallback
+ * chain is unambiguous — and it beats hand-copying the value into a second
+ * variable that silently goes stale when Neon rotates the password.
+ */
+const POOLED_URL_VARS = ["DATABASE_URL", "DEV_DATABASE_URL"] as const;
+
+/**
+ * Migrations run over the direct connection. Neon's pooler runs PgBouncer in
+ * transaction mode, which does not reliably carry the session state some DDL
+ * needs.
+ */
+const DIRECT_URL_VARS = [
+  "DATABASE_URL_UNPOOLED",
+  "DEV_DATABASE_URL_UNPOOLED",
+  ...POOLED_URL_VARS,
+] as const;
+
 export function databaseUrl(): string {
-  return requireVar("DATABASE_URL");
+  return firstDefined(POOLED_URL_VARS, "a pooled Postgres connection string");
+}
+
+export function migrationDatabaseUrl(): string {
+  return firstDefined(DIRECT_URL_VARS, "a direct Postgres connection string");
 }
 
 export function encryptionKeyHex(): string {
-  return requireVar("ENCRYPTION_KEY");
+  return firstDefined(["ENCRYPTION_KEY"], "ENCRYPTION_KEY");
 }
 
-function requireVar(name: keyof ServerEnv): string {
-  const value = process.env[name];
+function firstDefined(names: readonly string[], description: string): string {
+  for (const name of names) {
+    const value = process.env[name];
 
-  if (!value) {
-    throw new Error(`Missing required environment variable ${name}`);
+    if (value) return value;
   }
 
-  return value;
+  throw new Error(
+    `Missing ${description}. Set one of: ${names.join(", ")}`,
+  );
 }
