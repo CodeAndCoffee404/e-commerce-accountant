@@ -1,128 +1,161 @@
 # Настройка окружений
 
-Что нужно завести вручную, прежде чем этап 0 можно будет закрыть.
-Три окружения: **local** (ваша машина), **preview** (ветка `dev` на Vercel), **prod**.
+Три окружения: **local** (ваша машина), **preview** (ветка `dev` на Vercel), **production** (ветка `main`).
+
+Порядок важен: сначала Vercel, потому что адреса деплоев нужны для настройки Google OAuth.
 
 ---
 
-## 1. GitHub — приватный репозиторий
+## 0. GitHub — готово
 
-1. https://github.com/new → имя `e-commerce-accountant`, **Private**.
-2. **Не** отмечайте «Add a README», «.gitignore» и «license» — репозиторий должен быть пустым.
-3. Скопируйте URL вида `git@github.com:<вы>/e-commerce-accountant.git`.
-
-Пришлите URL — я подключу remote, сделаю первый коммит и создам ветку `dev`.
+Репозиторий `git@github.com:all1son4/e-commerce-accountant.git`, ветки `main` и `dev` запушены.
 
 ---
 
-## 2. Neon — две базы
+## 1. Vercel: проект, база Neon и хранилище — одним потоком
 
-Заводим **два отдельных проекта**, как договорились.
+### 1.1. Импорт проекта
 
-1. https://console.neon.tech → **New Project**.
-   - Name: `ea-prod`, Region: **EU (Frankfurt)** — данные клиента европейские, держим их в ЕС.
-   - Postgres версия: последняя.
-2. Повторите для второго проекта: Name `ea-dev`, тот же регион.
-3. В каждом проекте: **Connection Details** → строка подключения.
-   - Обязательно возьмите вариант с **Pooled connection** (в хосте есть `-pooler`).
-   - Формат: `postgresql://user:pass@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require`
+1. https://vercel.com/new
+2. **Import Git Repository** → `all1son4/e-commerce-accountant` → **Import**.
+   Если репозитория нет в списке — **Adjust GitHub App Permissions** и дайте доступ.
+3. Framework Preset определится как **Next.js**. Ничего не меняйте, нажмите **Deploy**.
+4. **Первый деплой упадёт** — переменных окружения ещё нет. Это ожидаемо, идём дальше.
 
-Нужны две строки: `DATABASE_URL` для prod и для dev.
+После импорта запишите два адреса, они понадобятся в шаге 2:
 
-> Для local можно указать строку от `ea-dev` — отдельная третья база не нужна,
-> пока вы один разработчик.
+```
+production: https://<project>.vercel.app
+preview:    https://<project>-git-dev-<team>.vercel.app
+```
+
+Точный preview-адрес появится после первого деплоя ветки `dev`
+(**Deployments** → фильтр по ветке `dev`). Он стабильный и не меняется между деплоями —
+именно поэтому мы работаем через ветку, а не через случайные preview-ссылки.
+
+### 1.2. База данных Neon — прод
+
+Neon заводится прямо из Vercel, отдельный аккаунт в Neon не нужен.
+
+1. В проекте: вкладка **Storage** → **Create Database**.
+2. В маркетплейсе выберите **Neon** → **Continue**.
+3. Параметры:
+   - Database Name: `ea-prod`
+   - Region: **Frankfurt (eu-central-1)** — данные покупателей европейские, держим их в ЕС
+   - Plan: Free на старте достаточно
+4. **Connect to Project** → выберите проект и отметьте **только Production**.
+
+Vercel сам добавит в проект переменные `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `PGHOST` и прочие.
+Нам нужна только `DATABASE_URL` — она уже пулированная, то что нужно.
+
+### 1.3. База данных Neon — dev
+
+Повторите шаг 1.2 ещё раз:
+
+- Database Name: `ea-dev`
+- Region: тот же Frankfurt
+- **Connect to Project** → отметьте **Preview** и **Development**, но **не Production**.
+
+> **Если Vercel ругается на конфликт имён переменных.** Обе базы хотят
+> назваться `DATABASE_URL`. Поскольку они привязаны к разным окружениям,
+> конфликта по сути нет, но интерфейс иногда предупреждает. Тогда задайте
+> второй базе префикс, например `DEV_`, а потом в **Settings → Environment
+> Variables** вручную добавьте `DATABASE_URL` для Preview и Development
+> со значением из `DEV_DATABASE_URL`.
+
+### 1.4. Хранилище файлов
+
+1. **Storage** → **Create Database** → **Blob**.
+2. Name: `ea-files`, регион Frankfurt.
+3. **Connect to Project** → отметьте **все три** окружения.
+
+Vercel добавит `BLOB_READ_WRITE_TOKEN`.
+
+> Одного стора хватит на оба окружения: ключи объектов будут начинаться
+> с `prod/` и `preview/`. Разделять есть смысл позже, когда появятся
+> реальные данные клиента.
+
+### 1.5. Переменные, которые Vercel не добавит сам
+
+**Settings → Environment Variables**. Для каждой переменной отмечайте, в каких окружениях она действует.
+
+| Переменная | Production | Preview + Development |
+|---|---|---|
+| `AUTH_SECRET` | `vGiarAVa++BFCBUZGr+9GJevh4+FQz+t6+txZg26gRQ=` | `8gXf/HZ7HLfEOn4WtnY+1QXN6pq1h20DriY5MfJ1QNE=` |
+| `ENCRYPTION_KEY` | `33b85fe1c87c8027de2c4a90faba3bdac57487a68b2e336f38afce988c3ed4b4` | `a0bf235a5763c5b45d8fb6f2c9ff43b59140250bec34b672a67c3bb3719d4db7` |
+| `GOOGLE_CLIENT_ID` | из шага 2 | то же значение |
+| `GOOGLE_CLIENT_SECRET` | из шага 2 | то же значение |
+
+> `ENCRYPTION_KEY` для production менять нельзя после того, как в базе появятся
+> зашифрованные refresh-токены Google — старые записи перестанут читаться.
+
+### 1.6. Ветка для продакшена
+
+**Settings → Git → Production Branch** — должно стоять `main`.
+Тогда `main` уезжает в прод, а `dev` автоматически даёт preview по стабильному адресу.
 
 ---
 
-## 3. Google Cloud — OAuth для входа
+## 2. Google Cloud — вход в приложение
 
-1. https://console.cloud.google.com → **New Project**, имя `E-commerce Accountant`.
+1. https://console.cloud.google.com → **Select a project** → **New Project**,
+   имя `E-commerce Accountant`.
 2. **APIs & Services → OAuth consent screen**:
-   - User type: **External**, если у вас обычный Gmail; **Internal**, если Workspace.
-   - App name: `E-commerce Accountant`, support email — ваш.
-   - Scopes: пока ничего не добавляйте, базовые `email`/`profile` подставятся сами.
-   - Test users: добавьте свой email и email бухгалтера клиента.
-     Пока приложение в статусе Testing, войти смогут только они — этого достаточно.
+   - User type: **External** (для обычного Gmail) или **Internal** (если Google Workspace)
+   - App name: `E-commerce Accountant`, support email — ваш
+   - Scopes: ничего не добавляйте, базовые `email` и `profile` подставятся сами
+   - **Test users**: добавьте свой email и email бухгалтера клиента
+
+   > Приложение останется в статусе **Testing**. Войти смогут только
+   > перечисленные тестовые пользователи — для MVP этого достаточно,
+   > проходить верификацию в Google не нужно.
+
 3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
-   - Application type: **Web application**
-   - Name: `web`
-   - **Authorized redirect URIs** — добавьте все три:
+   - Application type: **Web application**, Name: `web`
+   - **Authorized redirect URIs** — добавьте все три, подставив адреса из шага 1.1:
+
      ```
      http://localhost:3000/api/auth/callback/google
      https://<project>-git-dev-<team>.vercel.app/api/auth/callback/google
-     https://<ваш-прод-домен>/api/auth/callback/google
+     https://<project>.vercel.app/api/auth/callback/google
      ```
-     Точные адреса Vercel я пришлю после первого деплоя — второй и третий
-     можно добавить позже, для локальной работы хватит первого.
+
+     Адрес должен совпадать посимвольно, иначе Google вернёт `redirect_uri_mismatch`.
+
 4. Скопируйте **Client ID** и **Client secret**.
 
-> Скоуп `drive.file` для выгрузки отчётов на Google Drive добавим на этапе 5.
-> Он несенситивный, верификация приложения в Google не потребуется.
+> Доступ к Google Drive (скоуп `drive.file`) добавим на этапе 5 в этом же
+> OAuth-клиенте. Он несенситивный, верификация приложения не потребуется.
 
 ---
 
-## 4. Vercel — проект, окружения и Blob
+## 3. Что прислать мне
 
-Делается **после** того, как код окажется в GitHub.
+| Что | Откуда | Зачем |
+|---|---|---|
+| `DATABASE_URL` от `ea-dev` | Vercel → Storage → `ea-dev` → **Connect** / `.env.local` кнопка | накатить миграции и проверить подключение локально |
+| `GOOGLE_CLIENT_ID` | шаг 2.4 | настроить вход |
+| `GOOGLE_CLIENT_SECRET` | шаг 2.4 | настроить вход |
+| preview- и production-адреса | шаг 1.1 | проверить деплой |
 
-1. https://vercel.com/new → импортируйте репозиторий.
-2. Framework Preset определится как Next.js — ничего менять не нужно, деплой пока
-   упадёт из-за отсутствующих переменных, это нормально.
-3. **Settings → Environment Variables** — заполните для каждого окружения.
-   Vercel различает Production / Preview / Development; ставьте галочки соответственно.
+Prod-строку подключения присылать не нужно — она живёт только в Vercel.
+Blob-токен тоже не нужен: он понадобится на этапе 1, к тому моменту Vercel уже подставит его сам.
 
-   | Переменная | Production | Preview |
-   |---|---|---|
-   | `DATABASE_URL` | строка от `ea-prod` | строка от `ea-dev` |
-   | `AUTH_SECRET` | см. ниже | см. ниже |
-   | `ENCRYPTION_KEY` | см. ниже | см. ниже |
-   | `GOOGLE_CLIENT_ID` | один и тот же | один и тот же |
-   | `GOOGLE_CLIENT_SECRET` | один и тот же | один и тот же |
-   | `BLOB_READ_WRITE_TOKEN` | подставится автоматически (шаг 5) | то же |
-
-4. **Settings → Git → Production Branch**: оставьте `main`.
-   Ветка `dev` будет автоматически давать preview со стабильным адресом
-   `<project>-git-dev-<team>.vercel.app`.
+> Быстрый способ достать переменные окружения из Vercel к себе:
+> `npx vercel link` и затем `npx vercel env pull .env.local` —
+> подтянет весь набор для Development.
 
 ---
 
-## 5. Vercel Blob — хранилище файлов
+## 4. Локальная разработка
 
-1. В проекте: **Storage → Create Database → Blob**.
-2. Name: `ea-files`, регион — Frankfurt.
-3. **Connect to Project** → выберите проект и отметьте все три окружения.
-   Vercel сам добавит `BLOB_READ_WRITE_TOKEN` в переменные.
-
-> На старте одного стора хватит на оба окружения: ключи объектов будут
-> начинаться с `prod/` и `preview/`. Разделять на два стора имеет смысл
-> позже, когда появятся реальные данные клиента.
-
----
-
-## 6. Сгенерированные секреты
-
-`AUTH_SECRET` и `ENCRYPTION_KEY` уже созданы. Локальные лежат в `.env.local`,
-для Vercel возьмите значения, которые я прислал в чате.
-
-Сгенерировать новые при необходимости:
+`.env.local` уже создан, `AUTH_SECRET` и `ENCRYPTION_KEY` в нём заполнены.
+Осталось вписать `DATABASE_URL`, `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET`.
 
 ```bash
-npx auth secret            # AUTH_SECRET
-npm run generate:key       # ENCRYPTION_KEY
+npm run dev            # http://localhost:3000
+npm run db:migrate     # накатить миграции
+npm run db:studio      # посмотреть данные
+npm test               # тесты
+npm run typecheck      # типы
 ```
-
-> `ENCRYPTION_KEY` менять нельзя после того, как в базе появятся
-> зашифрованные refresh-токены Google — старые записи перестанут читаться.
-> Ротация ключа — отдельная процедура, заложена версионным префиксом `v1:`.
-
----
-
-## 7. Что прислать мне
-
-1. URL GitHub-репозитория.
-2. `DATABASE_URL` от `ea-dev` — чтобы я применил миграции и проверил подключение
-   локально. Prod-строку присылать не нужно, её достаточно вписать в Vercel.
-3. `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET`.
-
-Blob-токен мне не нужен: он понадобится на этапе 1, и к тому моменту
-Vercel уже подставит его сам.
