@@ -80,6 +80,23 @@ for (const { name, environment, value } of rows) {
   console.log(`  ${name} → ${environment} (${value.length} символов)`);
 }
 
+// Переменная удаляется целиком перед пересозданием: Vercel хранит одну запись
+// на несколько окружений, и выборочно снять с неё одно окружение нельзя.
+// Значит, в таблице должны быть все три — иначе прогон молча оставит
+// production без значения.
+for (const name of new Set(rows.map((row) => row.name))) {
+  const missing = ENVIRONMENTS.filter(
+    (environment) => !rows.some((row) => row.name === name && row.environment === environment),
+  );
+
+  if (missing.length > 0) {
+    throw new Error(
+      `${name}: в ${SECRETS_FILE} нет строк для ${missing.join(", ")}. ` +
+        "Перечислите все окружения, иначе прогон снесёт недостающие.",
+    );
+  }
+}
+
 if (dryRun) {
   console.log("\n--dry-run: ничего не меняю.");
   console.log(`Будут удалены ручные копии: ${INTEGRATION_MANAGED.join(", ")}`);
