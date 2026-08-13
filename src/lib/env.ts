@@ -12,7 +12,6 @@ const serverSchema = z.object({
     .regex(/^[0-9a-f]{64}$/i, "ENCRYPTION_KEY must be 64 hex characters (32 bytes)"),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
-  BLOB_READ_WRITE_TOKEN: z.string().min(1),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
@@ -69,6 +68,15 @@ export function migrationDatabaseUrl(): string {
 
 export function encryptionKeyHex(): string {
   return firstDefined(["ENCRYPTION_KEY"], "ENCRYPTION_KEY");
+}
+
+/**
+ * Kept out of `serverSchema` deliberately: the Blob store is only needed when
+ * a file is uploaded, and demanding it up front would break signing in on a
+ * machine that has no store connected yet.
+ */
+export function blobReadWriteToken(): string {
+  return firstDefined(["BLOB_READ_WRITE_TOKEN"], "BLOB_READ_WRITE_TOKEN");
 }
 
 function firstDefined(names: readonly string[], description: string): string {

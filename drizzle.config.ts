@@ -1,23 +1,19 @@
-import "dotenv/config";
-
+import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-/**
- * Prefers the direct (unpooled) connection: Neon's pooler runs PgBouncer in
- * transaction mode, which is a poor fit for migrations.
- */
-const url =
-  process.env.DATABASE_URL_UNPOOLED ??
-  process.env.DEV_DATABASE_URL_UNPOOLED ??
-  process.env.DATABASE_URL ??
-  process.env.DEV_DATABASE_URL ??
-  "";
+// Relative, not the `@/` alias: drizzle-kit loads this file with its own
+// bundler and does not read tsconfig paths.
+import { migrationDatabaseUrl } from "./src/lib/env";
+
+// Next.js reads .env.local on its own; drizzle-kit does not, and plain
+// `dotenv/config` would only look at .env.
+config({ path: [".env.local", ".env"] });
 
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
-  dbCredentials: { url },
+  dbCredentials: { url: migrationDatabaseUrl() },
   strict: true,
   verbose: true,
 });
