@@ -278,6 +278,123 @@ export const transactions = pgTable(
   ],
 );
 
+/* ------------------------------------------------------------------ *
+ * Справочники
+ *
+ * Ставки, номера и соответствия — данные, а не константы в коде. Иначе
+ * смена ставки НДС или новый SKU означают правку кода разработчиком.
+ * ------------------------------------------------------------------ */
+
+/**
+ * `validTo` is null while a rate is in force. Periods exist so a past month
+ * recalculates at the rate that applied then — not as an audit trail, which
+ * the plan deliberately leaves out.
+ */
+export const vatRates = pgTable(
+  "vat_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    country: text("country").notNull(),
+    /** Percent, so 20 means 20 %. */
+    rate: numeric("rate", { precision: 9, scale: 4 }).notNull(),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+    note: text("note"),
+  },
+  (table) => [
+    // Одна ставка на страну и дату начала. Без этого ограничения повторное
+    // наполнение справочников не находило конфликта и плодило дубли.
+    uniqueIndex("vat_rates_period_idx").on(table.tenantId, table.country, table.validFrom),
+  ],
+);
+
+export const sellerVatNumbers = pgTable(
+  "seller_vat_numbers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    country: text("country").notNull(),
+    vatNumber: text("vat_number").notNull(),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+    note: text("note"),
+  },
+  (table) => [
+    uniqueIndex("seller_vat_period_idx").on(table.tenantId, table.country, table.validFrom),
+  ],
+);
+
+export const skuMappings = pgTable(
+  "sku_mappings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    sourceSku: text("source_sku").notNull(),
+    targetSku: text("target_sku"),
+    itemName: text("item_name"),
+    /** Connectors and packaging: sold, but never invoiced through Zoho. */
+    isIgnored: boolean("is_ignored").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("sku_mappings_source_idx").on(table.tenantId, table.channel, table.sourceSku),
+  ],
+);
+
+/**
+ * Everything else a channel needs to be read correctly: which country a
+ * currency implies, which arrival countries are skipped, what the default
+ * scheme is. Kept as JSON because the shape differs per channel and the
+ * alternative is a table per rule.
+ */
+export const channelRules = pgTable(
+  "channel_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    note: text("note"),
+  },
+  (table) => [uniqueIndex("channel_rules_key_idx").on(table.tenantId, table.channel, table.key)],
+);
+
+/**
+ * European Central Bank reference rates, cached.
+ *
+ * Not tenant-scoped: a published reference rate is the same fact for everyone,
+ * and duplicating it per tenant would let two tenants disagree about what the
+ * ECB said on a given day.
+ */
+export const fxRates = pgTable(
+  "fx_rates",
+  {
+    rateDate: date("rate_date").notNull(),
+    base: text("base").notNull(),
+    quote: text("quote").notNull(),
+    /** Units of `quote` for one unit of `base`. */
+    rate: numeric("rate", { precision: 18, scale: 8 }).notNull(),
+    source: text("source").notNull().default("ecb"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.rateDate, table.base, table.quote] })],
+);
+
+export type VatRate = typeof vatRates.$inferSelect;
+export type SellerVatNumber = typeof sellerVatNumbers.$inferSelect;
+export type SkuMapping = typeof skuMappings.$inferSelect;
+export type ChannelRule = typeof channelRules.$inferSelect;
+export type FxRate = typeof fxRates.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type SourceFile = typeof sourceFiles.$inferSelect;

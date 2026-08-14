@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import type { MembershipRole } from "@/lib/db/schema";
+import { seedReferenceData } from "@/lib/reference/seed";
 
 /**
  * The MVP serves one client, so a sign-in that is bootstrapped rather than
@@ -118,6 +119,10 @@ async function ensureDefaultTenant(): Promise<string> {
     .insert(schema.tenants)
     .values({ name: DEFAULT_TENANT.name, slug: DEFAULT_TENANT.slug })
     .returning({ id: schema.tenants.id });
+
+  // Reference data comes with the tenant. An empty rate table would let the
+  // first report run and quietly produce nothing.
+  await seedReferenceData(created.id);
 
   return created.id;
 }
