@@ -36,6 +36,13 @@
       "when": 1786695176671,
       "tag": "0004_reference_uniqueness",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786697088547,
+      "tag": "0005_report_runs",
+      "breakpoints": true
     }
   ]
 }

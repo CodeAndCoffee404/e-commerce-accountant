@@ -390,6 +390,109 @@ export const fxRates = pgTable(
   (table) => [primaryKey({ columns: [table.rateDate, table.base, table.quote] })],
 );
 
+/* ------------------------------------------------------------------ *
+ * Отчёты
+ * ------------------------------------------------------------------ */
+
+export const reportType = pgEnum("report_type", [
+  "sales_by_currency",
+  "off_amazon_sales",
+  "amazon_zoho_invoice",
+]);
+
+export const reportStatus = pgEnum("report_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+]);
+
+/**
+ * A report as a task, not a file.
+ *
+ * The snapshots are the point: regenerating a period has to give the same
+ * numbers, and it will not if the rates or the exchange rate have moved since.
+ * What the run used is recorded with it.
+ */
+export const reportRuns = pgTable(
+  "report_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    reportType: reportType("report_type").notNull(),
+    periodLabel: text("period_label").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+
+    status: reportStatus("status").notNull().default("queued"),
+    requestedBy: text("requested_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    errorMessage: text("error_message"),
+
+    /** The rules and the rates as they stood when the report was built. */
+    rulesSnapshot: jsonb("rules_snapshot"),
+    fxSnapshot: jsonb("fx_snapshot"),
+    /** Rows in, rows out, what was skipped and why. */
+    stats: jsonb("stats"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("report_runs_lookup_idx").on(
+      table.tenantId,
+      table.reportType,
+      table.periodLabel,
+      table.createdAt,
+    ),
+  ],
+);
+
+/** Which uploads fed a run — the "sources" line of the report card. */
+export const reportRunSources = pgTable(
+  "report_run_sources",
+  {
+    reportRunId: uuid("report_run_id")
+      .notNull()
+      .references(() => reportRuns.id, { onDelete: "cascade" }),
+    sourceFileId: uuid("source_file_id")
+      .notNull()
+      .references(() => sourceFiles.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.reportRunId, table.sourceFileId] })],
+);
+
+export const artifactKind = pgEnum("artifact_kind", ["xlsx", "gsheet"]);
+export const driveStatus = pgEnum("drive_status", ["pending", "synced", "failed"]);
+
+export const reportArtifacts = pgTable(
+  "report_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportRunId: uuid("report_run_id")
+      .notNull()
+      .references(() => reportRuns.id, { onDelete: "cascade" }),
+
+    kind: artifactKind("kind").notNull(),
+    filename: text("filename").notNull(),
+    blobKey: text("blob_key"),
+    sizeBytes: integer("size_bytes"),
+
+    driveFileId: text("drive_file_id"),
+    driveUrl: text("drive_url"),
+    driveStatus: driveStatus("drive_status"),
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("report_artifacts_run_idx").on(table.reportRunId)],
+);
+
+export type ReportRun = typeof reportRuns.$inferSelect;
+export type ReportArtifact = typeof reportArtifacts.$inferSelect;
 export type VatRate = typeof vatRates.$inferSelect;
 export type SellerVatNumber = typeof sellerVatNumbers.$inferSelect;
 export type SkuMapping = typeof skuMappings.$inferSelect;
