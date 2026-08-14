@@ -11,6 +11,15 @@ import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants"
  * request body limit of Vercel functions, and the client's exports run larger.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  // Checked before handleUpload, not inside onBeforeGenerateToken: handleUpload
+  // validates the store token first, so a misconfigured store would answer an
+  // anonymous caller with a configuration error instead of a refusal.
+  const session = await auth();
+
+  if (!session?.user?.id || !session.tenantId) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
   const body = (await request.json()) as HandleUploadBody;
 
   try {
@@ -18,12 +27,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       request,
       body,
       onBeforeGenerateToken: async () => {
-        const session = await auth();
-
-        if (!session?.user?.id || !session.tenantId) {
-          throw new Error("Не авторизован");
-        }
-
         return {
           allowedContentTypes: [...UPLOAD_CONTENT_TYPES],
           maximumSizeInBytes: MAX_UPLOAD_BYTES,

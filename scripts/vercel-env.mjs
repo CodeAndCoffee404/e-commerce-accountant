@@ -17,9 +17,12 @@ const SECRETS_FILE = "docs/secrets.local.md";
 const ENVIRONMENTS = ["production", "preview", "development"];
 
 /**
- * Имена, которые заводят интеграции Vercel (Neon, Blob). Заведённая руками
- * копия занимает имя, из-за чего интеграция не может подключиться, и живёт
- * своей жизнью после смены пароля в Neon.
+ * Имена, которые заводят интеграции Vercel (Neon, Blob).
+ *
+ * Скрипт их только показывает и никогда не трогает. Первая версия удаляла их,
+ * чтобы освободить имя для интеграции — и это было верно ровно один раз, пока
+ * интеграций ещё не было. На следующем прогоне тот же код снёс уже настоящие
+ * значения: прод остался без строки подключения и без токена хранилища.
  */
 const INTEGRATION_MANAGED = ["DATABASE_URL", "BLOB_READ_WRITE_TOKEN"];
 
@@ -104,8 +107,16 @@ for (const name of new Set(rows.map((row) => row.name))) {
 
 if (dryRun) {
   console.log("\n--dry-run: ничего не меняю.");
-  console.log(`Будут удалены ручные копии: ${INTEGRATION_MANAGED.join(", ")}`);
+  console.log(`Не трогаю переменные интеграций: ${INTEGRATION_MANAGED.join(", ")}`);
   process.exit(0);
+}
+
+// Та же защита, что и для окружений: скрипт не должен уметь удалить то, чем
+// не владеет, даже если такое имя окажется в таблице секретов.
+for (const name of new Set(rows.map((row) => row.name))) {
+  if (INTEGRATION_MANAGED.includes(name)) {
+    throw new Error(`${name} задаёт интеграция Vercel — уберите строку из ${SECRETS_FILE}.`);
+  }
 }
 
 const whoami = vercel(["whoami"], { tolerate: true });
@@ -123,8 +134,7 @@ console.log("\nТекущее состояние:\n");
 console.log(vercel(["env", "ls"], { tolerate: true }) ?? "(не удалось прочитать)");
 
 for (const name of INTEGRATION_MANAGED) {
-  console.log(`- ${name}: удаляю ручную копию, значение придёт из интеграции`);
-  vercel(["env", "rm", name, "--yes"], { tolerate: true });
+  console.log(`- ${name}: не трогаю, этим владеет интеграция`);
 }
 
 const names = [...new Set(rows.map((row) => row.name))];

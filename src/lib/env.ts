@@ -45,7 +45,15 @@ export function serverEnv(): ServerEnv {
  * chain is unambiguous — and it beats hand-copying the value into a second
  * variable that silently goes stale when Neon rotates the password.
  */
-const POOLED_URL_VARS = ["DATABASE_URL", "DEV_DATABASE_URL"] as const;
+const POOLED_URL_VARS = [
+  "DATABASE_URL",
+  "DEV_DATABASE_URL",
+  // Neon publishes the same pooled string under several names. Depending on one
+  // of them turned out to be brittle: a tidy-up script deleted DATABASE_URL and
+  // took production offline while POSTGRES_URL sat there holding the same value.
+  "POSTGRES_URL",
+  "DEV_POSTGRES_URL",
+] as const;
 
 /**
  * Migrations run over the direct connection. Neon's pooler runs PgBouncer in
@@ -55,6 +63,8 @@ const POOLED_URL_VARS = ["DATABASE_URL", "DEV_DATABASE_URL"] as const;
 const DIRECT_URL_VARS = [
   "DATABASE_URL_UNPOOLED",
   "DEV_DATABASE_URL_UNPOOLED",
+  "POSTGRES_URL_NON_POOLING",
+  "DEV_POSTGRES_URL_NON_POOLING",
   ...POOLED_URL_VARS,
 ] as const;
 
