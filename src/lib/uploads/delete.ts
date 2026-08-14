@@ -40,6 +40,8 @@ export async function deleteUpload(fileId: string): Promise<DeleteUploadResult> 
       blobKey: schema.sourceFiles.blobKey,
       dataset: schema.sourceFiles.dataset,
       period: schema.sourceFiles.periodLabel,
+      status: schema.sourceFiles.status,
+      supersededByFileId: schema.sourceFiles.supersededByFileId,
     })
     .from(schema.sourceFiles)
     .where(
@@ -90,37 +92,57 @@ export async function deleteUpload(fileId: string): Promise<DeleteUploadResult> 
       )
       .orderBy(desc(schema.sourceFiles.uploadedAt));
 
-    // Only the newest comes back. Restoring every file this one replaced would
-    // put two versions of the same period into the ledger at once, and every
-    // figure drawn from it would be doubled.
-    const [newest, ...older] = replaced;
+    // Whether anything comes back depends on what is being deleted. Removing
+    // the file that currently counts hands the period back to its predecessor.
+    // Removing a file that was itself already replaced must restore nothing:
+    // its successor still counts, and resurrecting the predecessor too would
+    // put two versions of the period into the ledger at once — every figure
+    // drawn from it doubled.
+    const wasCurrent = file.status !== "superseded";
+    let cameBack: { id: string; filename: string } | null = null;
 
-    if (newest) {
-      await tx
-        .update(schema.sourceFiles)
-        .set({ status: "parsed", supersededByFileId: null })
-        .where(eq(schema.sourceFiles.id, newest.id));
+    if (wasCurrent) {
+      // Only the newest predecessor returns, for the same doubling reason.
+      const [newest, ...older] = replaced;
 
-      await tx
-        .update(schema.transactions)
-        .set({ isCurrent: true })
-        .where(
-          and(
-            eq(schema.transactions.tenantId, user.tenantId),
-            eq(schema.transactions.sourceFileId, newest.id),
-          ),
-        );
+      if (newest) {
+        cameBack = newest;
 
-      if (older.length > 0) {
-        // They stay replaced, now by the file that came back rather than by
-        // one that is about to stop existing.
         await tx
           .update(schema.sourceFiles)
-          .set({ supersededByFileId: newest.id })
+          .set({ status: "parsed", supersededByFileId: null })
+          .where(eq(schema.sourceFiles.id, newest.id));
+
+        await tx
+          .update(schema.transactions)
+          .set({ isCurrent: true })
           .where(
-            sql`${schema.sourceFiles.id} = any(${sql.param(older.map((row) => row.id))}::uuid[])`,
+            and(
+              eq(schema.transactions.tenantId, user.tenantId),
+              eq(schema.transactions.sourceFileId, newest.id),
+            ),
           );
+
+        if (older.length > 0) {
+          // They stay replaced, now by the file that came back rather than by
+          // one that is about to stop existing.
+          await tx
+            .update(schema.sourceFiles)
+            .set({ supersededByFileId: newest.id })
+            .where(
+              sql`${schema.sourceFiles.id} = any(${sql.param(older.map((row) => row.id))}::uuid[])`,
+            );
+        }
       }
+    } else if (replaced.length > 0) {
+      // A middle link goes quietly: its predecessors stay replaced, re-pointed
+      // to the successor that actually holds the period now.
+      await tx
+        .update(schema.sourceFiles)
+        .set({ supersededByFileId: file.supersededByFileId })
+        .where(
+          sql`${schema.sourceFiles.id} = any(${sql.param(replaced.map((row) => row.id))}::uuid[])`,
+        );
     }
 
     // The transactions go with it: the row has an ON DELETE CASCADE, and rows
@@ -131,7 +153,7 @@ export async function deleteUpload(fileId: string): Promise<DeleteUploadResult> 
         and(eq(schema.sourceFiles.id, fileId), eq(schema.sourceFiles.tenantId, user.tenantId)),
       );
 
-    return newest ?? null;
+    return cameBack;
   });
 
   // After the database, not before: a failed delete that had already thrown the

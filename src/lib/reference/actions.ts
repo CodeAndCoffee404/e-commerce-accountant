@@ -192,6 +192,9 @@ export async function restoreDefaults(): Promise<ActionResult> {
 
   await audit(user, "reference.restored", "reference", undefined, result);
   revalidatePath("/settings");
+  // The banner offering this action lives on Reports, and the availability it
+  // gates changes the moment the rules are back.
+  revalidatePath("/reports");
 
   return {
     ok: true,

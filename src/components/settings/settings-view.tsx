@@ -30,11 +30,22 @@ import {
   type ActionResult,
 } from "@/lib/reference/actions";
 import type { ReferenceData } from "@/lib/reference/queries";
+import type { AllReportSettings } from "@/lib/reports/settings";
+
+import { ReportSettingsTab } from "./report-settings";
 
 type VatRate = ReferenceData["vatRates"][number];
 type SkuMapping = ReferenceData["skuMappings"][number];
 
-export function SettingsView({ data, canEdit }: { data: ReferenceData; canEdit: boolean }) {
+export function SettingsView({
+  data,
+  reports,
+  canEdit,
+}: {
+  data: ReferenceData;
+  reports: AllReportSettings;
+  canEdit: boolean;
+}) {
   const router = useRouter();
   const { message } = App.useApp();
   const [pending, startTransition] = useTransition();
@@ -64,9 +75,26 @@ export function SettingsView({ data, canEdit }: { data: ReferenceData; canEdit: 
           children: <Skus data={data.skuMappings} canEdit={canEdit} run={run} pending={pending} />,
         },
         {
+          key: "reports",
+          label: "Reports",
+          children: (
+            <ReportSettingsTab settings={reports} canEdit={canEdit} run={run} pending={pending} />
+          ),
+        },
+        {
           key: "rules",
           label: "Channel rules",
-          children: <Rules data={data.channelRules} canEdit={canEdit} run={run} pending={pending} />,
+          children: (
+            <Rules
+              // The "reports" channel is report configuration with its own tab
+              // above; offering the same rows as raw JSON here would create two
+              // editors for one thing.
+              data={data.channelRules.filter((rule) => rule.channel !== "reports")}
+              canEdit={canEdit}
+              run={run}
+              pending={pending}
+            />
+          ),
         },
         {
           key: "seller",

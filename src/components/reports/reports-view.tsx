@@ -25,6 +25,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { restoreDefaults } from "@/lib/reference/actions";
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportRunCard } from "@/lib/reports/queries";
@@ -101,9 +102,29 @@ export function ReportsView({
                 as unrecognised — the report would come out nearly empty rather than fail, so it
                 is refused instead.
               </Typography.Paragraph>
-              <Link href="/settings">
-                Settings &rarr; Reference data &rarr; Restore missing defaults
-              </Link>
+              {canBuild ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const result = await restoreDefaults();
+
+                      if (result.ok) message.success(result.message, 6);
+                      else message.error(result.message, 8);
+
+                      router.refresh();
+                    })
+                  }
+                >
+                  Restore missing defaults now
+                </Button>
+              ) : (
+                <Link href="/settings">
+                  Settings &rarr; Reference data &rarr; Restore missing defaults
+                </Link>
+              )}
               <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
                 Restoring adds only what is absent. Anything you have edited is left alone.
               </Typography.Paragraph>
@@ -122,8 +143,15 @@ export function ReportsView({
           marginBottom: 24,
         }}
       >
-        {REPORT_DEFINITIONS.map((definition) => {
-          const availability = periods[definition.id] ?? { ready: [], blocked: [] };
+        {REPORT_DEFINITIONS.filter(
+          (definition) => periods[definition.id]?.enabled ?? true,
+        ).map((definition) => {
+          const availability = periods[definition.id] ?? {
+            enabled: true,
+            needs: definition.needs,
+            ready: [],
+            blocked: [],
+          };
           const ready = availability.ready;
           const waiting = availability.blocked;
 
@@ -139,7 +167,7 @@ export function ReportsView({
                 <Typography.Text strong style={{ fontSize: 12 }}>
                   Needs:
                 </Typography.Text>{" "}
-                {definition.needs}
+                {availability.needs || definition.needs}
               </Typography.Paragraph>
 
               <Space.Compact style={{ width: "100%" }}>

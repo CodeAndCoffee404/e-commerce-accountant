@@ -191,10 +191,15 @@ export function generateZohoInvoice(
  * right: a missing marketplace is not a smaller invoice, it is an invoice that
  * silently omits a country's sales.
  */
-export function missingCountries(rows: readonly LedgerRow[]): string[] {
+export function missingCountries(
+  rows: readonly LedgerRow[],
+  required: readonly string[] = ZOHO_COUNTRIES,
+): string[] {
   const present = new Set(
     rows.filter((row) => row.dataset === "amazon_monthly").map((row) => row.countryCode),
   );
 
-  return ZOHO_COUNTRIES.filter((country) => !present.has(country));
+  // Only the marketplaces the tenant still requires. A retired one stops
+  // blocking, but its rows are still invoiced whenever they do show up.
+  return required.filter((country) => !present.has(country));
 }

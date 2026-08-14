@@ -104,6 +104,7 @@ export function UploadsTable({
         rowKey="id"
         size="middle"
         loading={pending}
+        rowClassName={(row) => (row.status === "superseded" ? "ea-superseded" : "")}
         expandable={{
           // The reconciliation lives under the file it is about: "did all of
           // this get in" is a question about one upload, not about a list.

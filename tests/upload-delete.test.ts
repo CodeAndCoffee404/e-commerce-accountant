@@ -145,6 +145,49 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     await deleteUpload(first.id);
   });
 
+  it("restores nothing when a middle link of the chain is deleted", async () => {
+    // A replaced B replaced C is the history of one period corrected twice.
+    // Deleting B — already replaced itself — must not resurrect A: C still
+    // counts, and a period with two current files reports every figure twice.
+    const a = await upload("-chain-a");
+    const b = await upload("-chain-b");
+    const c = await upload("-chain-c");
+
+    expect(await currentRows(c.id)).toHaveLength(c.rows);
+
+    const result = await deleteUpload(b.id);
+
+    expect(result.ok).toBe(true);
+    // Nothing "counts again" — the message must not claim a restore happened.
+    expect(result.message).toBe("Deleted.");
+
+    // C is untouched, A is still out of play.
+    expect(await currentRows(c.id)).toHaveLength(c.rows);
+    expect(await currentRows(a.id)).toHaveLength(0);
+
+    const [first] = await db
+      .select({
+        status: schema.sourceFiles.status,
+        supersededBy: schema.sourceFiles.supersededByFileId,
+      })
+      .from(schema.sourceFiles)
+      .where(eq(schema.sourceFiles.id, a.id));
+
+    // A now records the file that actually holds the period, not the ghost.
+    expect(first.status).toBe("superseded");
+    expect(first.supersededBy).toBe(c.id);
+
+    // And deleting the current file still hands the period back down the
+    // chain: with B gone, that is A.
+    const afterC = await deleteUpload(c.id);
+
+    expect(afterC.ok).toBe(true);
+    expect(afterC.message).toContain(a.filename);
+    expect(await currentRows(a.id)).toHaveLength(a.rows);
+
+    await deleteUpload(a.id);
+  });
+
   it("refuses while a report was built from the file, and names it", async () => {
     const file = await upload("-used");
 

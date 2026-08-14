@@ -49,6 +49,12 @@ export type RegisterResult =
  */
 export async function registerUpload(raw: RegisterInput): Promise<RegisterResult> {
   const user = await requireUser();
+
+  // Mirrors the check at the token route: a viewer reads and nothing else.
+  if (user.role === "viewer") {
+    return { ok: false, message: "A viewer cannot upload files." };
+  }
+
   const input = inputSchema.parse(raw);
   const db = getDb();
 

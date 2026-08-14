@@ -28,6 +28,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
+  // A viewer reads; only an owner or accountant may add data. Checked at the
+  // token as well as at registration, because a signed token IS the write.
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "A viewer cannot upload files" }, { status: 403 });
+  }
+
   const body = (await request.json()) as HandleUploadPresignedBody;
 
   try {

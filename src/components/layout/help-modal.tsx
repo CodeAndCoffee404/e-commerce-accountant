@@ -138,6 +138,12 @@ export function HelpModal() {
                     VAT file.
                   </Paragraph>
                   <Paragraph type="secondary">
+                    What each report insists on is configurable on{" "}
+                    <Text strong>Settings &rarr; Reports</Text>: a retired channel or marketplace
+                    can be made optional — it stops blocking builds but is still counted whenever
+                    its file arrives — and a report you never use can be switched off entirely.
+                  </Paragraph>
+                  <Paragraph type="secondary">
                     Each run records the uploads, the VAT rates and the exchange rates it used, so
                     rebuilding the same period later gives the same numbers. Expanding a row shows
                     the sources and anything that was skipped.

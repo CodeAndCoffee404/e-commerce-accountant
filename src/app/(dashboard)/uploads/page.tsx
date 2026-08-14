@@ -39,7 +39,7 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
       <PageHeader
         title="Uploads"
         description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
-        extra={<UploadDialog tenantId={user.tenantId} />}
+        extra={user.role === "viewer" ? undefined : <UploadDialog tenantId={user.tenantId} />}
       />
       <UploadsTable
         rows={rows}

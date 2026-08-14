@@ -1,0 +1,102 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { record } from "@/lib/audit/record";
+import { requireUser } from "@/lib/auth/session";
+import { getDb, schema } from "@/lib/db";
+
+import { reportDefinition } from "./definitions";
+import type { Requirement } from "./settings";
+import { ZOHO_COUNTRIES } from "./zoho-invoice";
+
+export type SettingsActionResult = { ok: boolean; message: string };
+
+const inputSchema = z.object({
+  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
+  enabled: z.boolean(),
+  /** Datasets demoted to optional; everything else stays required. */
+  optionalDatasets: z.array(z.string()).default([]),
+  /** Zoho marketplaces demoted to optional. */
+  optionalCountries: z.array(z.string()).default([]),
+});
+
+export type SaveReportSettingsInput = z.input<typeof inputSchema>;
+
+/**
+ * Stores one report's configuration as a row in channel_rules under the
+ * "reports" channel. Only deviations are written — an absent entry means
+ * required — so the stored value stays readable in the rules editor and a
+ * report added later starts strict.
+ */
+export async function saveReportSettings(
+  raw: SaveReportSettingsInput,
+): Promise<SettingsActionResult> {
+  const user = await requireUser();
+
+  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+
+  const input = inputSchema.parse(raw);
+  const definition = reportDefinition(input.reportType);
+
+  const unknownDataset = input.optionalDatasets.find(
+    (dataset) => !(definition.datasets as readonly string[]).includes(dataset),
+  );
+
+  if (unknownDataset) {
+    return { ok: false, message: `"${definition.label}" does not read ${unknownDataset}.` };
+  }
+
+  const unknownCountry = input.optionalCountries.find(
+    (country) => !(ZOHO_COUNTRIES as readonly string[]).includes(country),
+  );
+
+  if (unknownCountry) {
+    return { ok: false, message: `${unknownCountry} is not one of the ten marketplaces.` };
+  }
+
+  const datasets: Record<string, Requirement> = {};
+
+  for (const dataset of input.optionalDatasets) datasets[dataset] = "optional";
+
+  const countries: Record<string, Requirement> = {};
+
+  for (const country of input.optionalCountries) countries[country] = "optional";
+
+  const value = { enabled: input.enabled, datasets, countries };
+
+  await getDb()
+    .insert(schema.channelRules)
+    .values({
+      tenantId: user.tenantId,
+      channel: "reports",
+      key: input.reportType,
+      value,
+      note: "Report configuration — edited on Settings -> Reports.",
+    })
+    .onConflictDoUpdate({
+      target: [schema.channelRules.tenantId, schema.channelRules.channel, schema.channelRules.key],
+      set: { value },
+    });
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: "report.settings_changed",
+      entity: "report_settings",
+      entityId: input.reportType,
+      payload: value,
+    },
+  );
+
+  revalidatePath("/reports");
+  revalidatePath("/settings");
+
+  return {
+    ok: true,
+    message: input.enabled
+      ? `${definition.label} updated.`
+      : `${definition.label} is now off. It disappears from Reports until turned back on.`,
+  };
+}

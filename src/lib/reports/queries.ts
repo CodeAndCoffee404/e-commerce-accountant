@@ -2,10 +2,16 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 
-import type { DatasetId } from "@/lib/ingest/datasets";
-
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
-import { ZOHO_COUNTRIES } from "./zoho-invoice";
+import {
+  DATASET_NAMES,
+  defaultSettings,
+  describeNeeds,
+  normaliseSettings,
+  requiredCountries,
+  requiredDatasets,
+  type AllReportSettings,
+} from "./settings";
 
 export type ReportRunCard = {
   id: string;
@@ -96,6 +102,10 @@ export async function listReportRuns(tenantId: string, limit = 50): Promise<Repo
 }
 
 export type ReportAvailability = {
+  /** False hides the card entirely; the report also refuses to build. */
+  enabled: boolean;
+  /** The "Needs" line, faithful to this tenant's configuration. */
+  needs: string;
   /** Periods that can be built right now. */
   ready: string[];
   /**
@@ -105,14 +115,31 @@ export type ReportAvailability = {
   blocked: { period: string; missing: string[] }[];
 };
 
-/** Short names for the UI. The legacy labels are too long to read in a list. */
-const DATASET_NAMES: Record<DatasetId, string> = {
-  amazon_vat: "Amazon VAT",
-  amazon_monthly: "Amazon Monthly",
-  allegro: "Allegro",
-  cdiscount: "Cdiscount",
-  shopify: "Shopify",
-};
+/**
+ * This tenant's report configuration, with the strict defaults filled in for
+ * anything never saved. One row per report in channel_rules under the
+ * "reports" channel — reference data rather than schema, because that is what
+ * it is: the client's own description of how their reporting works.
+ */
+export async function loadReportSettings(tenantId: string): Promise<AllReportSettings> {
+  const rows = await getDb()
+    .select({ key: schema.channelRules.key, value: schema.channelRules.value })
+    .from(schema.channelRules)
+    .where(
+      and(eq(schema.channelRules.tenantId, tenantId), eq(schema.channelRules.channel, "reports")),
+    );
+
+  const stored = new Map(rows.map((row) => [row.key, row.value]));
+  const result = defaultSettings();
+
+  for (const definition of REPORT_DEFINITIONS) {
+    if (stored.has(definition.id)) {
+      result[definition.id] = normaliseSettings(definition, stored.get(definition.id));
+    }
+  }
+
+  return result;
+}
 
 /**
  * What each report can be built for, and what is holding the rest back.
@@ -126,19 +153,31 @@ const DATASET_NAMES: Record<DatasetId, string> = {
 export async function availablePeriods(
   tenantId: string,
 ): Promise<Record<ReportTypeId, ReportAvailability>> {
-  const rows = await getDb()
-    .selectDistinct({
-      dataset: schema.sourceFiles.dataset,
-      periodLabel: schema.sourceFiles.periodLabel,
-      granularity: schema.sourceFiles.periodGranularity,
-      countryCode: schema.sourceFiles.countryCode,
-    })
-    .from(schema.sourceFiles)
-    .where(and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")));
+  const [rows, settings] = await Promise.all([
+    getDb()
+      .selectDistinct({
+        dataset: schema.sourceFiles.dataset,
+        periodLabel: schema.sourceFiles.periodLabel,
+        granularity: schema.sourceFiles.periodGranularity,
+        countryCode: schema.sourceFiles.countryCode,
+      })
+      .from(schema.sourceFiles)
+      .where(
+        and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
+      ),
+    loadReportSettings(tenantId),
+  ]);
 
   const result = {} as Record<ReportTypeId, ReportAvailability>;
 
   for (const definition of REPORT_DEFINITIONS) {
+    const configured = settings[definition.id];
+
+    if (!configured.enabled) {
+      result[definition.id] = { enabled: false, needs: "", ready: [], blocked: [] };
+      continue;
+    }
+
     const usable = rows.filter(
       (row) =>
         row.dataset !== null &&
@@ -151,10 +190,7 @@ export async function availablePeriods(
 
     for (const row of usable) {
       const period = row.periodLabel!;
-      const entry = byPeriod.get(period) ?? {
-        datasets: new Set(),
-        countries: new Set(),
-      };
+      const entry = byPeriod.get(period) ?? { datasets: new Set(), countries: new Set() };
 
       entry.datasets.add(row.dataset!);
       if (row.countryCode) entry.countries.add(row.countryCode);
@@ -167,11 +203,12 @@ export async function availablePeriods(
     for (const [period, entry] of byPeriod) {
       const missing: string[] = [];
 
-      // A report needing every channel is not offered until every channel is
-      // there: building it anyway would quietly under-report by exactly the
-      // channels nobody noticed were absent.
+      // A report needing every channel is not offered until every required
+      // channel is there: building it anyway would quietly under-report by
+      // exactly the channels nobody noticed were absent. Optional channels
+      // never block — they are included whenever their data exists.
       if (definition.requiresEveryDataset) {
-        for (const dataset of definition.datasets) {
+        for (const dataset of requiredDatasets(definition, configured)) {
           if (!entry.datasets.has(dataset)) missing.push(DATASET_NAMES[dataset]);
         }
       }
@@ -179,7 +216,7 @@ export async function availablePeriods(
       // One dataset, ten marketplaces. Checked here as well as at build time,
       // so an incomplete month is never offered in the first place.
       if (definition.id === "amazon_zoho_invoice") {
-        for (const country of ZOHO_COUNTRIES) {
+        for (const country of requiredCountries(configured)) {
           if (!entry.countries.has(country)) missing.push(country);
         }
       }
@@ -190,6 +227,8 @@ export async function availablePeriods(
 
     // Newest first: that is the period being worked on.
     result[definition.id] = {
+      enabled: true,
+      needs: describeNeeds(definition, configured),
       ready: ready.sort().reverse(),
       blocked: blocked.sort((a, b) => b.period.localeCompare(a.period)),
     };
@@ -205,18 +244,32 @@ export async function availablePeriods(
  * property of a period, it stops every period at once, and the fix is one
  * button on another page. Saying so up front beats letting someone select a
  * period and press Build to find out.
+ *
+ * Scoped to enabled reports and their required channels. An optional channel
+ * with data still needs its rules, but that is caught at build time with the
+ * same message — this banner is for what must be fixed before anything works.
  */
 export async function missingChannelRules(tenantId: string): Promise<string[]> {
-  const present = await getDb()
-    .select({ channel: schema.channelRules.channel, key: schema.channelRules.key })
-    .from(schema.channelRules)
-    .where(eq(schema.channelRules.tenantId, tenantId));
+  const [present, settings] = await Promise.all([
+    getDb()
+      .select({ channel: schema.channelRules.channel, key: schema.channelRules.key })
+      .from(schema.channelRules)
+      .where(eq(schema.channelRules.tenantId, tenantId)),
+    loadReportSettings(tenantId),
+  ]);
 
   const have = new Set(present.map((rule) => `${rule.channel}/${rule.key}`));
   const absent = new Set<string>();
 
   for (const definition of REPORT_DEFINITIONS) {
+    const configured = settings[definition.id];
+
+    if (!configured.enabled) continue;
+
+    const required = new Set<string>(requiredDatasets(definition, configured));
+
     for (const rule of definition.requiredRules) {
+      if (!required.has(rule.channel)) continue;
       if (!have.has(`${rule.channel}/${rule.key}`)) absent.add(`${rule.channel} / ${rule.key}`);
     }
   }

@@ -10,7 +10,9 @@ import { euroRateOn } from "@/lib/reference/fx";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
 import { generateOffAmazonSales } from "./off-amazon";
+import { loadReportSettings } from "./queries";
 import { channelRule } from "./rules";
+import { requiredCountries, requiredDatasets } from "./settings";
 import { generateSalesByCurrency } from "./sales-by-currency";
 import type { FxSnapshot, GeneratorResult, LedgerRow, RulesSnapshot } from "./types";
 import { summariseWarnings } from "./warnings";
@@ -42,6 +44,15 @@ export async function runReport(input: {
 }): Promise<RunOutcome> {
   const db = getDb();
   const definition = reportDefinition(input.reportType);
+  const settings = (await loadReportSettings(input.tenantId))[input.reportType];
+
+  if (!settings.enabled) {
+    return {
+      ok: false,
+      runId: null,
+      message: `"${definition.label}" is turned off in Settings -> Reports.`,
+    };
+  }
 
   const files = await db
     .select({
@@ -110,7 +121,11 @@ export async function runReport(input: {
 
     if (definition.requiresEveryDataset) {
       const present = new Set(files.map((file) => file.dataset));
-      const missing = definition.datasets.filter((dataset) => !present.has(dataset));
+      // Only the channels this tenant still requires. An optional channel is
+      // included whenever its data exists and never blocks the build.
+      const missing = requiredDatasets(definition, settings).filter(
+        (dataset) => !present.has(dataset),
+      );
 
       if (missing.length > 0) {
         throw new Error(
@@ -123,7 +138,7 @@ export async function runReport(input: {
     const rows = await loadLedger(input.tenantId, period.label, definition.datasets);
 
     if (input.reportType === "amazon_zoho_invoice") {
-      const missing = missingCountries(rows);
+      const missing = missingCountries(rows, requiredCountries(settings));
 
       if (missing.length > 0) {
         // Legacy refuses too, and rightly: a missing marketplace does not make
@@ -137,8 +152,15 @@ export async function runReport(input: {
     // Before anything is built. A missing channel rule does not make a smaller
     // report — it makes one where every row of that channel is skipped as
     // unrecognised, while the run still reports success.
+    // A rule is demanded when its channel is required, or when the channel is
+    // optional but its rows are actually here — either way the generator would
+    // otherwise skip every one of those rows as unrecognised.
+    const requiredChannels = new Set<string>(requiredDatasets(definition, settings));
+    const presentChannels = new Set(rows.map((row) => row.dataset));
     const absent = definition.requiredRules.filter(
-      (required) => channelRule(rules, required.channel, required.key) === null,
+      (required) =>
+        (requiredChannels.has(required.channel) || presentChannels.has(required.channel)) &&
+        channelRule(rules, required.channel, required.key) === null,
     );
 
     if (absent.length > 0) {
