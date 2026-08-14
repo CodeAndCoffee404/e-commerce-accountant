@@ -11,7 +11,15 @@ import type { ConnectionSummary } from "@/lib/google/connection";
 /** Messages for the outcomes the OAuth callback can redirect back with. */
 const OUTCOMES: Record<string, { type: "success" | "error" | "warning"; text: string }> = {
   connected: { type: "success", text: "Google connected. Now choose a folder." },
-  cancelled: { type: "warning", text: "You cancelled the consent in Google's window." },
+  cancelled: {
+    type: "warning",
+    // Google sends the same code whether the person pressed Cancel or was
+    // never allowed to see the consent screen, so the message has to cover
+    // both rather than accuse them of changing their mind.
+    text:
+      "Google did not grant access. Either the consent was cancelled, or this Google account " +
+      "is not allowed to use the app yet — see the note below.",
+  },
   state: {
     type: "error",
     text: "The request failed its check. Start connecting again from this page.",
@@ -178,6 +186,24 @@ export function DriveCard({
         the files it creates itself and the folder you point it at — the rest of your Drive
         stays invisible to it.
       </Typography.Paragraph>
+
+      {connection === null ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="If Google says access is blocked"
+          description={
+            <Typography.Text style={{ fontSize: 12 }}>
+              That is the Google Cloud project, not this app. Its OAuth consent screen has to be
+              published rather than left in Testing — in Testing only listed test users may
+              connect at all, and the token Google issues expires after seven days, which would
+              take the connection down every week. Publishing needs no review here: the app asks
+              only for non-sensitive permissions.
+            </Typography.Text>
+          }
+        />
+      ) : null}
 
       {connection === null ? (
         <Button
