@@ -118,6 +118,15 @@ export const CHANNEL_RULES: readonly {
   },
   {
     channel: "shopify",
+    key: "recompute_zero_tax_countries",
+    value: ["GB"],
+    note:
+      "Британские заказы приходят с нулевым налогом и без ставки в подписи — " +
+      "НДС досчитывается из суммы заказа. Для остальных стран нулевой налог " +
+      "означает именно ноль, и досчитывать его нельзя.",
+  },
+  {
+    channel: "shopify",
     key: "excluded_sources",
     value: ["shopify_draft_order"],
     note: "Черновики заказов — не продажи.",

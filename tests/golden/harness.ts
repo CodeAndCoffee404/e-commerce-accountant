@@ -1,0 +1,193 @@
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+
+import Decimal from "decimal.js";
+
+import { classify } from "@/lib/ingest/classify";
+import { mapTransactions } from "@/lib/ingest/mappers";
+import { parseSpreadsheet } from "@/lib/ingest/parse";
+import {
+  ALLEGRO_CURRENCY_MAP,
+  CHANNEL_RULES,
+  IGNORED_SKUS,
+  RULES_EFFECTIVE_FROM,
+  SELLER_VAT_NUMBERS,
+  SKU_MAPPINGS,
+  VAT_RATES,
+} from "@/lib/reference/seed-data";
+import type { LedgerRow, RulesSnapshot } from "@/lib/reports/types";
+
+export const CORPUS = path.resolve(
+  process.cwd(),
+  "docs/legacy-gas/exported-reports/Report Automation",
+);
+
+export const REPORTS = path.join(CORPUS, "Reports");
+
+export const corpusAvailable = (() => {
+  try {
+    return readdirSync(CORPUS).length > 0;
+  } catch {
+    return false;
+  }
+})();
+
+/** The seeded rules, without a database — the generators only need the values. */
+export function seededRules(): RulesSnapshot {
+  return {
+    vatRates: VAT_RATES.map((rate) => ({
+      country: rate.country,
+      rate: rate.rate,
+      validFrom: RULES_EFFECTIVE_FROM,
+      validTo: null,
+    })),
+    sellerVatNumbers: SELLER_VAT_NUMBERS.map((entry) => ({
+      country: entry.country,
+      vatNumber: entry.vatNumber,
+    })),
+    skuMappings: [
+      ...SKU_MAPPINGS.map((mapping) => ({ ...mapping, isIgnored: false })),
+      ...IGNORED_SKUS.map((sku) => ({
+        channel: "amazon",
+        sourceSku: sku,
+        targetSku: null,
+        itemName: null,
+        isIgnored: true,
+      })),
+    ],
+    channelRules: CHANNEL_RULES.map((rule) => ({
+      channel: rule.channel,
+      key: rule.key,
+      value: rule.value,
+    })),
+  };
+}
+
+export { ALLEGRO_CURRENCY_MAP };
+
+function findFiles(directory: string): string[] {
+  const files: string[] = [];
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      if (entry.name !== "Reports") files.push(...findFiles(full));
+    } else if (/\.(csv|xlsx)$/i.test(entry.name)) {
+      files.push(full);
+    }
+  }
+
+  return files;
+}
+
+const decimal = (value: string | null) => (value === null ? null : new Decimal(value));
+
+/**
+ * Rebuilds the ledger for one period straight from the source exports, without
+ * a database. A golden test compares the generator's output against what
+ * legacy shipped, so the fewer moving parts between file and figure, the more
+ * a mismatch means.
+ *
+ * CSV is preferred where both formats exist: the pair is the same export saved
+ * twice, and the XLSX copy has been through Google Sheets.
+ */
+export async function ledgerForPeriod(
+  periodLabel: string,
+  datasets: readonly string[],
+): Promise<LedgerRow[]> {
+  const byName = new Map<string, string>();
+
+  for (const file of findFiles(CORPUS)) {
+    const name = path.basename(file);
+
+    if (!name.includes(periodLabel)) continue;
+    // The archive keeps duplicates as `… July(1).xlsx`; they are the same file.
+    if (/\(\d+\)\.(csv|xlsx)$/i.test(name)) continue;
+
+    const key = name.replace(/\.(csv|xlsx)$/i, "");
+    const existing = byName.get(key);
+
+    if (!existing || (existing.endsWith(".xlsx") && file.endsWith(".csv"))) {
+      byName.set(key, file);
+    }
+  }
+
+  const rows: LedgerRow[] = [];
+
+  for (const file of byName.values()) {
+    const name = path.basename(file);
+    const parsed = await parseSpreadsheet(readFileSync(file), name);
+
+    if (!parsed.ok) throw new Error(`${name}: ${parsed.message}`);
+
+    const classification = classify(parsed.grid, name);
+
+    if (!classification.ok) throw new Error(`${name}: ${classification.message}`);
+    if (!datasets.includes(classification.dataset)) continue;
+
+    const mapped = mapTransactions(classification.dataset, {
+      grid: parsed.grid,
+      headerRowIndex: classification.headerRowIndex,
+      country: classification.country,
+      period: classification.period,
+    });
+
+    for (const row of mapped.rows) {
+      rows.push({
+        id: `${name}:${row.sourceRowNumber}`,
+        dataset: row.dataset,
+        channel: row.channel,
+        countryCode: row.countryCode,
+        occurredOn: row.occurredOn,
+        transactionType: row.transactionType,
+        currency: row.currency,
+        gross: row.gross,
+        vatAmount: row.vatAmount,
+        netAmount: row.netAmount,
+        sku: row.sku,
+        quantity: row.quantity,
+        sourceFileId: name,
+        sourceRowNumber: row.sourceRowNumber,
+        raw: row.raw,
+      });
+    }
+  }
+
+  return rows;
+}
+
+export type GoldenSheet = { headers: string[]; rows: string[][] };
+
+/** Reads a legacy report, dropping the blank rows its writer pads sheets with. */
+export async function readGolden(file: string): Promise<GoldenSheet> {
+  const parsed = await parseSpreadsheet(readFileSync(file), path.basename(file));
+
+  if (!parsed.ok) throw new Error(`${path.basename(file)}: ${parsed.message}`);
+
+  const [headers, ...body] = parsed.grid.map((row) => [...row].map((value) => value ?? ""));
+
+  return {
+    headers: headers ?? [],
+    rows: body.filter((row) => row.some((value) => value.trim() !== "")),
+  };
+}
+
+/**
+ * Compares two amounts as numbers, not as text.
+ *
+ * Legacy computed in binary floating point, so its totals carry artefacts like
+ * `913.8299999999998`. Comparing the strings would fail on arithmetic that is
+ * in fact more correct than the reference.
+ */
+export function sameAmount(ours: string, theirs: string, tolerance = "0.005"): boolean {
+  if (ours.trim() === "" && theirs.trim() === "") return true;
+
+  try {
+    return new Decimal(ours).minus(new Decimal(theirs)).abs().lte(new Decimal(tolerance));
+  } catch {
+    return ours.trim() === theirs.trim();
+  }
+}
+
+export { decimal };
