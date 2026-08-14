@@ -1,0 +1,225 @@
+import {
+  monthByAbbreviation,
+  monthByLocalisedName,
+  monthByNumber,
+  quarterMonths,
+  type Month,
+} from "./months";
+
+export type YearMonth = { year: number; month: Month };
+
+export type Period = {
+  /** `2026.07 July` or `2026.Q3`, byte-for-byte what legacy writes. */
+  label: string;
+  granularity: "month" | "quarter";
+  /** ISO calendar dates, inclusive. */
+  start: string;
+  end: string;
+};
+
+export type PeriodResult =
+  | { ok: true; period: Period }
+  | { ok: false; reason: PeriodFailure };
+
+export type PeriodFailure =
+  | "NO_PERIOD_VALUES"
+  | "INVALID_NUMBER_OF_MONTHS"
+  | "MULTIPLE_YEARS"
+  | "MULTIPLE_QUARTERS"
+  | "INCOMPLETE_QUARTER";
+
+const MIN_YEAR = 1900;
+const MAX_YEAR = 9999;
+
+function isoDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * A file covers either a single month or one whole calendar quarter — never an
+ * arbitrary range. §2.1 of the plan leans on that: replacement is by slice, and
+ * slices may only coincide or be unrelated, never partially overlap.
+ */
+export function buildPeriod(values: readonly YearMonth[]): PeriodResult {
+  if (values.length === 0) return { ok: false, reason: "NO_PERIOD_VALUES" };
+
+  if (values.length === 1) {
+    const { year, month } = values[0];
+
+    return {
+      ok: true,
+      period: {
+        label: `${year}.${month.numberText} ${month.fullName}`,
+        granularity: "month",
+        start: isoDate(year, month.number, 1),
+        end: isoDate(year, month.number, lastDayOfMonth(year, month.number)),
+      },
+    };
+  }
+
+  if (values.length !== 3) return { ok: false, reason: "INVALID_NUMBER_OF_MONTHS" };
+
+  const years = new Set(values.map((value) => value.year));
+  if (years.size !== 1) return { ok: false, reason: "MULTIPLE_YEARS" };
+
+  const quarters = new Set(values.map((value) => value.month.quarter));
+  if (quarters.size !== 1) return { ok: false, reason: "MULTIPLE_QUARTERS" };
+
+  const year = values[0].year;
+  const quarter = values[0].month.quarter;
+  const actual = values.map((value) => value.month.number).sort((a, b) => a - b);
+  const expected = quarterMonths(quarter);
+
+  if (!expected.every((month, index) => actual[index] === month)) {
+    return { ok: false, reason: "INCOMPLETE_QUARTER" };
+  }
+
+  const lastMonth = expected[2];
+
+  return {
+    ok: true,
+    period: {
+      label: `${year}.Q${quarter}`,
+      granularity: "quarter",
+      start: isoDate(year, expected[0], 1),
+      end: isoDate(year, lastMonth, lastDayOfMonth(year, lastMonth)),
+    },
+  };
+}
+
+/** Deduplicates while preserving nothing but year+month — the rest is noise. */
+export function collectPeriods(values: Iterable<YearMonth>): YearMonth[] {
+  const unique = new Map<string, YearMonth>();
+
+  for (const value of values) {
+    unique.set(`${value.year}-${value.month.numberText}`, value);
+  }
+
+  return [...unique.values()];
+}
+
+function validYear(year: number): boolean {
+  return Number.isInteger(year) && year >= MIN_YEAR && year <= MAX_YEAR;
+}
+
+/**
+ * Rejects a date that does not exist, such as 31 February. Round-tripping
+ * through Date is the cheapest way to ask the calendar.
+ */
+function calendarDateExists(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function toYearMonth(year: number, monthNumber: number, day: number): YearMonth | null {
+  if (!validYear(year) || !calendarDateExists(year, monthNumber, day)) return null;
+
+  const month = monthByNumber(monthNumber);
+
+  return month ? { year, month } : null;
+}
+
+/**
+ * Every parser below is deliberately strict about its channel's one format.
+ * A loose parser that guesses between `01.02.2026` as day-first and month-first
+ * would silently move a transaction into the wrong month.
+ */
+
+/** Amazon VAT `ACTIVITY_PERIOD`: `2026-May`. */
+export function parseAmazonActivityPeriod(value: string): YearMonth | null {
+  const match = value.trim().match(/^(\d{4})-([A-Za-z]{3})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = monthByAbbreviation(match[2]);
+
+  return validYear(year) && month ? { year, month } : null;
+}
+
+/** Allegro `data`: `31.07.2026 02:20`. */
+export function parseAllegroDate(value: string): YearMonth | null {
+  const match = value.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const [, day, month, year, hour, minute] = match.map(Number);
+
+  if (hour > 23 || minute > 59) return null;
+
+  return toYearMonth(year, month, day);
+}
+
+/**
+ * Cdiscount `Accounting date`: `2026-06-01`.
+ *
+ * The same value arrives two ways. In the CSV it is text; in the XLSX it is a
+ * real date cell, which reaches us as `2026-06-01 00:00:00`. Both are the same
+ * calendar date, so the time is accepted and ignored — the channel posts
+ * accounting dates, never timestamps.
+ */
+export function parseCdiscountDate(value: string): YearMonth | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]00:00:00)?$/);
+  if (!match) return null;
+
+  const [, year, month, day] = match.map(Number);
+
+  return toYearMonth(year, month, day);
+}
+
+/** Shopify `Created at`: `2026-07-31 22:34:13 +0300`. */
+export function parseShopifyDate(value: string): YearMonth | null {
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+([+-])(\d{2})(\d{2})$/);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = Number(match[8]);
+  const offsetMinute = Number(match[9]);
+
+  if (hour > 23 || minute > 59 || second > 59) return null;
+  if (offsetHour > 14 || offsetMinute > 59) return null;
+  if (offsetHour === 14 && offsetMinute !== 0) return null;
+
+  // The offset is validated but deliberately not applied. Converting
+  // `2026-07-31 22:34:13 +0300` to UTC would move the transaction into June,
+  // and legacy takes the calendar date as written. See PLAN §5, stage 1.
+  return toYearMonth(year, month, day);
+}
+
+/**
+ * Amazon Monthly date column, written in the marketplace's language:
+ * `1 may 2026 13:33:54 UTC`, `30.04.2026 22:42:06 UTC`, `6 juil. 2026 ...`.
+ */
+export function parseAmazonMonthlyDate(value: string): YearMonth | null {
+  const trimmed = value.trim();
+
+  const numeric = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\b/);
+  if (numeric) {
+    const [, day, month, year] = numeric.map(Number);
+
+    return toYearMonth(year, month, day);
+  }
+
+  const named = trimmed.match(/^(\d{1,2})\s+([^\s\d]+)\.?\s+(\d{4})\b/);
+  if (!named) return null;
+
+  const day = Number(named[1]);
+  const month = monthByLocalisedName(named[2]);
+  const year = Number(named[3]);
+
+  return month ? toYearMonth(year, month.number, day) : null;
+}
