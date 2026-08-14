@@ -1,7 +1,8 @@
 import type { DatasetId } from "@/lib/ingest/datasets";
+import { DATASET_NAMES } from "@/modules/channels/registry";
 
 import { REPORT_DEFINITIONS, type ReportDefinition, type ReportTypeId } from "./definitions";
-import { ZOHO_COUNTRIES } from "./zoho-invoice";
+import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 /**
  * Per-tenant configuration of the reports themselves: which ones exist, and
@@ -26,14 +27,9 @@ export type ReportSettings = {
 
 export type AllReportSettings = Record<ReportTypeId, ReportSettings>;
 
-/** Short names for the UI. The legacy labels are too long to read in a list. */
-export const DATASET_NAMES: Record<DatasetId, string> = {
-  amazon_vat: "Amazon VAT",
-  amazon_monthly: "Amazon Monthly",
-  allegro: "Allegro",
-  cdiscount: "Cdiscount",
-  shopify: "Shopify",
-};
+/** Short names for the UI, one per channel module. */
+export { DATASET_NAMES } from "@/modules/channels/registry";
+
 
 /**
  * Turns whatever is stored into a full, trustworthy settings object.

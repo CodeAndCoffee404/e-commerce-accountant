@@ -8,16 +8,15 @@ import { publishRun } from "@/lib/google/publish";
 import type { Period } from "@/lib/ingest/period";
 import { euroRateOn } from "@/lib/reference/fx";
 
+import { reportModule } from "@/modules/reports/registry";
+
 import { reportDefinition, type ReportTypeId } from "./definitions";
-import { generateOffAmazonSales } from "./off-amazon";
 import { loadReportSettings } from "./queries";
 import { channelRule } from "./rules";
-import { requiredCountries, requiredDatasets } from "./settings";
-import { generateSalesByCurrency } from "./sales-by-currency";
+import { requiredDatasets } from "./settings";
 import type { FxSnapshot, GeneratorResult, LedgerRow, RulesSnapshot } from "./types";
 import { summariseWarnings } from "./warnings";
 import { buildWorkbook, reportFilename } from "./workbook";
-import { generateZohoInvoice, missingCountries } from "./zoho-invoice";
 
 export type RunOutcome =
   | {
@@ -137,14 +136,12 @@ export async function runReport(input: {
 
     const rows = await loadLedger(input.tenantId, period.label, definition.datasets);
 
-    if (input.reportType === "amazon_zoho_invoice") {
-      const missing = missingCountries(rows, requiredCountries(settings));
+    // The module's own completeness check — its idea of "all there", brought
+    // with it rather than special-cased here.
+    {
+      const refusal = reportModule(input.reportType).validate?.(rows, settings);
 
-      if (missing.length > 0) {
-        // Legacy refuses too, and rightly: a missing marketplace does not make
-        // a smaller invoice, it makes one that omits a country in silence.
-        throw new Error(`Missing Amazon Monthly uploads: ${missing.join(", ")}.`);
-      }
+      if (refusal) throw new Error(refusal);
     }
 
     const rules = await loadRules(input.tenantId);
@@ -175,7 +172,7 @@ export async function runReport(input: {
 
     const fx = await loadFx(rows, period);
 
-    const result = build(input.reportType, rows, { period, rules, fx }, files);
+    const result = build(input.reportType, rows, { period, rules, fx });
 
     await storeArtifacts(run.id, input.tenantId, definition.label, period.label, result);
 
@@ -292,27 +289,9 @@ function build(
   reportType: ReportTypeId,
   rows: LedgerRow[],
   context: { period: Period; rules: RulesSnapshot; fx: FxSnapshot },
-  files: { dataset: string | null }[],
 ): GeneratorResult {
-  switch (reportType) {
-    case "off_amazon_sales":
-      return generateOffAmazonSales(rows, context);
-
-    case "amazon_zoho_invoice":
-      return generateZohoInvoice(rows, context);
-
-    case "sales_by_currency": {
-      // The report reproduces the source columns, so their order comes from the
-      // file rather than from a list kept in the code.
-      const headers = Object.keys(rows.find((row) => row.dataset === "amazon_vat")?.raw ?? {});
-
-      if (headers.length === 0) throw new Error("The Amazon VAT upload has no rows.");
-
-      void files;
-
-      return generateSalesByCurrency(rows, context, headers);
-    }
-  }
+  // The registry, not a switch: the core does not know the modules' names.
+  return reportModule(reportType).generate(rows, context);
 }
 
 async function loadLedger(

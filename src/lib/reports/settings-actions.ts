@@ -9,7 +9,7 @@ import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
 import type { Requirement } from "./settings";
-import { ZOHO_COUNTRIES } from "./zoho-invoice";
+import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 export type SettingsActionResult = { ok: boolean; message: string };
 
@@ -35,7 +35,9 @@ export async function saveReportSettings(
 ): Promise<SettingsActionResult> {
   const user = await requireUser();
 
-  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+  if (user.role !== "owner") {
+    return { ok: false, message: "Only the owner can change report settings." };
+  }
 
   const input = inputSchema.parse(raw);
   const definition = reportDefinition(input.reportType);

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { classify } from "@/lib/ingest/classify";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
-import { generateSalesByCurrency, TOTAL_COLUMN } from "@/lib/reports/sales-by-currency";
+import { generateSalesByCurrency, TOTAL_COLUMN } from "@/modules/reports/sales-by-currency";
 
 import { corpusAvailable, ledgerForPeriod, readGolden, REPORTS, seededRules } from "./harness";
 

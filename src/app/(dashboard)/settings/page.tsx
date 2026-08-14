@@ -34,7 +34,9 @@ export default async function SettingsPage() {
         pickerApiKey={googlePickerApiKey()}
         members={members}
         audit={audit}
-        canEdit={user.role !== "viewer"}
+        // The client's rule: company settings are the owner's alone. An
+        // accountant still sees everything — read-only.
+        canEdit={user.role === "owner"}
         isOwner={user.role === "owner"}
       />
     </>

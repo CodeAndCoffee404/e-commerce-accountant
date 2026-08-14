@@ -12,7 +12,7 @@ import {
   saveReportSettings,
   type SettingsActionResult,
 } from "@/lib/reports/settings-actions";
-import { ZOHO_COUNTRIES } from "@/lib/reports/zoho-invoice";
+import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 type Runner = (action: () => Promise<SettingsActionResult>) => void;
 

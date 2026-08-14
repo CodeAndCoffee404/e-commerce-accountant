@@ -1,21 +1,14 @@
+import { channelModule } from "@/modules/channels/registry";
+
 import type { DatasetId } from "../datasets";
-import { mapAllegro } from "./allegro";
-import { mapAmazonMonthly } from "./amazon-monthly";
-import { mapAmazonVat } from "./amazon-vat";
-import { mapCdiscount } from "./cdiscount";
-import { mapShopify } from "./shopify";
-import type { Mapper, MapContext, MapResult } from "./types";
+import type { MapContext, MapResult } from "./types";
 
-const MAPPERS: Record<DatasetId, Mapper> = {
-  amazon_vat: mapAmazonVat,
-  amazon_monthly: mapAmazonMonthly,
-  allegro: mapAllegro,
-  cdiscount: mapCdiscount,
-  shopify: mapShopify,
-};
-
+/**
+ * Facade over the channel modules, kept so ingestion has one stable import.
+ * The mapping itself lives with each channel in src/modules/channels.
+ */
 export function mapTransactions(dataset: DatasetId, context: MapContext): MapResult {
-  return MAPPERS[dataset](context);
+  return channelModule(dataset).map(context);
 }
 
 export type { MapContext, MapResult, MappedTransaction } from "./types";

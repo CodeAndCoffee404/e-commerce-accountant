@@ -43,12 +43,15 @@ export function ReportsView({
   periods,
   missingRules,
   canBuild,
+  canRestore,
 }: {
   runs: ReportRunCard[];
   periods: Record<ReportTypeId, ReportAvailability>;
   /** Required channel rules this tenant does not have. Usually empty. */
   missingRules: string[];
   canBuild: boolean;
+  /** Restoring defaults changes company settings, so it is the owner's. */
+  canRestore: boolean;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
@@ -102,7 +105,7 @@ export function ReportsView({
                 as unrecognised — the report would come out nearly empty rather than fail, so it
                 is refused instead.
               </Typography.Paragraph>
-              {canBuild ? (
+              {canRestore ? (
                 <Button
                   size="small"
                   type="primary"

@@ -2,7 +2,9 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
-import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
+import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
+
+import type { ReportModule } from "./types";
 
 /** The column the totals row sums, and the one legacy puts its total under. */
 export const TOTAL_COLUMN = "TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL";
@@ -83,3 +85,28 @@ export function generateSalesByCurrency(
 
   return { sheets, skipped, warnings };
 }
+
+export const salesByCurrencyModule: ReportModule = {
+  definition: {
+    id: "sales_by_currency",
+    label: "Sales report by currency",
+    datasets: ["amazon_vat"],
+    granularity: ["month", "quarter"],
+    // One file covers every marketplace, so there is nothing to be missing.
+    requiresEveryDataset: false,
+    description: "Amazon VAT transaction report, split by settlement currency, with totals.",
+    needs: "One Amazon VAT transaction report, which already covers every marketplace.",
+    why: "",
+    // Reads the VAT file as it stands; no per-channel rule decides anything.
+    requiredRules: [],
+  },
+  generate(rows, context) {
+    // The report reproduces the source columns, so their order comes from the
+    // file rather than from a list kept in the code.
+    const headers = Object.keys(rows.find((row) => row.dataset === "amazon_vat")?.raw ?? {});
+
+    if (headers.length === 0) throw new Error("The Amazon VAT upload has no rows.");
+
+    return generateSalesByCurrency(rows, context, headers);
+  },
+};

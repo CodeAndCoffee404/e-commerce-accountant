@@ -14,7 +14,7 @@ export type DriveResult = { ok: true; message: string } | { ok: false; message: 
 async function requireEditor() {
   const user = await requireUser();
 
-  if (user.role === "viewer") throw new Error("Not allowed.");
+  if (user.role !== "owner") throw new Error("Only the owner can manage the Drive connection.");
 
   return user;
 }

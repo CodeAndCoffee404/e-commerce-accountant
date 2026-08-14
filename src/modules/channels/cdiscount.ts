@@ -1,6 +1,12 @@
-import { parseIsoDate } from "./dates";
-import { Attention, RowReader } from "./reader";
-import type { MapContext, MapResult, MappedTransaction } from "./types";
+import type { Grid } from "@/lib/ingest/classify";
+import type { SimpleDataset } from "@/lib/ingest/datasets";
+
+import { classifySimpleChannel } from "./toolkit";
+import type { ChannelModule } from "./types";
+
+import { parseIsoDate } from "@/lib/ingest/mappers/dates";
+import { Attention, RowReader } from "@/lib/ingest/mappers/reader";
+import type { MapContext, MapResult, MappedTransaction } from "@/lib/ingest/mappers/types";
 
 /**
  * Cdiscount's invoice and credit-note list.
@@ -59,3 +65,39 @@ export function mapCdiscount({ grid, headerRowIndex }: MapContext): MapResult {
 
   return { rows, missingColumns: reader.missingColumns };
 }
+
+const PROFILE: SimpleDataset = {
+  id: "cdiscount",
+  label: "Cdiscount sales report",
+  headerRowIndex: 2,
+  requiredHeaders: ["Sales channel", "Shop Id", "Invoice/Refund Id", "Accounting date"],
+  periodResolver: "cdiscount",
+  periodColumn: "Accounting date",
+};
+
+export const cdiscountModule: ChannelModule = {
+  id: "cdiscount",
+  shortName: "Cdiscount",
+  classify: (grid: Grid) => classifySimpleChannel(PROFILE, grid),
+  map: mapCdiscount,
+  defaultRules: [
+    {
+      channel: "cdiscount",
+      key: "defaults",
+      value: {
+        currency: "EUR",
+        departureCountry: "FR",
+        arrivalCountry: "FR",
+        scheme: "REGULAR",
+        sellerVat: "FR23888800463",
+      },
+      note: "Cdiscount sells in France only.",
+    },
+    {
+      channel: "cdiscount",
+      key: "invoice_types",
+      value: { Vente: "B2C SALE", "Remboursement client": "REFUND" },
+      note: "Subscriptions and commission credits are not sales.",
+    },
+  ],
+};

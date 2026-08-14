@@ -1,4 +1,4 @@
-import type { AmazonCountry } from "../datasets";
+import type { AmazonCountry } from "@/lib/ingest/datasets";
 
 /**
  * Amazon writes this report in the marketplace's language, and in one of two

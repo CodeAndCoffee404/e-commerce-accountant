@@ -30,7 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  if (session.role === "viewer") {
+  if (session.role !== "owner") {
     return NextResponse.redirect(new URL("/settings?drive=forbidden", request.url));
   }
 

@@ -131,7 +131,7 @@ export async function buildAllReady(raw: { periodLabel: string }): Promise<Build
     failed: failed.length,
   });
 
-  revalidatePath("/close");
+  revalidatePath("/dashboard");
   revalidatePath("/reports");
 
   if (failed.length === 0) {

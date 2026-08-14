@@ -25,8 +25,8 @@ const { getDb, schema } = await import("@/lib/db");
 const { classify } = await import("@/lib/ingest/classify");
 const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
-const { buildAllReady } = await import("@/lib/close/actions");
-const { loadClose } = await import("@/lib/close/queries");
+const { buildAllReady } = await import("@/lib/dashboard/actions");
+const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
@@ -35,7 +35,7 @@ const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRE
 
 const PERIOD = "2026.07 July";
 
-describe.skipIf(!HAS_DB)("the month-close screen", () => {
+describe.skipIf(!HAS_DB)("the dashboard", () => {
   const db = getDb();
 
   beforeAll(async () => {
@@ -108,7 +108,7 @@ describe.skipIf(!HAS_DB)("the month-close screen", () => {
   });
 
   it("derives the checklist from the enabled reports and marks what landed", async () => {
-    const data = await loadClose(session.tenantId);
+    const data = await loadDashboard(session.tenantId);
 
     expect(data.month).toBe(PERIOD);
     // 1 VAT + 10 marketplaces + 3 channels.
@@ -134,10 +134,6 @@ describe.skipIf(!HAS_DB)("the month-close screen", () => {
     expect(byCurrency.state).toBe("waiting");
     expect(byCurrency.missing.join(" ")).toContain("Amazon VAT");
 
-    // No June data, so the comparison stays honestly empty.
-    expect(data.previousMonth).toBe("2026.06 June");
-    expect(data.deltas).toEqual([]);
-
     // The matrix carries the same facts.
     expect(data.matrix.months).toEqual([PERIOD]);
     expect(data.matrix.rows.find((row) => row.key === "allegro")!.cells).toEqual(["yes"]);
@@ -152,7 +148,7 @@ describe.skipIf(!HAS_DB)("the month-close screen", () => {
     // its way through every missing report.
     expect(first.message).not.toContain("Sales report by currency");
 
-    const after = await loadClose(session.tenantId);
+    const after = await loadDashboard(session.tenantId);
     const offAmazon = after.reports.find((report) => report.id === "off_amazon_sales")!;
 
     expect(offAmazon.state).toBe("built");
@@ -203,7 +199,7 @@ describe.skipIf(!HAS_DB)("the month-close screen", () => {
 
     await ingestSourceFile(row.id, session.tenantId, parsed.grid);
 
-    const data = await loadClose(session.tenantId);
+    const data = await loadDashboard(session.tenantId);
     const offAmazon = data.reports.find((report) => report.id === "off_amazon_sales")!;
 
     // The workbook still exists and still traces — but it no longer reflects

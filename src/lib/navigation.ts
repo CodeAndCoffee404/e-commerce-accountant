@@ -4,7 +4,7 @@ export type NavItem = {
   label: string;
   /** Name of the icon exported from @ant-design/icons. */
   icon:
-    | "CarryOutOutlined"
+    | "HomeOutlined"
     | "InboxOutlined"
     | "SwapOutlined"
     | "FileTextOutlined"
@@ -19,6 +19,14 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
+  {
+    // The welcome screen and the landing page: where the month stands and
+    // whether anything needs you. Everything below it is detail.
+    key: "dashboard",
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: "HomeOutlined",
+  },
   {
     key: "uploads",
     href: "/uploads",
@@ -40,15 +48,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: "FileTextOutlined",
   },
   {
-    // Below Reports, where it reads as the summary of the work above it. It is
-    // still the landing page — the menu order tells the workflow story, the
-    // landing tells you where this month stands.
-    key: "close",
-    href: "/close",
-    label: "Month close",
-    icon: "CarryOutOutlined",
-  },
-  {
     key: "settings",
     href: "/settings",
     label: "Settings",
@@ -56,4 +55,4 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
 ] as const;
 
-export const DEFAULT_ROUTE = "/close";
+export const DEFAULT_ROUTE = "/dashboard";

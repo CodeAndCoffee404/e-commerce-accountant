@@ -24,6 +24,7 @@ export default async function ReportsPage() {
         periods={periods}
         missingRules={missingRules}
         canBuild={user.role !== "viewer"}
+        canRestore={user.role === "owner"}
       />
     </>
   );

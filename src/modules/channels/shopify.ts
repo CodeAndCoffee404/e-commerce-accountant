@@ -1,9 +1,15 @@
+import type { Grid } from "@/lib/ingest/classify";
+import type { SimpleDataset } from "@/lib/ingest/datasets";
+
+import { classifySimpleChannel } from "./toolkit";
+import type { ChannelModule } from "./types";
+
 import Decimal from "decimal.js";
 
-import { parseIsoDate } from "./dates";
-import { wholeUnitsProblem } from "../numbers";
-import { Attention, RowReader } from "./reader";
-import type { MapContext, MapResult, MappedTransaction } from "./types";
+import { parseIsoDate } from "@/lib/ingest/mappers/dates";
+import { wholeUnitsProblem } from "@/lib/ingest/numbers";
+import { Attention, RowReader } from "@/lib/ingest/mappers/reader";
+import type { MapContext, MapResult, MappedTransaction } from "@/lib/ingest/mappers/types";
 
 /**
  * Shopify's order export. One order spans several rows — the first carries the
@@ -91,3 +97,67 @@ export function mapShopify({ grid, headerRowIndex }: MapContext): MapResult {
 
   return { rows, missingColumns: reader.missingColumns };
 }
+
+const PROFILE: SimpleDataset = {
+  id: "shopify",
+  label: "Geyser shopify sales report",
+  headerRowIndex: 0,
+  requiredHeaders: [
+    "Name",
+    "Email",
+    "Financial Status",
+    "Paid at",
+    "Fulfillment Status",
+    "Created at",
+  ],
+  periodResolver: "shopify",
+  periodColumn: "Created at",
+};
+
+export const shopifyModule: ChannelModule = {
+  id: "shopify",
+  shortName: "Shopify",
+  classify: (grid: Grid) => classifySimpleChannel(PROFILE, grid),
+  map: mapShopify,
+  defaultRules: [
+    {
+      channel: "shopify",
+      key: "defaults",
+      value: {
+        departureCountry: "ES",
+        domesticScheme: "REGULAR",
+        domesticSellerVat: "ESN0531416F",
+        exportScheme: "UNION-OSS",
+        exportSellerVat: "EE102013089",
+      },
+      note: "Always ships from Spain; REGULAR within Spain, UNION-OSS otherwise.",
+    },
+    {
+      channel: "shopify",
+      key: "skipped_arrival_countries",
+      value: ["CH"],
+      note: "Orders to Switzerland stay out of the report — an agreed rule.",
+    },
+    {
+      channel: "shopify",
+      key: "country_aliases",
+      value: { UK: "GB" },
+      note: "Shopify writes UK; reporting needs GB.",
+    },
+    {
+      channel: "shopify",
+      key: "recompute_zero_tax_countries",
+      value: ["GB"],
+      note:
+        "British orders arrive with zero tax and no rate in the label, so the VAT " +
+        "is computed from the order total. Elsewhere a zero means zero and must " +
+        "not be filled in.",
+    },
+    {
+      channel: "shopify",
+      key: "excluded_sources",
+      value: ["shopify_draft_order"],
+      note: "Draft orders are not sales.",
+    },
+  ],
+};

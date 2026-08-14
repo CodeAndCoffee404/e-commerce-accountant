@@ -1,7 +1,9 @@
 import Decimal from "decimal.js";
 
-import { decideSku } from "./rules";
-import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
+import { decideSku } from "@/lib/reports/rules";
+import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
+
+import type { ReportModule } from "./types";
 
 export const ZOHO_HEADERS = [
   "Invoice Date",
@@ -203,3 +205,36 @@ export function missingCountries(
   // blocking, but its rows are still invoiced whenever they do show up.
   return required.filter((country) => !present.has(country));
 }
+
+export const amazonZohoInvoiceModule: ReportModule = {
+  definition: {
+    id: "amazon_zoho_invoice",
+    label: "Amazon invoice for Zoho",
+    datasets: ["amazon_monthly"],
+    // A quarter is refused: the invoice is dated the last day of the month and
+    // numbered by month, so a quarter has no meaning here.
+    granularity: ["month"],
+    // One dataset, but ten countries — the module checks them itself below.
+    requiresEveryDataset: false,
+    description: "Ten marketplaces aggregated into invoice lines for Zoho.",
+    needs: "Amazon Monthly for all ten marketplaces: ES, IT, FR, DE, UK, SE, PL, NL, IE, BE.",
+    why:
+      "A missing marketplace does not make a smaller invoice. It makes one that leaves a " +
+      "country's sales out in silence, and nothing downstream would show it.",
+    // Driven by VAT rates and SKU mapping, both checked as reference data
+    // rather than as channel rules.
+    requiredRules: [],
+  },
+  // The module's own idea of "all there": every marketplace the tenant still
+  // requires. Legacy refuses too, and rightly — a missing marketplace is not a
+  // smaller invoice, it is an invoice that omits a country in silence.
+  validate(rows, settings) {
+    const required = ZOHO_COUNTRIES.filter(
+      (country) => settings.countries[country] !== "optional",
+    );
+    const missing = missingCountries(rows, required);
+
+    return missing.length > 0 ? `Missing Amazon Monthly uploads: ${missing.join(", ")}.` : null;
+  },
+  generate: generateZohoInvoice,
+};

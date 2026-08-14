@@ -1,6 +1,12 @@
-import { parseAllegroTimestamp } from "./dates";
-import { Attention, RowReader } from "./reader";
-import type { MapContext, MapResult, MappedTransaction } from "./types";
+import type { Grid } from "@/lib/ingest/classify";
+import type { SimpleDataset } from "@/lib/ingest/datasets";
+
+import { classifySimpleChannel } from "./toolkit";
+import type { ChannelModule } from "./types";
+
+import { parseAllegroTimestamp } from "@/lib/ingest/mappers/dates";
+import { Attention, RowReader } from "@/lib/ingest/mappers/reader";
+import type { MapContext, MapResult, MappedTransaction } from "@/lib/ingest/mappers/types";
 
 /**
  * Allegro's account statement. Every line is a money movement — a sale, a fee,
@@ -77,3 +83,46 @@ function currencyOf(raw: string | null): string | null {
 
   return null;
 }
+
+const PROFILE: SimpleDataset = {
+  id: "allegro",
+  label: "Allegro sales report",
+  headerRowIndex: 0,
+  requiredHeaders: ["data", "data zaksięgowania", "identyfikator", "operacja", "operator"],
+  periodResolver: "allegro",
+  periodColumn: "data",
+};
+
+export const ALLEGRO_CURRENCY_MAP = {
+  PLN: { country: "PL", scheme: "REGULAR", sellerVat: "PL5263307678" },
+  CZK: { country: "CZ", scheme: "UNION-OSS", sellerVat: "EE102013089" },
+  EUR: { country: "SK", scheme: "UNION-OSS", sellerVat: "EE102013089" },
+  HUF: { country: "HU", scheme: "UNION-OSS", sellerVat: "EE102013089" },
+} as const;
+
+export const allegroModule: ChannelModule = {
+  id: "allegro",
+  shortName: "Allegro",
+  classify: (grid: Grid) => classifySimpleChannel(PROFILE, grid),
+  map: mapAllegro,
+  defaultRules: [
+    {
+      channel: "allegro",
+      key: "currency_map",
+      value: ALLEGRO_CURRENCY_MAP,
+      note: "The currency decides the arrival country, the rate and the seller VAT number.",
+    },
+    {
+      channel: "allegro",
+      key: "departure_country",
+      value: "PL",
+      note: "Always ships from Poland.",
+    },
+    {
+      channel: "allegro",
+      key: "operation_types",
+      value: { wpłata: "B2C SALE", zwrot: "REFUND" },
+      note: "Anything else is an Allegro fee and does not belong in the report.",
+    },
+  ],
+};

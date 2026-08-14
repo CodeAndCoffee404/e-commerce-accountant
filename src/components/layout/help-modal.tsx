@@ -39,10 +39,10 @@ export function HelpModal() {
         }
       >
         <Paragraph type="secondary">
-          <Text strong>Month close</Text>, the first page, is the whole month at a glance: which
-          files are still missing, which reports can be built — one button builds everything
-          ready — what moved against last month, and what has reached Drive. The steps below are
-          the same work in detail, on the pages the sidebar lists.
+          The <Text strong>Dashboard</Text> greets you with the month at a glance: which files
+          are still missing, which reports can be built — one button builds everything ready —
+          and what needs your attention. The steps below are the same work in detail, on the
+          pages the sidebar lists.
         </Paragraph>
 
         <Steps
@@ -197,9 +197,9 @@ export function HelpModal() {
           </Paragraph>
 
           <Paragraph style={{ marginBottom: 0 }}>
-            <Text strong>Who can do what.</Text> An owner manages access, an accountant uploads and
-            builds and edits reference data, a viewer only looks. Every change is recorded under{" "}
-            <Text strong>Activity</Text> on Settings.
+            <Text strong>Who can do what.</Text> An owner manages access and all settings; an
+            accountant uploads, builds, deletes and exports; a viewer only looks. Every change is
+            recorded under <Text strong>Activity</Text> on Settings.
           </Paragraph>
 
           <Paragraph style={{ marginBottom: 0 }}>

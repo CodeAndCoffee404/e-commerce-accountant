@@ -2,8 +2,10 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
-import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "./rules";
-import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
+import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
+
+import type { ReportModule } from "./types";
+import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
 
 /**
  * Off-Amazon Sales: Allegro, Cdiscount and Shopify normalised into one shape.
@@ -358,3 +360,26 @@ function shopifyRow(
     scheme,
   ];
 }
+
+export const offAmazonSalesModule: ReportModule = {
+  definition: {
+    id: "off_amazon_sales",
+    label: "Off-Amazon Sales",
+    datasets: ["allegro", "cdiscount", "shopify"],
+    granularity: ["month"],
+    requiresEveryDataset: true,
+    description: "Allegro, Cdiscount and Shopify normalised into one sheet.",
+    needs: "Allegro, Cdiscount and Shopify, all three for the same month.",
+    why:
+      "Built from whichever channels happen to be uploaded, the sheet looks complete and " +
+      "understates revenue by exactly the ones nobody noticed were absent.",
+    requiredRules: [
+      { channel: "allegro", key: "operation_types" },
+      { channel: "allegro", key: "currency_map" },
+      { channel: "cdiscount", key: "invoice_types" },
+      { channel: "cdiscount", key: "defaults" },
+      { channel: "shopify", key: "defaults" },
+    ],
+  },
+  generate: generateOffAmazonSales,
+};

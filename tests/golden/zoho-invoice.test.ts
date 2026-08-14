@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { monthByNumber } from "@/lib/ingest/months";
 import { buildPeriod, collectPeriods } from "@/lib/ingest/period";
-import { generateZohoInvoice, missingCountries, ZOHO_HEADERS } from "@/lib/reports/zoho-invoice";
+import { generateZohoInvoice, missingCountries, ZOHO_HEADERS } from "@/modules/reports/amazon-zoho-invoice";
 
 import { corpusAvailable, ledgerForPeriod, readGolden, REPORTS, seededRules } from "./harness";
 

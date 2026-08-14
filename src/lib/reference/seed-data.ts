@@ -10,6 +10,13 @@
 /** Long enough ago to cover every period the client can upload. */
 export const RULES_EFFECTIVE_FROM = "2020-01-01";
 
+/**
+ * Channel rules live with their modules; re-exported here so seeding and the
+ * golden harness keep one import for "what a fresh tenant starts with".
+ */
+export { CHANNEL_RULES } from "@/modules/channels/registry";
+export { ALLEGRO_CURRENCY_MAP } from "@/modules/channels/allegro";
+
 export const VAT_RATES: readonly { country: string; rate: string; note?: string }[] = [
   { country: "PL", rate: "23", note: "Allegro, sales settled in złoty" },
   { country: "CZ", rate: "21", note: "Allegro, sales settled in koruna" },
@@ -43,96 +50,6 @@ export const SELLER_VAT_NUMBERS: readonly {
  * confirmed: if a second euro country ever appears it will be counted as SK,
  * silently. Kept as data so that assumption is visible and editable.
  */
-export const ALLEGRO_CURRENCY_MAP = {
-  PLN: { country: "PL", scheme: "REGULAR", sellerVat: "PL5263307678" },
-  CZK: { country: "CZ", scheme: "UNION-OSS", sellerVat: "EE102013089" },
-  EUR: { country: "SK", scheme: "UNION-OSS", sellerVat: "EE102013089" },
-  HUF: { country: "HU", scheme: "UNION-OSS", sellerVat: "EE102013089" },
-} as const;
-
-export const CHANNEL_RULES: readonly {
-  channel: string;
-  key: string;
-  value: unknown;
-  note: string;
-}[] = [
-  {
-    channel: "allegro",
-    key: "currency_map",
-    value: ALLEGRO_CURRENCY_MAP,
-    note: "The currency decides the arrival country, the rate and the seller VAT number.",
-  },
-  {
-    channel: "allegro",
-    key: "departure_country",
-    value: "PL",
-    note: "Always ships from Poland.",
-  },
-  {
-    channel: "allegro",
-    key: "operation_types",
-    value: { wpłata: "B2C SALE", zwrot: "REFUND" },
-    note: "Anything else is an Allegro fee and does not belong in the report.",
-  },
-  {
-    channel: "cdiscount",
-    key: "defaults",
-    value: {
-      currency: "EUR",
-      departureCountry: "FR",
-      arrivalCountry: "FR",
-      scheme: "REGULAR",
-      sellerVat: "FR23888800463",
-    },
-    note: "Cdiscount sells in France only.",
-  },
-  {
-    channel: "cdiscount",
-    key: "invoice_types",
-    value: { Vente: "B2C SALE", "Remboursement client": "REFUND" },
-    note: "Subscriptions and commission credits are not sales.",
-  },
-  {
-    channel: "shopify",
-    key: "defaults",
-    value: {
-      departureCountry: "ES",
-      domesticScheme: "REGULAR",
-      domesticSellerVat: "ESN0531416F",
-      exportScheme: "UNION-OSS",
-      exportSellerVat: "EE102013089",
-    },
-    note: "Always ships from Spain; REGULAR within Spain, UNION-OSS otherwise.",
-  },
-  {
-    channel: "shopify",
-    key: "skipped_arrival_countries",
-    value: ["CH"],
-    note: "Orders to Switzerland stay out of the report — an agreed rule.",
-  },
-  {
-    channel: "shopify",
-    key: "country_aliases",
-    value: { UK: "GB" },
-    note: "Shopify writes UK; reporting needs GB.",
-  },
-  {
-    channel: "shopify",
-    key: "recompute_zero_tax_countries",
-    value: ["GB"],
-    note:
-      "British orders arrive with zero tax and no rate in the label, so the VAT " +
-      "is computed from the order total. Elsewhere a zero means zero and must " +
-      "not be filled in.",
-  },
-  {
-    channel: "shopify",
-    key: "excluded_sources",
-    value: ["shopify_draft_order"],
-    note: "Draft orders are not sales.",
-  },
-];
-
 /** Amazon SKU → what the Zoho invoice should call it. */
 export const SKU_MAPPINGS: readonly {
   channel: string;

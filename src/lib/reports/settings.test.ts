@@ -8,7 +8,7 @@ import {
   requiredCountries,
   requiredDatasets,
 } from "./settings";
-import { ZOHO_COUNTRIES } from "./zoho-invoice";
+import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 describe("report settings", () => {
   const offAmazon = reportDefinition("off_amazon_sales");

@@ -1,14 +1,11 @@
-import Decimal from "decimal.js";
-import { and, desc, eq, inArray, sql, sum } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import { availablePeriods, loadReportSettings } from "@/lib/reports/queries";
 import { DATASET_NAMES, requiredCountries, requiredDatasets } from "@/lib/reports/settings";
-import { ZOHO_COUNTRIES } from "@/lib/reports/zoho-invoice";
-
-import { previousMonthLabel } from "./period";
+import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 /** One thing the month needs: a file, either present or still wanted. */
 export type ChecklistItem = {
@@ -42,28 +39,14 @@ export type CloseReport = {
   drive: { synced: number; failed: number; pending: number; total: number };
 };
 
-export type DeltaRow = {
-  channel: string;
-  country: string | null;
-  currency: string;
-  /** Display-ready, two decimal places. Formatted here so the page stays lean. */
-  current: string;
-  previous: string;
-  /** Null when there is no previous figure — the row is new this month. */
-  changePct: number | null;
-  flagged: boolean;
-};
-
-export type CloseData = {
+export type DashboardData = {
   /** Months with any parsed upload, newest first. */
   months: string[];
   month: string | null;
-  previousMonth: string | null;
   items: ChecklistItem[];
   reports: CloseReport[];
   /** Reports the one-button build would run right now. */
   buildable: number;
-  deltas: DeltaRow[];
   matrix: {
     months: string[];
     rows: { key: string; label: string; cells: ("yes" | "no" | "optional")[] }[];
@@ -77,7 +60,10 @@ export type CloseData = {
  * than hard-coded, so switching a channel to optional or a report off on
  * Settings changes this page the same moment it changes the builds.
  */
-export async function loadClose(tenantId: string, requestedMonth?: string): Promise<CloseData> {
+export async function loadDashboard(
+  tenantId: string,
+  requestedMonth?: string,
+): Promise<DashboardData> {
   const db = getDb();
 
   const [files, settings, availability] = await Promise.all([
@@ -104,8 +90,8 @@ export async function loadClose(tenantId: string, requestedMonth?: string): Prom
 
   months.sort().reverse();
 
-  const month = requestedMonth && months.includes(requestedMonth) ? requestedMonth : months[0] ?? null;
-  const previousMonth = month ? previousMonthLabel(month) : null;
+  const month =
+    requestedMonth && months.includes(requestedMonth) ? requestedMonth : months[0] ?? null;
 
   // What the month needs, from the enabled reports' own definitions.
   const items: ChecklistItem[] = [];
@@ -168,10 +154,7 @@ export async function loadClose(tenantId: string, requestedMonth?: string): Prom
     }
   }
 
-  const [reports, deltas] = await Promise.all([
-    month ? loadReports(tenantId, month, availability, settings) : Promise.resolve([]),
-    month ? loadDeltas(tenantId, month, previousMonth) : Promise.resolve([]),
-  ]);
+  const reports = month ? await loadReports(tenantId, month, availability, settings) : [];
 
   // History: the same checklist across every month on record.
   const matrixMonths = months.slice(0, 13);
@@ -202,11 +185,9 @@ export async function loadClose(tenantId: string, requestedMonth?: string): Prom
   return {
     months,
     month,
-    previousMonth,
     items,
     reports,
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
-    deltas,
     matrix,
   };
 }
@@ -317,128 +298,4 @@ async function loadReports(
   }
 
   return result;
-}
-
-async function loadDeltas(
-  tenantId: string,
-  month: string,
-  previousMonth: string | null,
-): Promise<DeltaRow[]> {
-  if (!previousMonth) return [];
-
-  const rows = await getDb()
-    .select({
-      dataset: schema.transactions.dataset,
-      country: schema.transactions.countryCode,
-      currency: schema.transactions.currency,
-      period: schema.transactions.periodLabel,
-      gross: sum(schema.transactions.gross),
-    })
-    .from(schema.transactions)
-    .where(
-      and(
-        eq(schema.transactions.tenantId, tenantId),
-        eq(schema.transactions.isCurrent, true),
-        sql`${schema.transactions.periodLabel} in (${month}, ${previousMonth})`,
-      ),
-    )
-    .groupBy(
-      schema.transactions.dataset,
-      schema.transactions.countryCode,
-      schema.transactions.currency,
-      schema.transactions.periodLabel,
-    );
-
-  return computeDeltas(
-    rows.map((row) => ({
-      dataset: row.dataset,
-      country: row.country,
-      currency: row.currency ?? "",
-      period: row.period,
-      gross: row.gross ?? "0",
-    })),
-    month,
-    previousMonth,
-  );
-}
-
-/**
- * Month-over-month comparison, flagged where a person should look.
- *
- * A flag is a swing of at least a quarter in either direction, or a channel
- * that went completely quiet — on amounts big enough to matter. It is a
- * pointer, not a verdict: the number may be perfectly right, but it should be
- * right on purpose.
- */
-export function computeDeltas(
-  rows: readonly {
-    dataset: string;
-    country: string | null;
-    currency: string;
-    period: string;
-    gross: string;
-  }[],
-  month: string,
-  previousMonth: string,
-): DeltaRow[] {
-  // A previous month with no data at all is not a comparison, it is the start
-  // of the record: every row would come out "new" and the table would be pure
-  // noise. The page says "nothing to compare" instead.
-  if (!rows.some((row) => row.period === previousMonth)) return [];
-
-  const buckets = new Map<string, { current: Decimal; previous: Decimal; row: (typeof rows)[number] }>();
-
-  for (const row of rows) {
-    if (!row.currency) continue;
-
-    const key = `${row.dataset}|${row.country ?? ""}|${row.currency}`;
-    const bucket = buckets.get(key) ?? {
-      current: new Decimal(0),
-      previous: new Decimal(0),
-      row,
-    };
-
-    if (row.period === month) bucket.current = bucket.current.plus(row.gross);
-    if (row.period === previousMonth) bucket.previous = bucket.previous.plus(row.gross);
-    buckets.set(key, bucket);
-  }
-
-  const result: DeltaRow[] = [];
-
-  for (const { current, previous, row } of buckets.values()) {
-    if (current.isZero() && previous.isZero()) continue;
-
-    const changePct = previous.isZero()
-      ? null
-      : Number(current.minus(previous).dividedBy(previous.abs()).times(100).toFixed(1));
-
-    // Small numbers swing wildly and mean nothing; a hundred in any currency
-    // here is a deliberate floor, not a tuned one.
-    const material = Decimal.max(current.abs(), previous.abs()).greaterThanOrEqualTo(100);
-    const flagged =
-      material &&
-      changePct !== null &&
-      (Math.abs(changePct) >= 25 || (current.isZero() && !previous.isZero()));
-
-    result.push({
-      channel: DATASET_NAMES[row.dataset as keyof typeof DATASET_NAMES] ?? row.dataset,
-      country: row.country,
-      currency: row.currency,
-      current: current.toFixed(2),
-      previous: previous.toFixed(2),
-      changePct,
-      flagged,
-    });
-  }
-
-  // The rows worth a look come first; the rest sort by channel and country.
-  return result.sort((a, b) => {
-    if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
-
-    return (
-      a.channel.localeCompare(b.channel) ||
-      (a.country ?? "").localeCompare(b.country ?? "") ||
-      a.currency.localeCompare(b.currency)
-    );
-  });
 }

@@ -14,14 +14,16 @@ import { seedReferenceData } from "./seed";
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
 /**
- * Owners and accountants may change reference data; a viewer may not. The check
- * lives here rather than in the interface, because a Server Action is a public
- * endpoint whatever the interface chooses to render.
+ * Company settings are the owner's alone — the client drew the line there:
+ * an accountant uploads, builds and deletes, but does not change what the
+ * numbers are computed from. The check lives here rather than in the
+ * interface, because a Server Action is a public endpoint whatever the
+ * interface chooses to render.
  */
 async function requireEditor() {
   const user = await requireUser();
 
-  if (user.role === "viewer") throw new Error("Not allowed to change reference data.");
+  if (user.role !== "owner") throw new Error("Only the owner can change company settings.");
 
   return user;
 }

@@ -1,7 +1,13 @@
-import { parseAmazonVatDate } from "./dates";
-import { wholeUnitsProblem } from "../numbers";
-import { Attention, RowReader } from "./reader";
-import type { MapContext, MapResult, MappedTransaction } from "./types";
+import type { Grid } from "@/lib/ingest/classify";
+import type { SimpleDataset } from "@/lib/ingest/datasets";
+
+import { classifySimpleChannel } from "./toolkit";
+import type { ChannelModule } from "./types";
+
+import { parseAmazonVatDate } from "@/lib/ingest/mappers/dates";
+import { wholeUnitsProblem } from "@/lib/ingest/numbers";
+import { Attention, RowReader } from "@/lib/ingest/mappers/reader";
+import type { MapContext, MapResult, MappedTransaction } from "@/lib/ingest/mappers/types";
 
 /**
  * Amazon's VAT transaction report. Amounts are plain decimals with a dot, and
@@ -71,3 +77,31 @@ export function mapAmazonVat({ grid, headerRowIndex }: MapContext): MapResult {
 
   return { rows, missingColumns: reader.missingColumns };
 }
+
+const PROFILE: SimpleDataset = {
+  id: "amazon_vat",
+  label: "Amazon VAT transaction report",
+  headerRowIndex: 0,
+  requiredHeaders: [
+    "UNIQUE_ACCOUNT_IDENTIFIER",
+    "ACTIVITY_PERIOD",
+    "SALES_CHANNEL",
+    "MARKETPLACE",
+    "PROGRAM_TYPE",
+    "TRANSACTION_TYPE",
+  ],
+  periodResolver: "amazon_vat",
+  periodColumn: "ACTIVITY_PERIOD",
+  /** Amazon VAT derives its period from AFN rows only. */
+  periodFilterColumn: "SALES_CHANNEL",
+  periodFilterValue: "AFN",
+};
+
+export const amazonVatModule: ChannelModule = {
+  id: "amazon_vat",
+  shortName: "Amazon VAT",
+  classify: (grid: Grid) => classifySimpleChannel(PROFILE, grid),
+  map: mapAmazonVat,
+  // Read as it stands; no per-channel rule decides anything.
+  defaultRules: [],
+};

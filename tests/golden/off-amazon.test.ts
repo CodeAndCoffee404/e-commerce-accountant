@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildPeriod, collectPeriods } from "@/lib/ingest/period";
 import { monthByNumber } from "@/lib/ingest/months";
-import { generateOffAmazonSales, OFF_AMAZON_HEADERS } from "@/lib/reports/off-amazon";
+import { generateOffAmazonSales, OFF_AMAZON_HEADERS } from "@/modules/reports/off-amazon-sales";
 
 import {
   corpusAvailable,

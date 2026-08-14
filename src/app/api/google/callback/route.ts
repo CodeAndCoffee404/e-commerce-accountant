@@ -14,7 +14,7 @@ function back(request: Request, outcome: string): NextResponse {
 export async function GET(request: Request): Promise<NextResponse> {
   const session = await auth();
 
-  if (!session?.user?.id || !session.tenantId || session.role === "viewer") {
+  if (!session?.user?.id || !session.tenantId || session.role !== "owner") {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
