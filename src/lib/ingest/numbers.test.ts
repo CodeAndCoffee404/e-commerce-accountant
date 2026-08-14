@@ -1,13 +1,7 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
 
-import {
-  NumberFormatError,
-  parseDecimalOrZero,
-  parseDecimalValue,
-  parseQuantity,
-  toNumeric,
-} from "./numbers";
+import { NumberFormatError, parseDecimalValue, toNumeric, wholeUnitsProblem } from "./numbers";
 
 const dot = { decimalSeparator: "." as const, column: "Total" };
 const comma = { decimalSeparator: "," as const, column: "Summe" };
@@ -66,21 +60,15 @@ describe("parseDecimalValue", () => {
   });
 });
 
-describe("parseDecimalOrZero", () => {
-  it("puts zero in place of an empty value", () => {
-    expect(parseDecimalOrZero("", dot).toFixed()).toBe("0");
-    expect(parseDecimalOrZero("7.65", dot).toFixed()).toBe("7.65");
-  });
-});
-
-describe("parseQuantity", () => {
-  it("accepts whole numbers", () => {
-    expect(parseQuantity("1", dot)).toBe(1);
-    expect(parseQuantity("12", dot)).toBe(12);
+describe("wholeUnitsProblem", () => {
+  it("says nothing about a whole quantity", () => {
+    expect(wholeUnitsProblem(new Decimal("1"), "quantity")).toBeNull();
+    expect(wholeUnitsProblem(new Decimal("12"), "quantity")).toBeNull();
+    expect(wholeUnitsProblem(null, "quantity")).toBeNull();
   });
 
-  it("rejects a fractional quantity — a sign the wrong column was read", () => {
-    expect(() => parseQuantity("1.5", dot)).toThrow(NumberFormatError);
+  it("names a fractional quantity — a sign the wrong column was read", () => {
+    expect(wholeUnitsProblem(new Decimal("1.5"), "quantity")).toContain("1.5");
   });
 });
 

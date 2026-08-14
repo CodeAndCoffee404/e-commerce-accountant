@@ -120,7 +120,19 @@ export function ReportsView({
         size="small"
         loading={pending}
         pagination={runs.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
-        locale={{ emptyText: <Empty description="No reports built yet" /> }}
+        locale={{
+          emptyText: (
+            <Empty
+              description={
+                <span>
+                  No reports yet.
+                  <br />
+                  Pick a period above and build one.
+                </span>
+              }
+            />
+          ),
+        }}
         expandable={{
           expandedRowRender: (run) => <RunDetails run={run} />,
           rowExpandable: (run) => run.sources.length > 0 || run.errorMessage !== null,

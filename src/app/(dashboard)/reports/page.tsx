@@ -3,6 +3,8 @@ import { ReportsView } from "@/components/reports/reports-view";
 import { requireUser } from "@/lib/auth/session";
 import { availablePeriods, listReportRuns } from "@/lib/reports/queries";
 
+export const metadata = { title: "Reports — E-commerce Accountant" };
+
 export default async function ReportsPage() {
   const user = await requireUser();
   const [runs, periods] = await Promise.all([

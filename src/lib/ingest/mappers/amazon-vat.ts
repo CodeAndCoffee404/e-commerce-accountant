@@ -1,4 +1,5 @@
 import { parseAmazonVatDate } from "./dates";
+import { wholeUnitsProblem } from "../numbers";
 import { Attention, RowReader } from "./reader";
 import type { MapContext, MapResult, MappedTransaction } from "./types";
 
@@ -22,6 +23,8 @@ export function mapAmazonVat({ grid, headerRowIndex }: MapContext): MapResult {
     const vat = attention.take(reader.decimal(rowIndex, "TOTAL_ACTIVITY_VALUE_VAT_AMT"));
     const rate = attention.take(reader.decimal(rowIndex, "PRICE_OF_ITEMS_VAT_RATE_PERCENT"));
     const quantity = attention.take(reader.decimal(rowIndex, "QTY"));
+
+    attention.add(wholeUnitsProblem(quantity, "QTY"));
 
     const occurredOn = parseAmazonVatDate(reader.text(rowIndex, "TRANSACTION_COMPLETE_DATE"))
       ?? parseAmazonVatDate(reader.text(rowIndex, "TAX_CALCULATION_DATE"));

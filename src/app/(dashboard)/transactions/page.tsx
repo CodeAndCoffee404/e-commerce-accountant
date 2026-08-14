@@ -12,6 +12,8 @@ function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+export const metadata = { title: "Transactions — E-commerce Accountant" };
+
 export default async function TransactionsPage({ searchParams }: PageProps<"/transactions">) {
   const user = await requireUser();
   const params = await searchParams;

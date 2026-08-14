@@ -58,10 +58,6 @@ export function vatRateOn(
   return new Decimal(candidates[0].rate).dividedBy(100);
 }
 
-export function sellerVatFor(rules: RulesSnapshot, country: string): string | null {
-  return rules.sellerVatNumbers.find((entry) => entry.country === country)?.vatNumber ?? null;
-}
-
 export type SkuDecision =
   | { kind: "ignore" }
   | { kind: "map"; targetSku: string; itemName: string }

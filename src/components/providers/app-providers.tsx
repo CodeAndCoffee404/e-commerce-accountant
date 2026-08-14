@@ -15,6 +15,11 @@ function AntdTheme({ children }: { children: ReactNode }) {
     <ConfigProvider
       locale={enUS}
       theme={{
+        // Emits the palette as CSS variables, so plain CSS and inline styles can
+        // reach a theme token instead of hard-coding a colour that then ignores
+        // dark mode. Also lets one stylesheet serve both themes.
+        cssVar: { prefix: "ant" },
+        hashed: false,
         algorithm:
           themeMode === "dark"
             ? antdTheme.darkAlgorithm

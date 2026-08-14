@@ -4,6 +4,8 @@ import { UploadsTable } from "@/components/uploads/uploads-table";
 import { requireUser } from "@/lib/auth/session";
 import { listUploads } from "@/lib/uploads/queries";
 
+export const metadata = { title: "Uploads — E-commerce Accountant" };
+
 export default async function UploadsPage() {
   const user = await requireUser();
   const rows = await listUploads(user.tenantId);

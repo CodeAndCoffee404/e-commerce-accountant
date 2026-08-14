@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import { parseIsoDate } from "./dates";
+import { wholeUnitsProblem } from "../numbers";
 import { Attention, RowReader } from "./reader";
 import type { MapContext, MapResult, MappedTransaction } from "./types";
 
@@ -42,6 +43,8 @@ export function mapShopify({ grid, headerRowIndex }: MapContext): MapResult {
     const price = attention.take(reader.decimal(rowIndex, "Lineitem price"));
     const quantity = attention.take(reader.decimal(rowIndex, "Lineitem quantity"));
     const discount = attention.take(reader.decimal(rowIndex, "Lineitem discount"));
+
+    attention.add(wholeUnitsProblem(quantity, "Lineitem quantity"));
 
     // Line gross is price × quantity less the line discount. Shopify does not
     // ship that product, and computing it here keeps the ledger row

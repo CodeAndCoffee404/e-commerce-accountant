@@ -1,5 +1,3 @@
-import { eq } from "drizzle-orm";
-
 import { getDb, schema } from "@/lib/db";
 
 import {
@@ -99,15 +97,4 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
     skuMappings: skus.length,
     channelRules: rules.length,
   };
-}
-
-/** True when the tenant has never been seeded. */
-export async function needsSeeding(tenantId: string): Promise<boolean> {
-  const [existing] = await getDb()
-    .select({ id: schema.channelRules.id })
-    .from(schema.channelRules)
-    .where(eq(schema.channelRules.tenantId, tenantId))
-    .limit(1);
-
-  return existing === undefined;
 }

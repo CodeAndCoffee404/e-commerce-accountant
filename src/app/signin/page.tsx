@@ -20,7 +20,11 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 24,
+        padding: "clamp(16px, 5vw, 48px)",
+        // A quiet wash rather than a flat panel, so the card has somewhere to
+        // sit. Both stops are theme tokens, so it follows dark mode.
+        background:
+          "radial-gradient(120% 120% at 50% 0%, var(--ant-color-primary-bg, transparent) 0%, transparent 60%)",
       }}
     >
       <SignInCard

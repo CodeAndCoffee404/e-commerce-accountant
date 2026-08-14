@@ -40,7 +40,19 @@ export function UploadsTable({ rows }: { rows: UploadRow[] }) {
         pagination={
           rows.length > 20 ? { pageSize: 20, showSizeChanger: false } : false
         }
-        locale={{ emptyText: <Empty description="No files uploaded yet" /> }}
+        locale={{
+        emptyText: (
+          <Empty
+            description={
+              <span>
+                No files yet.
+                <br />
+                Drop a channel export above — Amazon, Allegro, Cdiscount or Shopify.
+              </span>
+            }
+          />
+        ),
+      }}
         scroll={{ x: 900 }}
         columns={[
           {

@@ -10,7 +10,7 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Tooltip, Typography } from "antd";
+import { Button, Layout, Menu, Space, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
@@ -59,13 +59,19 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
         trigger={null}
         theme={themeMode}
         width={220}
+        // Collapses itself on a narrow screen: at 220px the sidebar would take
+        // half a phone, and this app is used on one when a file arrives by mail.
+        breakpoint="lg"
+        collapsedWidth={64}
       >
-        <div
+        <Link
+          href={NAV_ITEMS[0].href}
           style={{
             height: 56,
             display: "flex",
             alignItems: "center",
-            padding: collapsed ? "0 16px" : "0 20px",
+            justifyContent: collapsed ? "center" : "flex-start",
+            padding: collapsed ? 0 : "0 20px",
             overflow: "hidden",
             whiteSpace: "nowrap",
           }}
@@ -73,7 +79,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
           <Typography.Text strong style={{ fontSize: 15 }}>
             {collapsed ? "EA" : "E-commerce Accountant"}
           </Typography.Text>
-        </div>
+        </Link>
 
         <Menu
           mode="inline"
@@ -92,12 +98,17 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
             paddingInline: 16,
           }}
         >
-          <Button
-            type="text"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
-          />
+          <Space size={12}>
+            <Button
+              type="text"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+            />
+
+            {/* Where you are, for when the sidebar is collapsed to icons. */}
+            <Typography.Text strong>{activeItem?.label ?? ""}</Typography.Text>
+          </Space>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Tooltip title={themeMode === "dark" ? "Switch to light" : "Switch to dark"}>
@@ -113,7 +124,11 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
           </div>
         </Header>
 
-        <Content style={{ padding: 24 }}>{children}</Content>
+        {/* A max width so a wide table stays readable, and breathing room on a
+            phone where 24px of padding costs a column. */}
+        <Content style={{ padding: "clamp(12px, 3vw, 24px)" }}>
+          <div style={{ maxWidth: 1600, margin: "0 auto" }}>{children}</div>
+        </Content>
       </Layout>
     </Layout>
   );

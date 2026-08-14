@@ -30,6 +30,9 @@ export function TransactionsView({
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [drilling, setDrilling] = useState<string | null>(null);
+  const hasFilters = ["dataset", "period", "country", "type", "attention"].some((key) =>
+    params.get(key),
+  );
 
   const update = (key: string, value: string | null) => {
     const next = new URLSearchParams(params.toString());
@@ -106,7 +109,23 @@ export function TransactionsView({
         size="small"
         loading={pending}
         scroll={{ x: 1200 }}
-        locale={{ emptyText: <Empty description="No transactions match these filters" /> }}
+        locale={{
+          emptyText: (
+            <Empty
+              description={
+                page.total === 0 && !hasFilters ? (
+                  <span>
+                    The ledger is empty.
+                    <br />
+                    Upload an export and its rows will appear here.
+                  </span>
+                ) : (
+                  "No transactions match these filters"
+                )
+              }
+            />
+          ),
+        }}
         pagination={{
           current: page.page,
           pageSize: page.pageSize,

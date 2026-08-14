@@ -55,7 +55,7 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
   const token = await accessTokenFor(tenantId);
 
   if (!token) {
-    await markFailed(artifacts, "Google access was revoked.");
+    await markFailed(tenantId, artifacts, "Google access was revoked.");
 
     return {
       uploaded: 0,
@@ -73,7 +73,7 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
 
     folderId = await ensureFolder(token, connection.folderId, `${label} - ${run.periodLabel}`);
   } catch (error) {
-    await markFailed(artifacts, (error as Error).message);
+    await markFailed(tenantId, artifacts, (error as Error).message);
 
     return { uploaded: 0, failed: artifacts.length, message: (error as Error).message };
   }
@@ -137,7 +137,15 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
   };
 }
 
+/**
+ * Marks the run's files undelivered and records why.
+ *
+ * The reason lands on the connection, which is where the settings screen shows
+ * it: the failure is almost always about the connection rather than about one
+ * file, and an operator asking "why is nothing arriving" looks there.
+ */
 async function markFailed(
+  tenantId: string,
   artifacts: { id: string }[],
   reason: string,
 ): Promise<void> {
@@ -150,5 +158,8 @@ async function markFailed(
       .where(eq(schema.reportArtifacts.id, artifact.id));
   }
 
-  void reason;
+  await db
+    .update(schema.googleConnections)
+    .set({ lastError: reason })
+    .where(eq(schema.googleConnections.tenantId, tenantId));
 }

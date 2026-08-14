@@ -5,6 +5,7 @@ import {
   amazonMonthlyDecimalSeparator,
 } from "./amazon-monthly-columns";
 import { parseAmazonMonthlyTimestamp } from "./dates";
+import { wholeUnitsProblem } from "../numbers";
 import { Attention, RowReader } from "./reader";
 import type { MapContext, MapResult, MappedTransaction } from "./types";
 
@@ -49,6 +50,9 @@ export function mapAmazonMonthly({ grid, headerRowIndex, country }: MapContext):
     const tax = attention.take(reader.decimalOf(rowIndex, AMAZON_MONTHLY_COLUMNS.salesTax));
     const total = attention.take(reader.decimalOf(rowIndex, AMAZON_MONTHLY_COLUMNS.total));
     const quantity = attention.take(reader.decimalOf(rowIndex, AMAZON_MONTHLY_COLUMNS.quantity));
+
+    // A fraction here means the wrong column was matched, not half a filter.
+    attention.add(wholeUnitsProblem(quantity, "quantity"));
 
     const occurredOn = parseAmazonMonthlyTimestamp(reader.text(rowIndex, dateHeader));
 

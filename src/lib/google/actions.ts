@@ -6,7 +6,7 @@ import { z } from "zod";
 import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 
-import { accessTokenFor, disconnect, loadConnection, setFolder } from "./connection";
+import { accessTokenFor, disconnect, setFolder } from "./connection";
 import { folderName } from "./drive";
 
 export type DriveResult = { ok: true; message: string } | { ok: false; message: string };
@@ -92,10 +92,4 @@ export async function disconnectDrive(): Promise<DriveResult> {
     ok: true,
     message: "Google Drive disconnected. Files already uploaded stay where they are.",
   };
-}
-
-export async function driveStatus() {
-  const user = await requireUser();
-
-  return loadConnection(user.tenantId);
 }

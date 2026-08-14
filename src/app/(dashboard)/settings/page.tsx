@@ -12,6 +12,8 @@ import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
 import { loadReferenceData } from "@/lib/reference/queries";
 
+export const metadata = { title: "Settings — E-commerce Accountant" };
+
 export default async function SettingsPage() {
   const user = await requireUser();
   const [data, connection, members, audit] = await Promise.all([

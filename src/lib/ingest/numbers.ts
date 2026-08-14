@@ -85,28 +85,17 @@ export function parseDecimalValue(
   return negative ? value.negated() : value;
 }
 
-/** Same rules, but a missing value counts as zero. */
-export function parseDecimalOrZero(
-  raw: string | null | undefined,
-  options: { decimalSeparator: DecimalSeparator; column: string },
-): Decimal {
-  return parseDecimalValue(raw, options) ?? new Decimal(0);
-}
-
 /**
  * Quantities are whole units in every channel, so a fractional one means the
  * column was misread rather than that someone sold half a filter.
+ *
+ * Returns the reason instead of throwing: a single odd row should flag itself
+ * and let the rest of the file through.
  */
-export function parseQuantity(
-  raw: string | null | undefined,
-  options: { decimalSeparator: DecimalSeparator; column: string },
-): number | null {
-  const value = parseDecimalValue(raw, options);
+export function wholeUnitsProblem(value: Decimal | null, column: string): string | null {
+  if (value === null || value.isInteger()) return null;
 
-  if (value === null) return null;
-  if (!value.isInteger()) throw new NumberFormatError((raw ?? "").trim(), options.column);
-
-  return value.toNumber();
+  return `Quantity "${value.toFixed()}" in column "${column}" is not a whole number.`;
 }
 
 /** The string form Postgres `numeric` accepts without going through a float. */
