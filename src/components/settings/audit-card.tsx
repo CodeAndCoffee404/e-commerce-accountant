@@ -26,7 +26,7 @@ function summarise(payload: Record<string, unknown> | null): string {
 
 export function AuditCard({ rows }: { rows: AuditRow[] }) {
   return (
-    <Card size="small" title="Activity">
+    <Card size="small" variant="borderless" styles={{ body: { padding: 0 } }}>
       <Typography.Paragraph type="secondary">
         Who did what. The reference tables keep no history of their own, so this is where
         &ldquo;who changed this rate, and when&rdquo; is answered. Entries are never edited or

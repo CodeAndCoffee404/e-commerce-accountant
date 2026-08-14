@@ -24,7 +24,7 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="How the reports work, the numbers they use, where they go, and who may touch them. Nothing here is hard-coded — changing a rate does not need a developer."
+        description="Reports, rates, integrations and access. Nothing here needs a developer."
       />
 
       <SettingsView

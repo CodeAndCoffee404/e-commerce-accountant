@@ -124,9 +124,9 @@ export function AppShell({
             height: 56,
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: 8,
             justifyContent: collapsed ? "center" : "flex-start",
-            padding: collapsed ? 0 : "0 16px",
+            padding: collapsed ? 0 : "0 12px",
             overflow: "hidden",
             whiteSpace: "nowrap",
             borderBottom: `1px solid ${token.colorSplit}`,
@@ -151,7 +151,7 @@ export function AppShell({
             EA
           </span>
           {collapsed ? null : (
-            <Typography.Text strong style={{ fontSize: 15 }}>
+            <Typography.Text strong style={{ fontSize: 14, letterSpacing: -0.1 }}>
               E-commerce Accountant
             </Typography.Text>
           )}

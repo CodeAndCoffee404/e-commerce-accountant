@@ -2,14 +2,13 @@
 
 import {
   CheckCircleFilled,
-  CloseCircleOutlined,
   CloudOutlined,
-  MinusOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
 import {
   App,
+  Badge,
   Button,
   Card,
   Progress,
@@ -43,6 +42,7 @@ export function DashboardView({
   firstName,
   flaggedRows,
   canBuild,
+  uploadAction,
 }: {
   data: DashboardData;
   activity: AuditRow[];
@@ -50,6 +50,8 @@ export function DashboardView({
   /** Current ledger rows waiting for a person, tenant-wide. */
   flaggedRows: number;
   canBuild: boolean;
+  /** The Upload files control, provided by the page so roles stay server-side. */
+  uploadAction: React.ReactNode;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
@@ -134,8 +136,11 @@ export function DashboardView({
               }
         }
         toolbar={
-          empty ? null : (
+          empty ? (
+            uploadAction
+          ) : (
             <Space wrap>
+              {uploadAction}
               <Select
                 value={data.month ?? undefined}
                 style={{ minWidth: 170 }}
@@ -234,8 +239,7 @@ export function DashboardView({
       <Card size="small" title="History">
         <MatrixTable matrix={data.matrix} selected={data.month} />
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
-          Every month on record. A dot is a file that is there; a dash is an optional one that is
-          not. Click a month to open it.
+          Every month on record: a dot is a file that is there, a dash is one that is not.
         </Typography.Paragraph>
       </Card>
 
@@ -455,14 +459,32 @@ function Ring({
   );
 }
 
-function FileChip({ item }: { item: ChecklistItem }) {
-  const icon = item.uploaded ? (
-    <CheckCircleFilled />
-  ) : item.requirement === "optional" ? (
-    <MinusOutlined />
-  ) : (
-    <CloseCircleOutlined />
+function Dot({ color, size = 7 }: { color: string; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 999,
+        background: color,
+        display: "inline-block",
+        flex: "none",
+      }}
+    />
   );
+}
+
+function FileChip({ item }: { item: ChecklistItem }) {
+  const { token } = theme.useToken();
+
+  // Fourteen solid orange tags shout; fourteen quiet chips with a status dot
+  // read. The dot is the state, the chip is just a name.
+  const dot = item.uploaded
+    ? token.colorSuccess
+    : item.requirement === "optional"
+      ? token.colorTextQuaternary
+      : token.colorWarning;
 
   return (
     <Tooltip
@@ -474,16 +496,23 @@ function FileChip({ item }: { item: ChecklistItem }) {
             : "Still wanted for this month."
       }
     >
-      <Tag
-        icon={icon}
-        color={item.uploaded ? "green" : item.requirement === "optional" ? "default" : "orange"}
+      <span
         style={{
-          marginInlineEnd: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          padding: "3px 10px",
+          borderRadius: 999,
+          background: token.colorFillTertiary,
+          fontSize: 12,
+          color: item.uploaded ? token.colorText : token.colorTextSecondary,
           opacity: !item.uploaded && item.requirement === "optional" ? 0.65 : 1,
+          cursor: "default",
         }}
       >
+        <Dot color={dot} />
         {item.label.replace("Amazon Monthly Transaction report", "Amazon")}
-      </Tag>
+      </span>
     </Tooltip>
   );
 }
@@ -499,34 +528,35 @@ function ReportLine({ report }: { report: CloseReport }) {
         justifyContent: "space-between",
       }}
     >
-      <Space size={8} wrap>
+      <Space size={10} wrap>
         <Text strong style={{ fontSize: 13 }}>
           {report.label}
         </Text>
 
         {report.state === "built" && !report.stale ? (
-          <Tag color="green">built</Tag>
+          <Badge status="success" text={<Text style={{ fontSize: 12 }}>built</Text>} />
         ) : report.state === "built" && report.stale ? (
           <Tooltip title="A file it was built from has been replaced by a re-upload since. The build button above will rebuild it.">
-            <Tag color="orange">built, now stale</Tag>
+            <Badge status="warning" text={<Text style={{ fontSize: 12 }}>built, now stale</Text>} />
           </Tooltip>
         ) : report.state === "ready" ? (
-          <Tag color="blue">ready</Tag>
+          // The processing dot pulses — "this one is actionable right now".
+          <Badge status="processing" text={<Text style={{ fontSize: 12 }}>ready</Text>} />
         ) : (
-          <Tag>waiting</Tag>
+          <Badge status="default" text={<Text type="secondary" style={{ fontSize: 12 }}>waiting</Text>} />
         )}
 
         {report.warnings > 0 ? (
           <Tooltip title="Open Reports and expand the run to read them.">
-            <Tag icon={<WarningOutlined />} color="orange">
-              {report.warnings}
-            </Tag>
+            <Text style={{ fontSize: 12, color: "var(--ant-color-warning)" }}>
+              <WarningOutlined /> {report.warnings}
+            </Text>
           </Tooltip>
         ) : null}
 
         {report.lastFailure ? (
           <Tooltip title={report.lastFailure}>
-            <Tag color="red">failed</Tag>
+            <Badge status="error" text={<Text style={{ fontSize: 12 }}>failed</Text>} />
           </Tooltip>
         ) : null}
 
@@ -548,14 +578,16 @@ function ReportLine({ report }: { report: CloseReport }) {
 }
 
 function DriveBadge({ drive }: { drive: CloseReport["drive"] }) {
+  const { token } = theme.useToken();
+
   if (drive.total === 0) return null;
 
   if (drive.failed > 0) {
     return (
       <Tooltip title="Delivery to Drive failed for some files. Retry lives on Reports; the workbooks are safe here either way.">
-        <Tag icon={<CloudOutlined />} color="red">
-          Drive: {drive.failed} failed
-        </Tag>
+        <Text style={{ fontSize: 12, color: token.colorError }}>
+          <CloudOutlined /> {drive.failed} failed
+        </Text>
       </Tooltip>
     );
   }
@@ -563,15 +595,17 @@ function DriveBadge({ drive }: { drive: CloseReport["drive"] }) {
   if (drive.pending > 0) {
     return (
       <Tooltip title="Not in Drive yet. If Drive is not connected, connect it under Settings — the workbooks are downloadable here regardless.">
-        <Tag icon={<CloudOutlined />}>not in Drive</Tag>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          <CloudOutlined /> not in Drive
+        </Text>
       </Tooltip>
     );
   }
 
   return (
-    <Tag icon={<CloudOutlined />} color="green">
-      in Drive
-    </Tag>
+    <Text style={{ fontSize: 12, color: token.colorSuccess }}>
+      <CloudOutlined /> in Drive
+    </Text>
   );
 }
 
@@ -608,22 +642,17 @@ function MatrixTable({
         },
         ...matrix.months.map((month, index) => ({
           title: (
-            <Typography.Link
+            // A button, unmistakably: hover, border, press. A bare blue label
+            // did not read as clickable.
+            <Button
+              size="small"
+              shape="round"
+              type={month === selected ? "primary" : "text"}
               onClick={() => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
-              style={{
-                fontSize: 12,
-                fontWeight: month === selected ? 600 : 400,
-                ...(month === selected
-                  ? {
-                      background: token.colorPrimaryBg,
-                      borderRadius: 999,
-                      padding: "2px 10px",
-                    }
-                  : {}),
-              }}
+              style={{ fontSize: 12, fontWeight: month === selected ? 600 : 400 }}
             >
               {month.slice(0, 7)}
-            </Typography.Link>
+            </Button>
           ),
           key: month,
           width: 72,
@@ -632,11 +661,15 @@ function MatrixTable({
             const cell = row.cells[index];
 
             if (cell === "yes") {
-              return <CheckCircleFilled style={{ color: token.colorSuccess }} />;
+              return (
+                <span style={{ display: "inline-flex", justifyContent: "center", width: "100%" }}>
+                  <Dot color={token.colorSuccess} size={8} />
+                </span>
+              );
             }
 
             return (
-              <Text type="secondary" style={{ opacity: cell === "optional" ? 0.4 : 0.8 }}>
+              <Text type="secondary" style={{ opacity: cell === "optional" ? 0.35 : 0.7 }}>
                 —
               </Text>
             );

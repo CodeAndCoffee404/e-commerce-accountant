@@ -30,7 +30,7 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
     });
 
   return (
-    <Card size="small" title="Access">
+    <Card size="small" variant="borderless" styles={{ body: { padding: 0 } }}>
       <Typography.Paragraph type="secondary">
         Google decides who a person is; this list decides whether they may come in. An address
         here can sign in with its Google account — no password is ever set.

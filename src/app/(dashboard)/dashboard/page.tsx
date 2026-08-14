@@ -1,5 +1,4 @@
 import { DashboardView } from "@/components/dashboard/dashboard-view";
-import { PageHeader } from "@/components/layout/page-header";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
@@ -26,20 +25,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   // fallback for a Google account with no display name.
   const firstName = user.name?.split(" ")[0] ?? user.email.split("@")[0];
 
+  // No PageHeader here on purpose: the app bar already says Dashboard, and a
+  // page that opens with a greeting does not introduce itself twice.
   return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        description="The month at a glance: what is in, what can be built, and what needs you."
-        extra={user.role === "viewer" ? undefined : <UploadDialog tenantId={user.tenantId} />}
-      />
-      <DashboardView
-        data={data}
-        activity={activity}
-        firstName={firstName}
-        flaggedRows={flaggedRows}
-        canBuild={user.role !== "viewer"}
-      />
-    </>
+    <DashboardView
+      data={data}
+      activity={activity}
+      firstName={firstName}
+      flaggedRows={flaggedRows}
+      canBuild={user.role !== "viewer"}
+      uploadAction={user.role === "viewer" ? null : <UploadDialog tenantId={user.tenantId} />}
+    />
   );
 }
