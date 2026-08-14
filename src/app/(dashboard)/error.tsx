@@ -45,8 +45,8 @@ export default function DashboardError({
         <Button type="primary" key="retry" onClick={reset}>
           Try again
         </Button>,
-        <Button key="uploads" href="/uploads">
-          Back to uploads
+        <Button key="home" href="/dashboard">
+          Back to the dashboard
         </Button>,
       ]}
     />

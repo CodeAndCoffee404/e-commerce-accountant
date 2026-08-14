@@ -1,0 +1,1 @@
+CREATE INDEX "transactions_period_idx" ON "transactions" USING btree ("tenant_id","period_label","is_current");

@@ -105,10 +105,14 @@ export function DashboardView({
     const period = data.month;
 
     startTransition(async () => {
-      const result = await buildAllReady({ periodLabel: period });
+      try {
+        const result = await buildAllReady({ periodLabel: period });
 
-      if (result.ok) message.success(result.message, 8);
-      else message.error(result.message, 12);
+        if (result.ok) message.success(result.message, 8);
+        else message.error(result.message, 12);
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+      }
 
       router.refresh();
     });

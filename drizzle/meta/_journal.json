@@ -57,6 +57,13 @@
       "when": 1786715852968,
       "tag": "0007_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786736139559,
+      "tag": "0008_transactions-period-index",
+      "breakpoints": true
     }
   ]
 }

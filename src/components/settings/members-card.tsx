@@ -31,10 +31,14 @@ export function MembersCard({
 
   const run = (action: () => Promise<{ ok: boolean; message: string }>) =>
     startTransition(async () => {
-      const result = await action();
+      try {
+        const result = await action();
 
-      if (result.ok) message.success(result.message, 6);
-      else message.error(result.message, 8);
+        if (result.ok) message.success(result.message, 6);
+        else message.error(result.message, 8);
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+      }
 
       router.refresh();
     });

@@ -73,10 +73,14 @@ export function SettingsView({
 
   const run = (action: () => Promise<ActionResult>) => {
     startTransition(async () => {
-      const result = await action();
+      try {
+        const result = await action();
 
-      if (result.ok) message.success(result.message);
-      else message.error(result.message, 6);
+        if (result.ok) message.success(result.message);
+        else message.error(result.message, 6);
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+      }
 
       router.refresh();
     });

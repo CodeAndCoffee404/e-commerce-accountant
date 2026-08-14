@@ -275,6 +275,9 @@ export const transactions = pgTable(
       table.isCurrent,
     ),
     index("transactions_natural_key_idx").on(table.tenantId, table.naturalKey),
+    // The shape of every read that matters: reports load a period's current
+    // rows, the dashboard counts them, the ledger pages filter by them.
+    index("transactions_period_idx").on(table.tenantId, table.periodLabel, table.isCurrent),
     index("transactions_file_idx").on(table.sourceFileId),
   ],
 );

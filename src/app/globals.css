@@ -67,3 +67,12 @@ html {
     transform: none;
   }
 }
+
+/* Content clears the notch and the home indicator on phones. */
+@supports (padding: env(safe-area-inset-left)) {
+  .ant-layout-content {
+    padding-left: max(clamp(12px, 3vw, 24px), env(safe-area-inset-left));
+    padding-right: max(clamp(12px, 3vw, 24px), env(safe-area-inset-right));
+    padding-bottom: max(clamp(12px, 3vw, 24px), env(safe-area-inset-bottom));
+  }
+}

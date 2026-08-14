@@ -81,6 +81,8 @@ export function ReportsView({
         else message.error(result.message, 10);
 
         router.refresh();
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
       } finally {
         setBuilding(null);
       }
@@ -112,10 +114,14 @@ export function ReportsView({
                   loading={pending}
                   onClick={() =>
                     startTransition(async () => {
-                      const result = await restoreDefaults();
+                      try {
+                        const result = await restoreDefaults();
 
-                      if (result.ok) message.success(result.message, 6);
-                      else message.error(result.message, 8);
+                        if (result.ok) message.success(result.message, 6);
+                        else message.error(result.message, 8);
+                      } catch {
+                        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                      }
 
                       router.refresh();
                     })
@@ -362,10 +368,14 @@ export function ReportsView({
                 disabled={!canBuild}
                 onConfirm={() =>
                   startTransition(async () => {
-                    const result = await deleteRun(run.id);
+                    try {
+                      const result = await deleteRun(run.id);
 
-                    if (result.ok) message.success(result.message);
-                    else message.error(result.message, 6);
+                      if (result.ok) message.success(result.message);
+                      else message.error(result.message, 6);
+                    } catch {
+                      message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                    }
 
                     router.refresh();
                   })
@@ -403,10 +413,14 @@ export function ReportsView({
                   loading={pending}
                   onClick={() =>
                     startTransition(async () => {
-                      const result = await republish(run.id);
+                      try {
+                        const result = await republish(run.id);
 
-                      if (result.ok) message.success(result.message, 6);
-                      else message.error(result.message, 8);
+                        if (result.ok) message.success(result.message, 6);
+                        else message.error(result.message, 8);
+                      } catch {
+                        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                      }
 
                       router.refresh();
                     })

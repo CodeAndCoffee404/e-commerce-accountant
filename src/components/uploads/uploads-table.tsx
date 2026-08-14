@@ -245,12 +245,16 @@ export function UploadsTable({
                     cancelText="Keep"
                     onConfirm={() =>
                       startTransition(async () => {
-                        const result = await deleteUpload(row.id);
+                        try {
+                          const result = await deleteUpload(row.id);
 
-                        // Ten seconds on a refusal: it names the reports that
-                        // have to go first, which is not readable in three.
-                        if (result.ok) message.success(result.message, 6);
-                        else message.error(result.message, 10);
+                          // Ten seconds on a refusal: it names the reports
+                          // that have to go first — not readable in three.
+                          if (result.ok) message.success(result.message, 6);
+                          else message.error(result.message, 10);
+                        } catch {
+                          message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                        }
 
                         router.refresh();
                       })

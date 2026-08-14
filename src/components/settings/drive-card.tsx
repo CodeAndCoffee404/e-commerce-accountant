@@ -158,10 +158,14 @@ export function DriveCard({
           if (!folder) return;
 
           startTransition(async () => {
-            const result = await chooseFolder({ folderId: folder.id });
+            try {
+              const result = await chooseFolder({ folderId: folder.id });
 
-            if (result.ok) message.success(result.message, 6);
-            else message.error(result.message, 8);
+              if (result.ok) message.success(result.message, 6);
+              else message.error(result.message, 8);
+            } catch {
+              message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+            }
 
             router.refresh();
           });
@@ -255,10 +259,14 @@ export function DriveCard({
               disabled={!canEdit}
               onConfirm={() =>
                 startTransition(async () => {
-                  const result = await disconnectDrive();
+                  try {
+                    const result = await disconnectDrive();
 
-                  if (result.ok) message.success(result.message);
-                  else message.error(result.message);
+                    if (result.ok) message.success(result.message);
+                    else message.error(result.message);
+                  } catch {
+                    message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                  }
 
                   router.refresh();
                 })
