@@ -1,10 +1,15 @@
 "use server";
 
+import { del } from "@vercel/blob";
+import { and, eq } from "drizzle-orm";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
+import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 
 import { publishRun } from "@/lib/google/publish";
 
@@ -87,4 +92,50 @@ export async function republish(runId: string): Promise<BuildResult> {
   return result.failed === 0 && result.uploaded > 0
     ? { ok: true, runId, message: result.message }
     : { ok: false, message: result.message };
+}
+
+/**
+ * Removes a run and its files.
+ *
+ * A failed or superseded run is clutter in a register that has to stay
+ * readable. The workbooks go with it — keeping bytes nothing points at is how
+ * storage fills with things nobody dares delete later. What is already in the
+ * client's Drive stays: it is their file now, and reaching into their Drive to
+ * take it back is not this application's business.
+ */
+export async function deleteRun(runId: string): Promise<BuildResult> {
+  const user = await requireUser();
+
+  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+
+  const db = getDb();
+
+  const artifacts = await db
+    .select({ id: schema.reportArtifacts.id, blobKey: schema.reportArtifacts.blobKey })
+    .from(schema.reportArtifacts)
+    .innerJoin(schema.reportRuns, eq(schema.reportRuns.id, schema.reportArtifacts.reportRunId))
+    .where(
+      and(eq(schema.reportArtifacts.reportRunId, runId), eq(schema.reportRuns.tenantId, user.tenantId)),
+    );
+
+  const [deleted] = await db
+    .delete(schema.reportRuns)
+    .where(and(eq(schema.reportRuns.id, runId), eq(schema.reportRuns.tenantId, user.tenantId)))
+    .returning({ id: schema.reportRuns.id, period: schema.reportRuns.periodLabel });
+
+  if (!deleted) return { ok: false, message: "No such report." };
+
+  for (const artifact of artifacts) {
+    if (artifact.blobKey) await del(artifact.blobKey).catch(() => undefined);
+  }
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    { action: "report.deleted", entity: "report_run", entityId: runId, payload: { period: deleted.period } },
+  );
+
+  log.info("report.deleted", { tenantId: user.tenantId, userId: user.id, entityId: runId });
+  revalidatePath("/reports");
+
+  return { ok: true, runId, message: "Report removed." };
 }

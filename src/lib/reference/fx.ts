@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { and, desc, eq, lte } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 
 /**
  * The ECB publishes reference rates against the euro. The ninety-day feed
@@ -122,7 +123,13 @@ export async function euroRateOn(currency: string, on: string): Promise<RateLook
     .orderBy(desc(schema.fxRates.rateDate))
     .limit(1);
 
-  if (!row) return null;
+  if (!row) {
+    // Nothing cached at or before that date. The report will show an empty
+    // exchange rate, and this line is how anyone finds out why.
+    log.warn("fx.missing", { currency, on });
+
+    return null;
+  }
 
   // The feed quotes currency per euro; converting an amount into euro divides.
   return {

@@ -1,11 +1,14 @@
 "use client";
 
-import { Button, Empty, Table, Tag, Tooltip, Typography } from "antd";
-import { useState } from "react";
+import { Button, Empty, Input, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useTransition } from "react";
 
-import type { UploadRow } from "@/lib/uploads/queries";
+import type { UploadOptions, UploadRow } from "@/lib/uploads/queries";
+import type { FileReconciliation } from "@/lib/uploads/reconciliation";
 
 import { PreviewDrawer } from "./preview-drawer";
+import { ReconciliationPanel } from "./reconciliation-panel";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -22,11 +25,56 @@ const STATUS_COLOURS: Record<string, string> = {
   rejected: "red",
 };
 
-export function UploadsTable({ rows }: { rows: UploadRow[] }) {
+export function UploadsTable({
+  rows,
+  options,
+  reconciliation,
+}: {
+  rows: UploadRow[];
+  options: UploadOptions;
+  reconciliation: Record<string, FileReconciliation>;
+}) {
+  const router = useRouter();
+  const params = useSearchParams();
+  const [pending, startTransition] = useTransition();
   const [previewing, setPreviewing] = useState<UploadRow | null>(null);
+
+  const update = (key: string, value: string | null) => {
+    const next = new URLSearchParams(params.toString());
+
+    if (value === null || value === "") next.delete(key);
+    else next.set(key, value);
+
+    startTransition(() => router.push(`/uploads?${next.toString()}`));
+  };
+
+  const selector = (key: string, placeholder: string, values: string[]) => (
+    <Select
+      allowClear
+      showSearch
+      style={{ minWidth: 180 }}
+      placeholder={placeholder}
+      value={params.get(key) ?? undefined}
+      onChange={(value) => update(key, value ?? null)}
+      options={values.map((value) => ({ value, label: value }))}
+    />
+  );
 
   return (
     <>
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          placeholder="Filename"
+          defaultValue={params.get("q") ?? ""}
+          style={{ width: 220 }}
+          onSearch={(value) => update("q", value || null)}
+        />
+        {selector("dataset", "Type", options.datasets)}
+        {selector("period", "Period", options.periods)}
+        {selector("status", "Status", options.statuses)}
+      </Space>
+
       <PreviewDrawer
         fileId={previewing?.id ?? null}
         filename={previewing?.filename ?? null}
@@ -37,6 +85,19 @@ export function UploadsTable({ rows }: { rows: UploadRow[] }) {
         dataSource={rows}
         rowKey="id"
         size="middle"
+        loading={pending}
+        expandable={{
+          // The reconciliation lives under the file it is about: "did all of
+          // this get in" is a question about one upload, not about a list.
+          expandedRowRender: (row) => (
+            <ReconciliationPanel
+              fileId={row.id}
+              data={reconciliation[row.id]}
+              period={row.period}
+              dataset={row.dataset}
+            />
+          ),
+        }}
         pagination={
           rows.length > 20 ? { pageSize: 20, showSizeChanger: false } : false
         }

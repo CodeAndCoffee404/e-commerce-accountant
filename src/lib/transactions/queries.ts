@@ -202,3 +202,19 @@ export async function transactionTotals(
     .filter((row) => row.currency !== null)
     .map((row) => ({ ...row, currency: row.currency! }));
 }
+
+/** Current rows a person still has to look at. Drives the sidebar badge. */
+export async function countNeedsAttention(tenantId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ value: count() })
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.tenantId, tenantId),
+        eq(schema.transactions.isCurrent, true),
+        eq(schema.transactions.needsAttention, true),
+      ),
+    );
+
+  return row?.value ?? 0;
+}

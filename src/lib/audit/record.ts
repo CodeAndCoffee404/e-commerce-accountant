@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 
 export type AuditActor = {
   id: string | null;
@@ -35,7 +36,11 @@ export async function record(actor: AuditActor, input: AuditInput): Promise<void
       payload: input.payload ?? null,
     });
   } catch (error) {
-    console.error("audit: could not record", input.action, error);
+    log.error("audit.write_failed", error, {
+      tenantId: actor.tenantId,
+      userId: actor.id,
+      auditAction: input.action,
+    });
   }
 }
 

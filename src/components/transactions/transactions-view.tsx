@@ -1,6 +1,6 @@
 "use client";
 
-import { WarningOutlined } from "@ant-design/icons";
+import { DownloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Button, Empty, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -77,6 +77,16 @@ export function TransactionsView({
             <Typography.Text>Needs attention</Typography.Text>
           </Tooltip>
         </Space>
+
+        <Tooltip title="Downloads exactly what these filters show, as CSV.">
+          <Button
+            icon={<DownloadOutlined />}
+            href={`/api/transactions/export?${params.toString()}`}
+            download
+          >
+            Export
+          </Button>
+        </Tooltip>
 
         <Space>
           <Switch

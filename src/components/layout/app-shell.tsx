@@ -10,11 +10,12 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Space, Tooltip, Typography } from "antd";
+import { Badge, Button, Layout, Menu, Space, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 
+import { HelpModal } from "@/components/layout/help-modal";
 import { UserMenu } from "@/components/layout/user-menu";
 import type { CurrentUser } from "@/lib/auth/session";
 import { NAV_ITEMS, type NavItem } from "@/lib/navigation";
@@ -29,7 +30,16 @@ const ICONS: Record<NavItem["icon"], ComponentType> = {
   SettingOutlined,
 };
 
-export function AppShell({ children, user }: { children: ReactNode; user: CurrentUser }) {
+export function AppShell({
+  children,
+  user,
+  needsAttention,
+}: {
+  children: ReactNode;
+  user: CurrentUser;
+  /** Rows a person has to look at. Zero hides the badge entirely. */
+  needsAttention: number;
+}) {
   const pathname = usePathname();
   const collapsed = useUiStore((store) => store.sidebarCollapsed);
   const setCollapsed = useUiStore((store) => store.setSidebarCollapsed);
@@ -43,10 +53,22 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
   const menuItems = NAV_ITEMS.map((item) => {
     const Icon = ICONS[item.icon];
 
+    // The count sits on Transactions, where the filter that shows them lives.
+    // Without it a flagged row waits until somebody happens to look.
+    const badge =
+      item.key === "transactions" && needsAttention > 0 ? (
+        <Badge count={needsAttention} size="small" offset={[6, -2]} />
+      ) : null;
+
     return {
       key: item.key,
       icon: <Icon />,
-      label: <Link href={item.href}>{item.label}</Link>,
+      label: (
+        <Link href={item.key === "transactions" && needsAttention > 0 ? `${item.href}?attention=1` : item.href}>
+          {item.label}
+          {badge}
+        </Link>
+      ),
     };
   });
 
@@ -110,7 +132,9 @@ export function AppShell({ children, user }: { children: ReactNode; user: Curren
             <Typography.Text strong>{activeItem?.label ?? ""}</Typography.Text>
           </Space>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <HelpModal />
+
             <Tooltip title={themeMode === "dark" ? "Switch to light" : "Switch to dark"}>
               <Button
                 type="text"

@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
+import { log } from "@/lib/log";
 import { getDb, schema } from "@/lib/db";
 import { classify } from "@/lib/ingest/classify";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
@@ -56,6 +57,10 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   // without this, naming another tenant's object would disclose it or destroy
   // it.
   if (!isOwnUpload(input.pathname, user.tenantId)) {
+    // Worth a warning rather than a note: the browser cannot produce this path
+    // by accident, so either something is broken or someone is probing.
+    log.warn("upload.foreign_path", { tenantId: user.tenantId, userId: user.id });
+
     return { ok: false, message: "That file does not belong to this account." };
   }
 
@@ -92,14 +97,29 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   const parsed = await parseSpreadsheet(bytes, input.filename);
 
   if (!parsed.ok) {
+    log.warn("upload.unreadable", {
+      tenantId: user.tenantId,
+      userId: user.id,
+      code: parsed.code,
+      sha256,
+    });
     await discard(input.pathname);
+
     return { ok: false, message: parsed.message };
   }
 
   const classification = classify(parsed.grid, input.filename);
 
   if (!classification.ok) {
+    log.warn("upload.unclassified", {
+      tenantId: user.tenantId,
+      userId: user.id,
+      code: classification.code,
+      dataset: classification.dataset,
+      sha256,
+    });
     await discard(input.pathname);
+
     return { ok: false, message: classification.message };
   }
 
@@ -147,6 +167,14 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   try {
     ingested = await ingestSourceFile(row.id, user.tenantId, parsed.grid);
   } catch (error) {
+    log.error("upload.ingest_failed", error, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      entityId: row.id,
+      dataset: classification.dataset,
+      period: classification.period.label,
+    });
+
     await db.delete(schema.sourceFiles).where(eq(schema.sourceFiles.id, row.id));
     await discard(input.pathname);
 
@@ -157,6 +185,17 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
       }`,
     };
   }
+
+  log.info("upload.registered", {
+    tenantId: user.tenantId,
+    userId: user.id,
+    entityId: row.id,
+    dataset: classification.dataset,
+    period: classification.period.label,
+    transactions: ingested.inserted,
+    supersededRows: ingested.supersededRows,
+    needsAttention: ingested.needsAttention,
+  });
 
   await record(
     { id: user.id, email: user.email, tenantId: user.tenantId },
@@ -173,6 +212,23 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
       },
     },
   );
+
+  await db
+    .update(schema.sourceFiles)
+    .set({
+      detectionMeta: {
+        format: parsed.format,
+        encoding: parsed.encoding,
+        delimiter: parsed.delimiter,
+        marketplace: classification.marketplace,
+        periodSource: classification.periodSource,
+        rowCount: parsed.grid.length,
+        // The two numbers the reconciliation view compares.
+        sourceRows: ingested.sourceRows,
+        mappedRows: ingested.inserted,
+      },
+    })
+    .where(eq(schema.sourceFiles.id, row.id));
 
   revalidatePath("/uploads");
   revalidatePath("/transactions");

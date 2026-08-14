@@ -9,6 +9,15 @@ import type { Period } from "@/lib/ingest/period";
 import type { AmazonCountry } from "@/lib/ingest/datasets";
 
 export type IngestResult = {
+  /**
+   * Non-blank rows below the header — what the file offered.
+   *
+   * Recorded so the interface can answer "did everything get in" without
+   * re-reading the file. A mapper drops rows on purpose (a fee line, a blank),
+   * and the difference between this and `inserted` is exactly what an
+   * accountant wants explained.
+   */
+  sourceRows: number;
   inserted: number;
   supersededFiles: number;
   supersededRows: number;
@@ -68,6 +77,11 @@ export async function ingestSourceFile(
     period,
   });
 
+  const headerRowIndex = file.headerRowIndex ?? 0;
+  const sourceRows = grid
+    .slice(headerRowIndex + 1)
+    .filter((row) => row.some((value) => (value ?? "").trim() !== "")).length;
+
   // One transaction: a half-applied replacement would leave the ledger holding
   // two versions of the same slice, which is exactly what this prevents.
   return db.transaction(async (tx) => {
@@ -93,6 +107,7 @@ export async function ingestSourceFile(
       .where(eq(schema.sourceFiles.id, fileId));
 
     return {
+      sourceRows,
       inserted: mapped.rows.length,
       supersededFiles: superseded.files,
       supersededRows: superseded.rows,

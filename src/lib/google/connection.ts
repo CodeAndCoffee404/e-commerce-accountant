@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 
 import { refreshAccessToken } from "./oauth";
 
@@ -107,6 +108,8 @@ export async function accessTokenFor(tenantId: string): Promise<string | null> {
   try {
     return await refreshAccessToken(decryptSecret(row.refreshTokenEncrypted));
   } catch (error) {
+    log.error("drive.token_refresh_failed", error, { tenantId });
+
     await db
       .update(schema.googleConnections)
       .set({ status: "revoked", lastError: (error as Error).message })

@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 import { publishRun } from "@/lib/google/publish";
 import type { Period } from "@/lib/ingest/period";
 import { euroRateOn } from "@/lib/reference/fx";
@@ -98,6 +99,8 @@ export async function runReport(input: {
     })
     .returning({ id: schema.reportRuns.id });
 
+  const startedAt = Date.now();
+
   try {
     await db
       .insert(schema.reportRunSources)
@@ -161,9 +164,33 @@ export async function runReport(input: {
       message: error.message,
     }));
 
+    log.info("report.built", {
+      tenantId: input.tenantId,
+      userId: input.requestedBy,
+      entityId: run.id,
+      reportType: input.reportType,
+      period: period.label,
+      ledgerRows: rows.length,
+      outputRows: result.sheets.reduce((total, sheet) => total + sheet.rows.length, 0),
+      warnings: result.warnings.length,
+      driveUploaded: published.uploaded,
+      driveFailed: published.failed,
+      ms: Date.now() - startedAt,
+    });
+
     return { ok: true, runId: run.id, result, published };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The report could not be built.";
+
+    log.error("report.failed", error, {
+      tenantId: input.tenantId,
+      userId: input.requestedBy,
+      entityId: run.id,
+      reportType: input.reportType,
+      period: period.label,
+      sourceFiles: files.length,
+      ms: Date.now() - startedAt,
+    });
 
     // The run stays, marked failed. A report that vanished on error tells the
     // operator nothing about why.

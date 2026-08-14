@@ -1,11 +1,24 @@
 "use client";
 
 import { CloudUploadOutlined, DownloadOutlined, WarningOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Empty, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Empty,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { buildReport, republish } from "@/lib/reports/actions";
+import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportRunCard } from "@/lib/reports/queries";
 
@@ -191,6 +204,32 @@ export function ReportsView({
                 ))}
                 {run.artifacts.length === 0 ? "—" : null}
               </Space>
+            ),
+          },
+          {
+            title: "",
+            key: "remove",
+            width: 60,
+            render: (_, run) => (
+              <Popconfirm
+                title="Remove this report?"
+                description="Its files go too. Anything already in Google Drive stays there."
+                disabled={!canBuild}
+                onConfirm={() =>
+                  startTransition(async () => {
+                    const result = await deleteRun(run.id);
+
+                    if (result.ok) message.success(result.message);
+                    else message.error(result.message, 6);
+
+                    router.refresh();
+                  })
+                }
+              >
+                <Button size="small" type="text" danger disabled={!canBuild}>
+                  ✕
+                </Button>
+              </Popconfirm>
             ),
           },
           {

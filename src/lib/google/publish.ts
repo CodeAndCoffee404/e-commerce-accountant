@@ -2,6 +2,7 @@ import { get } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
 
 import { accessTokenFor, loadConnection } from "./connection";
 import { reportDefinition } from "@/lib/reports/definitions";
@@ -113,6 +114,12 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
 
       uploaded += 1;
     } catch (error) {
+      log.error("drive.upload_failed", error, {
+        tenantId,
+        entityId: artifact.id,
+        runId,
+      });
+
       await db
         .update(schema.reportArtifacts)
         .set({ driveStatus: "failed", driveUrl: null })
