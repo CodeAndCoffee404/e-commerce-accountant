@@ -21,7 +21,13 @@ export type ReportRunCard = {
     skipped?: { reason: string; count: number }[];
   } | null;
   sources: string[];
-  artifacts: { id: string; filename: string; sizeBytes: number | null; driveUrl: string | null }[];
+  artifacts: {
+    id: string;
+    filename: string;
+    sizeBytes: number | null;
+    driveUrl: string | null;
+    driveStatus: string | null;
+  }[];
 };
 
 const LABELS = new Map(REPORT_DEFINITIONS.map((definition) => [definition.id, definition.label]));
@@ -80,6 +86,7 @@ export async function listReportRuns(tenantId: string, limit = 50): Promise<Repo
         filename: artifact.filename,
         sizeBytes: artifact.sizeBytes,
         driveUrl: artifact.driveUrl,
+        driveStatus: artifact.driveStatus,
       }))
       .sort((a, b) => a.filename.localeCompare(b.filename)),
   }));

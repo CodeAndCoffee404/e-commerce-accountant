@@ -43,6 +43,13 @@
       "when": 1786697088547,
       "tag": "0005_report_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786697879376,
+      "tag": "0006_google_connections",
+      "breakpoints": true
     }
   ]
 }

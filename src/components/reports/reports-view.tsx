@@ -1,11 +1,11 @@
 "use client";
 
-import { DownloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { CloudUploadOutlined, DownloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Card, Empty, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { buildReport, downloadArtifact } from "@/lib/reports/actions";
+import { buildReport, downloadArtifact, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportRunCard } from "@/lib/reports/queries";
 
@@ -156,18 +156,67 @@ export function ReportsView({
             render: (_, run) => (
               <Space wrap size={4}>
                 {run.artifacts.map((artifact) => (
-                  <Button
-                    key={artifact.id}
-                    size="small"
-                    icon={<DownloadOutlined />}
-                    onClick={() => download(artifact.id)}
-                  >
-                    {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
-                  </Button>
+                  <Space.Compact key={artifact.id} size="small">
+                    <Button
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      onClick={() => download(artifact.id)}
+                    >
+                      {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
+                    </Button>
+                    {artifact.driveUrl ? (
+                      <Tooltip title="Открыть в Google Drive">
+                        <Button
+                          size="small"
+                          href={artifact.driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Drive
+                        </Button>
+                      </Tooltip>
+                    ) : null}
+                  </Space.Compact>
                 ))}
                 {run.artifacts.length === 0 ? "—" : null}
               </Space>
             ),
+          },
+          {
+            title: "Drive",
+            key: "drive",
+            width: 120,
+            render: (_, run) => {
+              if (run.artifacts.length === 0) return "—";
+
+              const failed = run.artifacts.some((artifact) => artifact.driveStatus === "failed");
+              const synced = run.artifacts.every((artifact) => artifact.driveStatus === "synced");
+
+              if (synced) return <Tag color="green">synced</Tag>;
+
+              // A failed upload is not a failed report: the file is here and
+              // can be sent again without rebuilding anything.
+              return (
+                <Button
+                  size="small"
+                  icon={<CloudUploadOutlined />}
+                  danger={failed}
+                  loading={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const result = await republish(run.id);
+
+                      if (result.ok) message.success(result.message, 6);
+                      else message.error(result.message, 8);
+
+                      router.refresh();
+                    })
+                  }
+                >
+                  {failed ? "Retry" : "Send"}
+                </Button>
+              );
+            },
           },
         ]}
       />

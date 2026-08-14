@@ -76,6 +76,16 @@ export function migrationDatabaseUrl(): string {
   return firstDefined(DIRECT_URL_VARS, "a direct Postgres connection string");
 }
 
+/**
+ * Browser key for Google's file picker. Not a secret in the usual sense — it
+ * travels to the client by design and is restricted by HTTP referrer in the
+ * Google console. Absent, the picker simply cannot open, so it is optional
+ * here rather than required at startup.
+ */
+export function googlePickerApiKey(): string | null {
+  return process.env.GOOGLE_PICKER_API_KEY ?? null;
+}
+
 export function encryptionKeyHex(): string {
   return firstDefined(["ENCRYPTION_KEY"], "ENCRYPTION_KEY");
 }

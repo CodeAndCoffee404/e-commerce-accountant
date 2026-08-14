@@ -8,6 +8,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
+import { publishRun } from "@/lib/google/publish";
+
 import { runReport } from "./run";
 
 export type BuildResult = { ok: true; runId: string; message: string } | { ok: false; message: string };
@@ -92,4 +94,19 @@ export async function downloadArtifact(
     filename: artifact.filename,
     dataUrl: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytes.toString("base64")}`,
   };
+}
+
+/** Retry delivery for a run whose upload failed, without rebuilding it. */
+export async function republish(runId: string): Promise<BuildResult> {
+  const user = await requireUser();
+
+  if (user.role === "viewer") return { ok: false, message: "Недостаточно прав." };
+
+  const result = await publishRun(user.tenantId, runId);
+
+  revalidatePath("/reports");
+
+  return result.failed === 0 && result.uploaded > 0
+    ? { ok: true, runId, message: result.message }
+    : { ok: false, message: result.message };
 }

@@ -230,8 +230,44 @@ git config user.email "78477841+all1son4@users.noreply.github.com"
 
 4. Скопируйте **Client ID** и **Client secret**.
 
-> Доступ к Google Drive (скоуп `drive.file`) добавим на этапе 5 в этом же
-> OAuth-клиенте. Он несенситивный, верификация приложения не потребуется.
+### 2.5. Доступ к Google Drive
+
+Отчёты складываются в папку на Google Drive клиента. Нужны ещё три вещи в том
+же проекте Google Cloud.
+
+**Включите два API.** APIs & Services → **Enable APIs and Services**:
+
+- **Google Drive API** — записывать файлы;
+- **Google Picker API** — окно выбора папки.
+
+**Добавьте адреса возврата** в тот же OAuth-клиент из шага 2.3:
+
+```
+http://localhost:3000/api/google/callback
+https://e-commerce-accountant-git-dev-code-and-coffee1.vercel.app/api/google/callback
+https://e-commerce-accountant.vercel.app/api/google/callback
+```
+
+Это отдельный маршрут от входа: доступ к диску запрашивается один раз и явно,
+а не при каждом входе в приложение.
+
+**Создайте ключ для Picker.** Credentials → Create Credentials → **API key**.
+Ограничьте его: Application restrictions → **Websites**, перечислите три
+адреса приложения; API restrictions → только **Google Picker API**. Значение
+впишите в `docs/secrets.local.md` строкой `GOOGLE_PICKER_API_KEY` с окружением
+`all` и прогоните `npm run env:sync`.
+
+> Ключ Picker уезжает в браузер по своей природе — на то он и browser key.
+> Ограничение по адресам и по API и есть его защита; секретом в обычном смысле
+> он не является.
+
+**Скоуп остаётся `drive.file`.** Приложение видит только те файлы, которые само
+создало, и ту папку, которую клиент выбрал. Верификация в Google не нужна.
+
+Отсюда же следует, почему папка выбирается через окно Google, а не вводом
+идентификатора: `drive.file` не даёт доступа к уже существующей папке, пока
+пользователь не укажет её явно. Введённый вручную идентификатор не несёт с
+собой никакого разрешения.
 
 ---
 
@@ -242,6 +278,7 @@ git config user.email "78477841+all1son4@users.noreply.github.com"
 | доступ к Vercel CLI | `npx vercel login` — один раз, дальше всё делаю я |
 | `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` | шаг 2.4, впишите строками в `docs/secrets.local.md` |
 | `AUTH_BOOTSTRAP_EMAILS` | адрес Google, которым будете входить — в ту же таблицу, затем `npm run env:sync` |
+| `GOOGLE_PICKER_API_KEY` | шаг 2.5, в ту же таблицу с окружением `all` |
 
 Больше ничего присылать не нужно. Строки подключения к базам я возьму сам через
 `npx vercel env pull` — они уже лежат в Vercel и обе помечены не-Sensitive,

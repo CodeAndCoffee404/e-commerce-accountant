@@ -391,6 +391,52 @@ export const fxRates = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
+ * Подключение Google Drive
+ * ------------------------------------------------------------------ */
+
+export const googleConnectionStatus = pgEnum("google_connection_status", [
+  "connected",
+  "needs_folder",
+  "revoked",
+  "error",
+]);
+
+/**
+ * The client's own Drive, connected once and used for every report after.
+ *
+ * The scope is `drive.file`, which needs no review from Google but grants
+ * access only to files this app created or that the user picked explicitly.
+ * That is why the folder is chosen through Google's picker rather than by
+ * pasting an id: an id alone carries no permission.
+ */
+export const googleConnections = pgTable(
+  "google_connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    googleAccountEmail: text("google_account_email").notNull(),
+    /** AES-256-GCM, `v1:` prefixed. Never leaves the server in clear. */
+    refreshTokenEncrypted: text("refresh_token_encrypted").notNull(),
+    scope: text("scope").notNull(),
+
+    rootFolderId: text("root_folder_id"),
+    rootFolderName: text("root_folder_name"),
+
+    status: googleConnectionStatus("status").notNull().default("needs_folder"),
+    lastError: text("last_error"),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+    connectedBy: text("connected_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  // One Drive per tenant: two would make "where did the report go" ambiguous.
+  (table) => [uniqueIndex("google_connections_tenant_idx").on(table.tenantId)],
+);
+
+export type GoogleConnection = typeof googleConnections.$inferSelect;
+
+/* ------------------------------------------------------------------ *
  * Отчёты
  * ------------------------------------------------------------------ */
 

@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { publishRun } from "@/lib/google/publish";
 import type { Period } from "@/lib/ingest/period";
 import { euroRateOn } from "@/lib/reference/fx";
 
@@ -14,7 +15,12 @@ import { buildWorkbook, reportFilename } from "./workbook";
 import { generateZohoInvoice, missingCountries } from "./zoho-invoice";
 
 export type RunOutcome =
-  | { ok: true; runId: string; result: GeneratorResult }
+  | {
+      ok: true;
+      runId: string;
+      result: GeneratorResult;
+      published: { uploaded: number; failed: number; message: string };
+    }
   | { ok: false; runId: string | null; message: string };
 
 /**
@@ -134,7 +140,16 @@ export async function runReport(input: {
       })
       .where(eq(schema.reportRuns.id, run.id));
 
-    return { ok: true, runId: run.id, result };
+    // Delivery is attempted here but never allowed to fail the run: the report
+    // is built and downloadable, and Drive being unreachable is a separate
+    // problem with its own retry.
+    const published = await publishRun(input.tenantId, run.id).catch((error: Error) => ({
+      uploaded: 0,
+      failed: 0,
+      message: error.message,
+    }));
+
+    return { ok: true, runId: run.id, result, published };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось построить отчёт.";
 
