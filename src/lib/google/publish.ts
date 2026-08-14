@@ -4,7 +4,9 @@ import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 
 import { accessTokenFor, loadConnection } from "./connection";
-import { ensureFolder, uploadFile } from "./drive";
+import { reportDefinition } from "@/lib/reports/definitions";
+
+import { ensureFolder, GOOGLE_SHEET_MIME, uploadFile } from "./drive";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -65,9 +67,11 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
   let folderId: string;
 
   try {
-    // A folder per report and period, the way legacy organised them, so a
-    // month's files stay together instead of piling into one directory.
-    folderId = await ensureFolder(token, connection.folderId, `${run.periodLabel}`);
+    // `<Report> - <Period>`, the way legacy named its folders. A folder per
+    // period alone would mix three different reports for the same month.
+    const label = reportDefinition(run.reportType).label;
+
+    folderId = await ensureFolder(token, connection.folderId, `${label} - ${run.periodLabel}`);
   } catch (error) {
     await markFailed(artifacts, (error as Error).message);
 
@@ -88,9 +92,12 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
       const bytes = new Uint8Array(await new Response(stored.stream).arrayBuffer());
 
       const file = await uploadFile(token, {
-        name: artifact.filename,
+        // Without the extension: the file arrives as a Google Sheet, and
+        // `… .xlsx` on a Sheet reads as a mistake.
+        name: artifact.filename.replace(/\.xlsx$/i, ""),
         parentFolderId: folderId,
         mimeType: XLSX_MIME,
+        convertTo: GOOGLE_SHEET_MIME,
         bytes,
       });
 

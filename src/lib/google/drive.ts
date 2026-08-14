@@ -7,6 +7,9 @@ export type DriveFile = {
   webViewLink: string;
 };
 
+/** Drive's own spreadsheet type. Naming it converts the upload on import. */
+export const GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+
 /**
  * Uploads a file into a folder the user picked.
  *
@@ -21,12 +24,21 @@ export async function uploadFile(
     parentFolderId: string;
     mimeType: string;
     bytes: Uint8Array;
+    /**
+     * Convert to a Google Sheet on the way in. The client works in Sheets, and
+     * a workbook they have to download and reopen is a step they did not have
+     * before.
+     */
+    convertTo?: string;
   },
 ): Promise<DriveFile> {
   const boundary = `ea-${Math.random().toString(36).slice(2)}`;
   const metadata = JSON.stringify({
     name: input.name,
     parents: [input.parentFolderId],
+    // Drive converts when the metadata asks for one of its own types and the
+    // uploaded media is something it can read.
+    ...(input.convertTo ? { mimeType: input.convertTo } : {}),
   });
 
   const body = Buffer.concat([
