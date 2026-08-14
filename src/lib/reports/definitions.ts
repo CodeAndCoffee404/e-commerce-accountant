@@ -10,6 +10,14 @@ export type ReportDefinition = {
   datasets: readonly DatasetId[];
   /** Whole quarters are allowed only where legacy allowed them. */
   granularity: readonly ("month" | "quarter")[];
+  /**
+   * Refuse to build unless every listed dataset is present for the period.
+   *
+   * A report assembled from whatever happened to be uploaded looks complete
+   * and is not — it understates revenue by exactly the channels nobody
+   * noticed were missing.
+   */
+  requiresEveryDataset: boolean;
   description: string;
 };
 
@@ -19,6 +27,8 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     label: "Sales report by currency",
     datasets: ["amazon_vat"],
     granularity: ["month", "quarter"],
+    // One file covers every marketplace, so there is nothing to be missing.
+    requiresEveryDataset: false,
     description: "Amazon VAT transaction report, split by settlement currency, with totals.",
   },
   {
@@ -26,6 +36,7 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     label: "Off-Amazon Sales",
     datasets: ["allegro", "cdiscount", "shopify"],
     granularity: ["month"],
+    requiresEveryDataset: true,
     description: "Allegro, Cdiscount and Shopify normalised into one sheet.",
   },
   {
@@ -35,6 +46,8 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     // A quarter is refused: the invoice is dated the last day of the month and
     // numbered by month, so a quarter has no meaning here.
     granularity: ["month"],
+    // One dataset, but ten countries — checked separately by missingCountries.
+    requiresEveryDataset: false,
     description: "Ten marketplaces aggregated into invoice lines for Zoho.",
   },
 ];

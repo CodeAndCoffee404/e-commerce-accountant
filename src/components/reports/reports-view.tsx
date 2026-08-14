@@ -5,7 +5,7 @@ import { Alert, App, Button, Card, Empty, Select, Space, Table, Tag, Tooltip, Ty
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { buildReport, downloadArtifact, republish } from "@/lib/reports/actions";
+import { buildReport, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportRunCard } from "@/lib/reports/queries";
 
@@ -48,38 +48,23 @@ export function ReportsView({
     });
   };
 
-  const download = (artifactId: string) => {
-    startTransition(async () => {
-      const result = await downloadArtifact(artifactId);
-
-      if (!result.ok) {
-        message.error(result.message, 6);
-        return;
-      }
-
-      // The store is private, so the bytes come back through the server rather
-      // than as a link anyone could follow.
-      const link = document.createElement("a");
-
-      link.href = result.dataUrl;
-      link.download = result.filename;
-      link.click();
-    });
-  };
-
   return (
     <>
-      <Space wrap align="start" style={{ marginBottom: 24, width: "100%" }}>
+      {/* Grid rather than a row of fixed cards: at 330px each they ran off the
+          side of a phone. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
         {REPORT_DEFINITIONS.map((definition) => {
           const available = periods[definition.id] ?? [];
 
           return (
-            <Card
-              key={definition.id}
-              size="small"
-              title={definition.label}
-              style={{ width: 330 }}
-            >
+            <Card key={definition.id} size="small" title={definition.label}>
               <Typography.Paragraph type="secondary" style={{ minHeight: 44 }}>
                 {definition.description}
               </Typography.Paragraph>
@@ -112,13 +97,14 @@ export function ReportsView({
             </Card>
           );
         })}
-      </Space>
+      </div>
 
       <Table<ReportRunCard>
         dataSource={runs}
         rowKey="id"
         size="small"
         loading={pending}
+        scroll={{ x: 1100 }}
         pagination={runs.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
         locale={{
           emptyText: (
@@ -178,10 +164,14 @@ export function ReportsView({
               <Space wrap size={4}>
                 {run.artifacts.map((artifact) => (
                   <Space.Compact key={artifact.id} size="small">
+                    {/* A real link: the browser downloads it itself, with its
+                        own progress, instead of the file passing through a
+                        server action as base64. */}
                     <Button
                       size="small"
                       icon={<DownloadOutlined />}
-                      onClick={() => download(artifact.id)}
+                      href={`/api/reports/${artifact.id}`}
+                      download={artifact.filename}
                     >
                       {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
                     </Button>

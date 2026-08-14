@@ -137,7 +137,26 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   // Parsed in the same call rather than by a background job: the operator is
   // waiting on the answer, and a file that classified but never became
   // transactions is the kind of half-state that goes unnoticed for a month.
-  const ingested = await ingestSourceFile(row.id, user.tenantId, parsed.grid);
+  //
+  // If it fails, the record goes with it. Leaving the row behind would be
+  // worse than useless: its checksum makes the file a duplicate, so the same
+  // file could never be uploaded again, and the row would sit there for ever
+  // holding no transactions.
+  let ingested;
+
+  try {
+    ingested = await ingestSourceFile(row.id, user.tenantId, parsed.grid);
+  } catch (error) {
+    await db.delete(schema.sourceFiles).where(eq(schema.sourceFiles.id, row.id));
+    await discard(input.pathname);
+
+    return {
+      ok: false,
+      message: `Recognised as ${classification.label}, but its rows could not be stored: ${
+        error instanceof Error ? error.message : "unknown error"
+      }`,
+    };
+  }
 
   await record(
     { id: user.id, email: user.email, tenantId: user.tenantId },

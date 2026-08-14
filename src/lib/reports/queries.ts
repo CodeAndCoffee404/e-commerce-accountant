@@ -113,18 +113,37 @@ export async function availablePeriods(
   const result = {} as Record<ReportTypeId, string[]>;
 
   for (const definition of REPORT_DEFINITIONS) {
-    const periods = rows
-      .filter(
-        (row) =>
-          row.dataset !== null &&
-          definition.datasets.includes(row.dataset) &&
-          row.periodLabel !== null &&
-          definition.granularity.includes(row.granularity ?? "month"),
+    const usable = rows.filter(
+      (row) =>
+        row.dataset !== null &&
+        definition.datasets.includes(row.dataset) &&
+        row.periodLabel !== null &&
+        definition.granularity.includes(row.granularity ?? "month"),
+    );
+
+    const datasetsByPeriod = new Map<string, Set<string>>();
+
+    for (const row of usable) {
+      const period = row.periodLabel!;
+      const seen = datasetsByPeriod.get(period) ?? new Set<string>();
+
+      seen.add(row.dataset!);
+      datasetsByPeriod.set(period, seen);
+    }
+
+    const periods = [...datasetsByPeriod.entries()]
+      // A report needing every channel is not offered until every channel is
+      // there. Offering it and then refusing wastes the operator's time, and
+      // building it anyway would quietly under-report.
+      .filter(([, datasets]) =>
+        definition.requiresEveryDataset
+          ? definition.datasets.every((dataset) => datasets.has(dataset))
+          : true,
       )
-      .map((row) => row.periodLabel!);
+      .map(([period]) => period);
 
     // Newest first: that is the period being worked on.
-    result[definition.id] = [...new Set(periods)].sort().reverse();
+    result[definition.id] = periods.sort().reverse();
   }
 
   return result;

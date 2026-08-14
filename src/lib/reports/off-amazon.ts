@@ -1,5 +1,7 @@
 import Decimal from "decimal.js";
 
+import { parseDecimalValue } from "@/lib/ingest/numbers";
+
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "./rules";
 import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
 
@@ -281,11 +283,18 @@ function shopifyRow(
   // the report, see the rules table in PLAN §1.
   if (skippedCountries.includes(arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
 
-  let total: Decimal;
+  // The shared parser, not `new Decimal(...)`: it knows about spaces used for
+  // thousands, a currency written beside the amount and a Unicode minus, and it
+  // reports a failure instead of throwing out of the whole report.
+  let total: Decimal | null;
 
   try {
-    total = new Decimal(orderTotal.replace(",", "."));
+    total = parseDecimalValue(orderTotal, { decimalSeparator: ".", column: "Total" });
   } catch {
+    total = null;
+  }
+
+  if (total === null) {
     warnings.push(`Shopify: order total "${orderTotal}" could not be read, row ${row.sourceRowNumber}`);
 
     return skip(skipped, "Shopify: order total could not be read");
@@ -318,8 +327,13 @@ function shopifyRow(
   const recompute =
     channelRule<string[]>(context.rules, "shopify", "recompute_zero_tax_countries") ?? [];
   const reported = row.raw["Taxes"];
-  const reportedVat =
-    reported && reported.trim() !== "" ? new Decimal(reported.replace(",", ".")) : null;
+  let reportedVat: Decimal | null = null;
+
+  try {
+    reportedVat = parseDecimalValue(reported, { decimalSeparator: ".", column: "Taxes" });
+  } catch {
+    warnings.push(`Shopify: tax "${reported}" could not be read, row ${row.sourceRowNumber}`);
+  }
   const computedVat = rate === null ? null : splitGross(total, rate).vat;
 
   const vat =

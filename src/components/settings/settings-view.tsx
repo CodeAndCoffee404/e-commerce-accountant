@@ -121,6 +121,7 @@ function VatRates({
         size="small"
         pagination={false}
         loading={pending}
+        scroll={{ x: 760 }}
         columns={[
           { title: "Country", dataIndex: "country", width: 90 },
           {
@@ -215,6 +216,7 @@ function Skus({
         size="small"
         pagination={false}
         loading={pending}
+        scroll={{ x: 900 }}
         columns={[
           { title: "Channel", dataIndex: "channel", width: 100 },
           { title: "Source SKU", dataIndex: "sourceSku", width: 260 },
@@ -369,6 +371,7 @@ function SellerVat({ data }: { data: ReferenceData["sellerVatNumbers"] }) {
       rowKey="id"
       size="small"
       pagination={false}
+      scroll={{ x: 640 }}
       columns={[
         { title: "Country", dataIndex: "country", width: 90 },
         { title: "VAT number", dataIndex: "vatNumber", width: 200 },

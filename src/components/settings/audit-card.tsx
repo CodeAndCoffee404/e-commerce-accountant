@@ -37,6 +37,7 @@ export function AuditCard({ rows }: { rows: AuditRow[] }) {
         dataSource={rows}
         rowKey="id"
         size="small"
+        scroll={{ x: 820 }}
         pagination={rows.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
         locale={{ emptyText: <Empty description="Nothing has happened yet" /> }}
         columns={[

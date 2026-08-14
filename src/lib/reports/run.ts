@@ -103,6 +103,18 @@ export async function runReport(input: {
       .insert(schema.reportRunSources)
       .values(files.map((file) => ({ reportRunId: run.id, sourceFileId: file.id })));
 
+    if (definition.requiresEveryDataset) {
+      const present = new Set(files.map((file) => file.dataset));
+      const missing = definition.datasets.filter((dataset) => !present.has(dataset));
+
+      if (missing.length > 0) {
+        throw new Error(
+          `Missing uploads for ${input.periodLabel}: ${missing.join(", ")}. ` +
+            "A report built from the channels that happen to be there understates the rest.",
+        );
+      }
+    }
+
     const rows = await loadLedger(input.tenantId, period.label, definition.datasets);
 
     if (input.reportType === "amazon_zoho_invoice") {

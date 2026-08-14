@@ -1,5 +1,7 @@
 import Decimal from "decimal.js";
 
+import { parseDecimalValue } from "@/lib/ingest/numbers";
+
 import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
 
 /** The column the totals row sums, and the one legacy puts its total under. */
@@ -44,6 +46,7 @@ export function generateSalesByCurrency(
 
   const totalIndex = sourceHeaders.indexOf(TOTAL_COLUMN);
   const headers = [...sourceHeaders];
+  const warnings: string[] = [];
 
   const sheets: ReportSheet[] = [...byCurrency.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -54,9 +57,15 @@ export function generateSalesByCurrency(
         let total = new Decimal(0);
 
         for (const row of currencyRows) {
-          const value = row.raw[TOTAL_COLUMN];
+          // Through the shared parser, not `new Decimal(...)`: an amount with a
+          // space for thousands or a Unicode minus would throw and take the
+          // whole report down with it.
+          const value = parseDecimalValue(row.raw[TOTAL_COLUMN], {
+            decimalSeparator: ".",
+            column: TOTAL_COLUMN,
+          });
 
-          if (value) total = total.plus(new Decimal(value.replace(",", ".")));
+          if (value) total = total.plus(value);
         }
 
         // Decimal, not a running float. The legacy total for July reads
@@ -72,5 +81,5 @@ export function generateSalesByCurrency(
 
   void context;
 
-  return { sheets, skipped, warnings: [] };
+  return { sheets, skipped, warnings };
 }

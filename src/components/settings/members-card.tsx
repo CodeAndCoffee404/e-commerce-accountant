@@ -40,7 +40,9 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
         <Form
           form={form}
           layout="inline"
-          style={{ marginBottom: 16 }}
+          // The items wrap instead of squeezing: on a phone the address field
+          // would otherwise shrink to a few characters.
+          style={{ marginBottom: 16, rowGap: 8 }}
           initialValues={{ role: "accountant" }}
           onFinish={(values) =>
             run(async () => {
@@ -52,8 +54,12 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
             })
           }
         >
-          <Form.Item name="email" rules={[{ required: true, message: "Email is required" }]}>
-            <Input placeholder="name@company.com" style={{ minWidth: 240 }} />
+          <Form.Item
+            name="email"
+            rules={[{ required: true, message: "Email is required" }]}
+            style={{ flex: "1 1 240px", marginInlineEnd: 8 }}
+          >
+            <Input placeholder="name@company.com" />
           </Form.Item>
           <Form.Item name="role">
             <Select
@@ -75,6 +81,7 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
         size="small"
         pagination={false}
         loading={pending}
+        scroll={{ x: 700 }}
         columns={[
           {
             title: "Person",
