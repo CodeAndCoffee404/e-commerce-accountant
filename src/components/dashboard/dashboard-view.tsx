@@ -21,7 +21,7 @@ import {
 } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useSyncExternalStore, useTransition } from "react";
 
 import type { AuditRow } from "@/lib/audit/record";
 import { buildAllReady } from "@/lib/dashboard/actions";
@@ -288,6 +288,18 @@ export function DashboardView({
   );
 }
 
+function subscribeNever(): () => void {
+  return () => undefined;
+}
+
+function timeGreeting(hour: number): string {
+  if (hour < 5) return "Up late";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+
+  return "Good evening";
+}
+
 function Hero({
   firstName,
   intro,
@@ -307,6 +319,16 @@ function Hero({
   toolbar: React.ReactNode;
 }) {
   const { token } = theme.useToken();
+  // "Hey" on the server and for the first client paint, the time of day once
+  // the visitor's clock is knowable. useSyncExternalStore's server snapshot is
+  // the sanctioned way to render one thing on the server and another after
+  // hydration without a cascading effect.
+  const mounted = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  const greeting = mounted ? timeGreeting(new Date().getHours()) : "Hey";
 
   return (
     <section
@@ -355,7 +377,7 @@ function Hero({
                 color: "transparent",
               }}
             >
-              Hey, {firstName}
+              {greeting}, {firstName}
             </span>{" "}
             <span aria-hidden>👋</span>
           </Title>

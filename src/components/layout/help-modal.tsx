@@ -2,7 +2,7 @@
 
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Alert, Button, Divider, Modal, Space, Steps, Tooltip, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -16,9 +16,35 @@ const { Paragraph, Text, Title } = Typography;
 export function HelpModal() {
   const [open, setOpen] = useState(false);
 
+  // "?" from anywhere that is not a text field. The one shortcut every
+  // application agrees on.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "?" || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      setOpen(true);
+    };
+
+    window.addEventListener("keydown", onKey);
+
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
-      <Tooltip title="How this works">
+      <Tooltip title="How this works — or press ?">
         <Button
           type="text"
           aria-label="How this works"
