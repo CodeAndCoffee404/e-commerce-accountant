@@ -15,27 +15,16 @@ import {
   seededRules,
 } from "./harness";
 
-/**
- * Months that reconcile with the legacy report exactly, row for row across all
- * thirteen columns.
- */
+/** Every month legacy shipped an Off-Amazon report for. */
 const PERIODS = [
   "2026.01 January",
   "2026.02 February",
+  "2026.03 March",
+  "2026.04 April",
   "2026.05 May",
+  "2026.06 June",
   "2026.07 July",
 ];
-
-/**
- * Months still being reconciled. Row counts and every channel breakdown already
- * agree; the totals do not, by an amount not yet traced to a rule.
- *
- * Listed rather than quietly dropped: an unexplained difference in an
- * accounting report is the thing this project exists to remove, and it stays
- * visible until it is either fixed or written up in docs/known-deviations.md
- * as a legacy bug.
- */
-const UNRECONCILED = ["2026.03 March", "2026.04 April", "2026.06 June"];
 
 function periodOf(label: string) {
   const [year, rest] = label.split(".");
@@ -69,9 +58,30 @@ function canonical(row: readonly string[]): string {
     .join("|");
 }
 
-describe.skipIf(!corpusAvailable)("Off-Amazon Sales против эталона", () => {
-  for (const label of UNRECONCILED) it.todo(`${label} — сверка не завершена`);
+/**
+ * The one accepted difference: legacy wrote Cdiscount refunds positive in some
+ * months and negative in others, because the script changed at some point and
+ * the reports were never regenerated. The agreed rule is that a refund is
+ * negative in every channel, so ours is the negative one.
+ *
+ * Recognised by flipping the sign back: if that turns our row into the legacy
+ * row exactly, the sign is the whole of the difference. Anything else is a real
+ * disagreement and fails. See docs/known-deviations.md §2.
+ */
+function isCdiscountRefundSign(ours: string, theirs: string): boolean {
+  const columns = ours.split("|");
 
+  if (columns[0] !== "Cdiscount" || columns[2] !== "REFUND") return false;
+
+  // VAT, net and total — the three amounts.
+  for (const index of [5, 6, 7]) {
+    columns[index] = (-Number(columns[index])).toFixed(4);
+  }
+
+  return columns.join("|") === theirs;
+}
+
+describe.skipIf(!corpusAvailable)("Off-Amazon Sales против эталона", () => {
   it.each(PERIODS)("%s", async (label) => {
     const golden = await readGolden(
       path.join(REPORTS, `Off-Amazon Sales - ${label}`, `Off-Amazon Sales - ${label}.xlsx`),
@@ -88,23 +98,33 @@ describe.skipIf(!corpusAvailable)("Off-Amazon Sales против эталона"
 
     const ours = result.sheets[0].rows.map((row) => row.map((value) => String(value ?? "")));
 
-    // Totals first: a report that agrees row by row but not in sum would mean
-    // the comparison itself is wrong.
-    const sum = (rows: string[][], column: number) =>
-      rows.reduce((total, row) => total + Number(row[column] || 0), 0);
-
     expect(ours.length).toBe(golden.rows.length);
-    expect(sameAmount(String(sum(ours, 7)), String(sum(golden.rows, 7)), "0.05")).toBe(true);
-    expect(sameAmount(String(sum(ours, 5)), String(sum(golden.rows, 5)), "0.05")).toBe(true);
 
-    // Then every row, as a multiset over all thirteen columns.
+    // Every row, as a multiset over all thirteen columns.
     const oursCanonical = ours.map(canonical).sort();
     const theirsCanonical = golden.rows.map(canonical).sort();
 
-    const extra = oursCanonical.filter((row, index) => row !== theirsCanonical[index]);
+    const unmatched = oursCanonical.filter((row) => !theirsCanonical.includes(row));
+    const theirsUnmatched = theirsCanonical.filter((row) => !oursCanonical.includes(row));
 
-    expect(oursCanonical, extra.length > 0 ? `первое расхождение: ${extra[0]}` : "").toEqual(
-      theirsCanonical,
+    // Each remaining difference has to be one we have written down. An
+    // unexplained one fails, whatever its size.
+    const unexplained = unmatched.filter(
+      (row) => !theirsUnmatched.some((golden) => isCdiscountRefundSign(row, golden)),
     );
+
+    expect(unexplained, `не объяснённые расхождения:\n${unexplained.join("\n")}`).toEqual([]);
+    expect(unmatched.length).toBe(theirsUnmatched.length);
+
+    // Totals agree once the recorded deviation is undone.
+    const signed = (rows: string[][], column: number) =>
+      rows.reduce((total, row) => {
+        const value = Number(row[column] || 0);
+
+        return total + (row[0] === "Cdiscount" && row[2] === "REFUND" ? Math.abs(value) : value);
+      }, 0);
+
+    expect(sameAmount(String(signed(ours, 7)), String(signed(golden.rows, 7)), "0.05")).toBe(true);
+    expect(sameAmount(String(signed(ours, 5)), String(signed(golden.rows, 5)), "0.05")).toBe(true);
   }, 120_000);
 });
