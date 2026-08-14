@@ -1,7 +1,7 @@
 "use client";
 
 import { DownloadOutlined, WarningOutlined } from "@ant-design/icons";
-import { Button, Empty, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Select, Space, Switch, Table, Tag, theme, Tooltip, Typography } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -27,6 +27,9 @@ export function TransactionsView({
   totals: { currency: string; gross: string; vat: string; net: string; rows: number }[];
 }) {
   const router = useRouter();
+  // Read from the theme: a hard-coded amber stayed the light-mode shade on a
+  // dark background.
+  const { token } = theme.useToken();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [drilling, setDrilling] = useState<string | null>(null);
@@ -212,7 +215,7 @@ export function TransactionsView({
             render: (_, row) =>
               row.needsAttention ? (
                 <Tooltip title={row.attentionReason ?? "Needs attention"}>
-                  <WarningOutlined style={{ color: "#d48806" }} />
+                  <WarningOutlined style={{ color: token.colorWarning }} />
                 </Tooltip>
               ) : null,
           },

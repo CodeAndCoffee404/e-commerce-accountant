@@ -1,4 +1,4 @@
-import { and, count, eq, sql, sum } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 
@@ -11,7 +11,6 @@ export type FileReconciliation = {
   currentRows: number;
   supersededRows: number;
   needsAttention: number;
-  totals: { currency: string; gross: string; vat: string }[];
 };
 
 type DetectionMeta = { sourceRows?: number; mappedRows?: number };
@@ -34,16 +33,16 @@ export async function reconcileFiles(
   if (fileIds.length === 0) return result;
 
   const db = getDb();
-  const inScope = sql`${schema.transactions.sourceFileId} = any(${sql.param([...fileIds])}::uuid[])`;
+  const ids = sql.param([...fileIds]);
 
-  const [files, counts, totals] = await Promise.all([
+  const [files, counts] = await Promise.all([
     db
       .select({ id: schema.sourceFiles.id, detectionMeta: schema.sourceFiles.detectionMeta })
       .from(schema.sourceFiles)
       .where(
         and(
           eq(schema.sourceFiles.tenantId, tenantId),
-          sql`${schema.sourceFiles.id} = any(${sql.param([...fileIds])}::uuid[])`,
+          sql`${schema.sourceFiles.id} = any(${ids}::uuid[])`,
         ),
       ),
 
@@ -55,27 +54,13 @@ export async function reconcileFiles(
         flagged: sql<number>`count(*) filter (where ${schema.transactions.needsAttention})::int`,
       })
       .from(schema.transactions)
-      .where(and(eq(schema.transactions.tenantId, tenantId), inScope))
-      .groupBy(schema.transactions.sourceFileId, schema.transactions.isCurrent),
-
-    // Grouped by currency: Allegro settles in five, and one summed figure
-    // across them would be a number with no meaning.
-    db
-      .select({
-        fileId: schema.transactions.sourceFileId,
-        currency: schema.transactions.currency,
-        gross: sum(schema.transactions.gross),
-        vat: sum(schema.transactions.vatAmount),
-      })
-      .from(schema.transactions)
       .where(
         and(
           eq(schema.transactions.tenantId, tenantId),
-          eq(schema.transactions.isCurrent, true),
-          inScope,
+          sql`${schema.transactions.sourceFileId} = any(${ids}::uuid[])`,
         ),
       )
-      .groupBy(schema.transactions.sourceFileId, schema.transactions.currency),
+      .groupBy(schema.transactions.sourceFileId, schema.transactions.isCurrent),
   ]);
 
   for (const file of files) {
@@ -88,14 +73,6 @@ export async function reconcileFiles(
       currentRows: rows.find((row) => row.isCurrent)?.rows ?? 0,
       supersededRows: rows.find((row) => !row.isCurrent)?.rows ?? 0,
       needsAttention: rows.find((row) => row.isCurrent)?.flagged ?? 0,
-      totals: totals
-        .filter((row) => row.fileId === file.id && row.currency !== null)
-        .map((row) => ({
-          currency: row.currency!,
-          gross: row.gross ?? "0",
-          vat: row.vat ?? "0",
-        }))
-        .sort((a, b) => a.currency.localeCompare(b.currency)),
     });
   }
 

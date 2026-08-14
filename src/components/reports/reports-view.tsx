@@ -12,6 +12,7 @@ import {
   Space,
   Table,
   Tag,
+  theme,
   Tooltip,
   Typography,
 } from "antd";
@@ -20,7 +21,7 @@ import { useState, useTransition } from "react";
 
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
-import type { ReportRunCard } from "@/lib/reports/queries";
+import type { ReportAvailability, ReportRunCard } from "@/lib/reports/queries";
 
 const STATUS_COLOURS: Record<string, string> = {
   queued: "default",
@@ -35,11 +36,12 @@ export function ReportsView({
   canBuild,
 }: {
   runs: ReportRunCard[];
-  periods: Record<ReportTypeId, string[]>;
+  periods: Record<ReportTypeId, ReportAvailability>;
   canBuild: boolean;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<Record<string, string | undefined>>({});
 
@@ -74,7 +76,9 @@ export function ReportsView({
         }}
       >
         {REPORT_DEFINITIONS.map((definition) => {
-          const available = periods[definition.id] ?? [];
+          const availability = periods[definition.id] ?? { ready: [], blocked: [] };
+          const ready = availability.ready;
+          const waiting = availability.blocked;
 
           return (
             <Card key={definition.id} size="small" title={definition.label}>
@@ -83,30 +87,69 @@ export function ReportsView({
               </Typography.Paragraph>
 
               <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-                Only periods with parsed uploads for this report are offered. Building it again
-                is safe — each run is recorded separately with the rules and rates it used.
+                Only periods with everything this report needs are offered. Building it again is
+                safe — each run is recorded separately with the rules and rates it used.
               </Typography.Paragraph>
 
               <Space.Compact style={{ width: "100%" }}>
                 <Select
                   style={{ width: "100%" }}
-                  placeholder={available.length === 0 ? "No data" : "Period"}
-                  disabled={available.length === 0}
+                  placeholder={ready.length === 0 ? "Nothing ready" : "Period"}
+                  disabled={ready.length === 0}
                   value={choice[definition.id]}
                   onChange={(value) =>
                     setChoice((current) => ({ ...current, [definition.id]: value }))
                   }
-                  options={available.map((period) => ({ value: period, label: period }))}
+                  options={ready.map((period) => ({ value: period, label: period }))}
                 />
                 <Button
                   type="primary"
                   loading={pending}
-                  disabled={!canBuild || available.length === 0}
+                  disabled={!canBuild || ready.length === 0}
                   onClick={() => build(definition.id)}
                 >
                   Build
                 </Button>
               </Space.Compact>
+
+              {/* A greyed-out card that gives no reason sends someone off to
+                  re-upload files that are already here. Naming what is missing
+                  is the whole difference between a dead end and a next step. */}
+              {waiting.length > 0 ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginTop: 12 }}
+                  message={
+                    waiting.length === 1
+                      ? `${waiting[0].period} is not ready yet`
+                      : `${waiting.length} periods are not ready yet`
+                  }
+                  description={
+                    <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                      {waiting.slice(0, 3).map((entry) => (
+                        <Typography.Text key={entry.period} style={{ fontSize: 12 }}>
+                          <b>{entry.period}</b> — still missing:{" "}
+                          {entry.missing.slice(0, 6).join(", ")}
+                          {entry.missing.length > 6 ? ` and ${entry.missing.length - 6} more` : ""}
+                        </Typography.Text>
+                      ))}
+                      {waiting.length > 3 ? (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          and {waiting.length - 3} older period
+                          {waiting.length - 3 === 1 ? "" : "s"}
+                        </Typography.Text>
+                      ) : null}
+                    </Space>
+                  }
+                />
+              ) : null}
+
+              {ready.length === 0 && waiting.length === 0 ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Nothing uploaded for this report yet.
+                </Typography.Text>
+              ) : null}
             </Card>
           );
         })}
@@ -148,7 +191,7 @@ export function ReportsView({
                 <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
                 {(run.stats?.warnings?.length ?? 0) > 0 ? (
                   <Tooltip title={run.stats?.warnings?.join("; ")}>
-                    <WarningOutlined style={{ color: "#d48806" }} />
+                    <WarningOutlined style={{ color: token.colorWarning }} />
                   </Tooltip>
                 ) : null}
               </Space>
@@ -290,7 +333,9 @@ function RunDetails({ run }: { run: ReportRunCard }) {
           message="Warnings"
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {run.stats?.warnings?.map((warning) => <li key={warning}>{warning}</li>)}
+              {run.stats?.warnings?.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
             </ul>
           }
         />

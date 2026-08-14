@@ -53,8 +53,9 @@ export function HelpModal() {
               description: (
                 <>
                   <Paragraph>
-                    On <Text strong>Uploads</Text>, drop the files exactly as the channel produced
-                    them. CSV or XLSX, up to 20 MB each. Several at once is fine.
+                    On <Text strong>Uploads</Text>, press <Text strong>Upload files</Text>. Add
+                    as many as you have — they queue up in a list and go one after another, and
+                    each one reports what it turned out to be. CSV or XLSX, up to 20 MB each.
                   </Paragraph>
                   <Paragraph type="secondary">
                     Nothing is read from the filename. The type, the country and the period come
@@ -95,7 +96,8 @@ export function HelpModal() {
                 <>
                   <Paragraph>
                     A number or date that could not be read flags its row. The count appears next to{" "}
-                    <Text strong>Transactions</Text> in the sidebar.
+                    <Text strong>Uploads</Text> in the sidebar, and against the file itself in the
+                    list — expand it to see how many.
                   </Paragraph>
                   <Alert
                     type="info"
@@ -117,8 +119,9 @@ export function HelpModal() {
               description: (
                 <>
                   <Paragraph>
-                    On <Text strong>Reports</Text>, pick a period and build. Only periods that can
-                    actually be built are offered.
+                    On <Text strong>Reports</Text>, pick a period and build. Only periods with
+                    everything the report needs are offered — and when one is not, the card names
+                    what it is still waiting for, so nobody has to guess which file is missing.
                   </Paragraph>
                   <Paragraph type="secondary">
                     <Text strong>Off-Amazon Sales</Text> needs Allegro, Cdiscount and Shopify

@@ -90,12 +90,7 @@ export function UploadsTable({
           // The reconciliation lives under the file it is about: "did all of
           // this get in" is a question about one upload, not about a list.
           expandedRowRender: (row) => (
-            <ReconciliationPanel
-              fileId={row.id}
-              data={reconciliation[row.id]}
-              period={row.period}
-              dataset={row.dataset}
-            />
+            <ReconciliationPanel fileId={row.id} data={reconciliation[row.id]} />
           ),
         }}
         pagination={
@@ -108,7 +103,7 @@ export function UploadsTable({
               <span>
                 No files yet.
                 <br />
-                Drop a channel export above — Amazon, Allegro, Cdiscount or Shopify.
+                Use <b>Upload files</b> above — Amazon, Allegro, Cdiscount or Shopify exports.
               </span>
             }
           />
@@ -175,10 +170,21 @@ export function UploadsTable({
           {
             title: "Status",
             dataIndex: "status",
-            width: 120,
-            render: (status: string) => (
-              <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
-            ),
+            width: 150,
+            render: (status: string, row) => {
+              const flagged = reconciliation[row.id]?.needsAttention ?? 0;
+
+              return (
+                <Space direction="vertical" size={4}>
+                  <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
+                  {flagged > 0 ? (
+                    <Tooltip title="Rows whose number or date could not be read. Expand this row for the detail.">
+                      <Tag color="orange">{flagged} to review</Tag>
+                    </Tooltip>
+                  ) : null}
+                </Space>
+              );
+            },
           },
           {
             title: "Uploaded",

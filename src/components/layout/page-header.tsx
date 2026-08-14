@@ -18,6 +18,9 @@ export function PageHeader({
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",
+        // Wraps on a phone rather than crushing the description into a column
+        // two words wide.
+        flexWrap: "wrap",
         gap: 16,
         marginBottom: 24,
       }}

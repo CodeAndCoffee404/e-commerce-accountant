@@ -10,7 +10,7 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Layout, Menu, Space, Tooltip, Typography } from "antd";
+import { Badge, Button, Layout, Menu, Space, theme, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
@@ -41,6 +41,9 @@ export function AppShell({
   needsAttention: number;
 }) {
   const pathname = usePathname();
+  // Read from the theme rather than written as a hex value: a separator that
+  // ignores dark mode is the reason chrome ends up unreadable in one of them.
+  const { token } = theme.useToken();
   const collapsed = useUiStore((store) => store.sidebarCollapsed);
   const setCollapsed = useUiStore((store) => store.setSidebarCollapsed);
   const themeMode = useUiStore((store) => store.themeMode);
@@ -50,21 +53,33 @@ export function AppShell({
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
 
+  // A disabled page is still reachable by typing its address, and highlighting
+  // a row nobody can click would only puzzle whoever got there.
+  const selectedKeys = activeItem && !activeItem.disabled ? [activeItem.key] : [];
+
   const menuItems = NAV_ITEMS.map((item) => {
     const Icon = ICONS[item.icon];
 
-    // The count sits on Transactions, where the filter that shows them lives.
-    // Without it a flagged row waits until somebody happens to look.
+    // The count sits on Uploads, which is where a flagged row can now be seen
+    // and acted on — one expander below the file that produced it. Without it
+    // a flagged row waits until somebody happens to look.
     const badge =
-      item.key === "transactions" && needsAttention > 0 ? (
+      item.key === "uploads" && needsAttention > 0 ? (
         <Badge count={needsAttention} size="small" offset={[6, -2]} />
       ) : null;
 
     return {
       key: item.key,
       icon: <Icon />,
-      label: (
-        <Link href={item.key === "transactions" && needsAttention > 0 ? `${item.href}?attention=1` : item.href}>
+      disabled: item.disabled,
+      // A disabled row gets no link at all: greying out something that still
+      // navigates is the worst of both.
+      label: item.disabled ? (
+        <Tooltip title={item.disabledReason} placement="right">
+          <span>{item.label}</span>
+        </Tooltip>
+      ) : (
+        <Link href={item.href}>
           {item.label}
           {badge}
         </Link>
@@ -85,6 +100,7 @@ export function AppShell({
         // half a phone, and this app is used on one when a file arrives by mail.
         breakpoint="lg"
         collapsedWidth={64}
+        style={{ borderInlineEnd: `1px solid ${token.colorSplit}` }}
       >
         <Link
           href={NAV_ITEMS[0].href}
@@ -96,6 +112,7 @@ export function AppShell({
             padding: collapsed ? 0 : "0 20px",
             overflow: "hidden",
             whiteSpace: "nowrap",
+            borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
           <Typography.Text strong style={{ fontSize: 15 }}>
@@ -106,7 +123,7 @@ export function AppShell({
         <Menu
           mode="inline"
           theme={themeMode}
-          selectedKeys={activeItem ? [activeItem.key] : []}
+          selectedKeys={selectedKeys}
           items={menuItems}
         />
       </Sider>
@@ -118,6 +135,12 @@ export function AppShell({
             alignItems: "center",
             justifyContent: "space-between",
             paddingInline: 16,
+            borderBottom: `1px solid ${token.colorSplit}`,
+            // Stays put while a long table scrolls, so the way out is always
+            // in reach.
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
           }}
         >
           <Space size={12}>

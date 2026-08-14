@@ -2,7 +2,10 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 
+import type { DatasetId } from "@/lib/ingest/datasets";
+
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
+import { ZOHO_COUNTRIES } from "./zoho-invoice";
 
 export type ReportRunCard = {
   id: string;
@@ -92,25 +95,48 @@ export async function listReportRuns(tenantId: string, limit = 50): Promise<Repo
   }));
 }
 
+export type ReportAvailability = {
+  /** Periods that can be built right now. */
+  ready: string[];
+  /**
+   * Periods where something has been uploaded but not enough, with the pieces
+   * still wanted. Newest first.
+   */
+  blocked: { period: string; missing: string[] }[];
+};
+
+/** Short names for the UI. The legacy labels are too long to read in a list. */
+const DATASET_NAMES: Record<DatasetId, string> = {
+  amazon_vat: "Amazon VAT",
+  amazon_monthly: "Amazon Monthly",
+  allegro: "Allegro",
+  cdiscount: "Cdiscount",
+  shopify: "Shopify",
+};
+
 /**
- * Periods that can actually be built, per report type — a period with no parsed
- * uploads for that report would only ever produce an error.
+ * What each report can be built for, and what is holding the rest back.
+ *
+ * Offering a period and then refusing it wastes the operator's time, so an
+ * incomplete period is not offered. But refusing in silence is worse: a card
+ * that greys itself out with no reason leaves someone re-uploading files that
+ * are already there. So the two are returned together — what can be built, and
+ * what each remaining period is still waiting for.
  */
 export async function availablePeriods(
   tenantId: string,
-): Promise<Record<ReportTypeId, string[]>> {
+): Promise<Record<ReportTypeId, ReportAvailability>> {
   const rows = await getDb()
     .selectDistinct({
       dataset: schema.sourceFiles.dataset,
       periodLabel: schema.sourceFiles.periodLabel,
       granularity: schema.sourceFiles.periodGranularity,
+      countryCode: schema.sourceFiles.countryCode,
     })
     .from(schema.sourceFiles)
-    .where(
-      and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
-    );
+    .where(and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")));
 
-  const result = {} as Record<ReportTypeId, string[]>;
+  const result = {} as Record<ReportTypeId, ReportAvailability>;
 
   for (const definition of REPORT_DEFINITIONS) {
     const usable = rows.filter(
@@ -121,29 +147,52 @@ export async function availablePeriods(
         definition.granularity.includes(row.granularity ?? "month"),
     );
 
-    const datasetsByPeriod = new Map<string, Set<string>>();
+    const byPeriod = new Map<string, { datasets: Set<string>; countries: Set<string> }>();
 
     for (const row of usable) {
       const period = row.periodLabel!;
-      const seen = datasetsByPeriod.get(period) ?? new Set<string>();
+      const entry = byPeriod.get(period) ?? {
+        datasets: new Set(),
+        countries: new Set(),
+      };
 
-      seen.add(row.dataset!);
-      datasetsByPeriod.set(period, seen);
+      entry.datasets.add(row.dataset!);
+      if (row.countryCode) entry.countries.add(row.countryCode);
+      byPeriod.set(period, entry);
     }
 
-    const periods = [...datasetsByPeriod.entries()]
+    const ready: string[] = [];
+    const blocked: { period: string; missing: string[] }[] = [];
+
+    for (const [period, entry] of byPeriod) {
+      const missing: string[] = [];
+
       // A report needing every channel is not offered until every channel is
-      // there. Offering it and then refusing wastes the operator's time, and
-      // building it anyway would quietly under-report.
-      .filter(([, datasets]) =>
-        definition.requiresEveryDataset
-          ? definition.datasets.every((dataset) => datasets.has(dataset))
-          : true,
-      )
-      .map(([period]) => period);
+      // there: building it anyway would quietly under-report by exactly the
+      // channels nobody noticed were absent.
+      if (definition.requiresEveryDataset) {
+        for (const dataset of definition.datasets) {
+          if (!entry.datasets.has(dataset)) missing.push(DATASET_NAMES[dataset]);
+        }
+      }
+
+      // One dataset, ten marketplaces. Checked here as well as at build time,
+      // so an incomplete month is never offered in the first place.
+      if (definition.id === "amazon_zoho_invoice") {
+        for (const country of ZOHO_COUNTRIES) {
+          if (!entry.countries.has(country)) missing.push(country);
+        }
+      }
+
+      if (missing.length === 0) ready.push(period);
+      else blocked.push({ period, missing });
+    }
 
     // Newest first: that is the period being worked on.
-    result[definition.id] = periods.sort().reverse();
+    result[definition.id] = {
+      ready: ready.sort().reverse(),
+      blocked: blocked.sort((a, b) => b.period.localeCompare(a.period)),
+    };
   }
 
   return result;

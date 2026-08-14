@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/layout/page-header";
-import { UploadDropzone } from "@/components/uploads/upload-dropzone";
+import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
 import { requireUser } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
@@ -39,8 +39,8 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
       <PageHeader
         title="Uploads"
         description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
+        extra={<UploadDialog tenantId={user.tenantId} />}
       />
-      <UploadDropzone tenantId={user.tenantId} />
       <UploadsTable rows={rows} options={options} reconciliation={reconciliation} />
     </>
   );

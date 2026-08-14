@@ -1,13 +1,8 @@
 "use client";
 
 import { Alert, Descriptions, Space, Tag, Typography } from "antd";
-import Link from "next/link";
 
 import type { FileReconciliation } from "@/lib/uploads/reconciliation";
-
-function trim(value: string): string {
-  return value.includes(".") ? value.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1") : value;
-}
 
 /**
  * The reconciliation for one uploaded file.
@@ -19,13 +14,9 @@ function trim(value: string): string {
 export function ReconciliationPanel({
   fileId,
   data,
-  period,
-  dataset,
 }: {
   fileId: string;
   data: FileReconciliation | undefined;
-  period: string | null;
-  dataset: string | null;
 }) {
   if (!data) {
     return <Typography.Text type="secondary">No reconciliation for this file yet.</Typography.Text>;
@@ -59,9 +50,7 @@ export function ReconciliationPanel({
           {data.needsAttention === 0 ? (
             <Tag color="green">none</Tag>
           ) : (
-            <Link href={`/transactions?attention=1${period ? `&period=${encodeURIComponent(period)}` : ""}`}>
-              <Tag color="orange">{data.needsAttention} — review</Tag>
-            </Link>
+            <Tag color="orange">{data.needsAttention}</Tag>
           )}
         </Descriptions.Item>
       </Descriptions>
@@ -83,33 +72,12 @@ export function ReconciliationPanel({
         />
       ) : null}
 
-      {data.totals.length > 0 ? (
-        <div>
-          <Typography.Text strong>Totals in the ledger</Typography.Text>
-          <br />
-          <Space wrap style={{ marginTop: 6 }}>
-            {data.totals.map((total) => (
-              <Tag key={total.currency} style={{ padding: "3px 8px" }}>
-                <b>{total.currency}</b> · gross {trim(total.gross)} · VAT {trim(total.vat)}
-              </Tag>
-            ))}
-          </Space>
-          <br />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Compare with the file itself — these are sums of what was stored, not of what was
-            reported.
-          </Typography.Text>
-        </div>
+      {data.needsAttention > 0 ? (
+        <Typography.Text type="secondary">
+          A flagged row is one whose number or date could not be read. Correct it in the source
+          file and upload that file again — the corrected upload replaces this one.
+        </Typography.Text>
       ) : null}
-
-      <Link
-        href={`/transactions?${new URLSearchParams({
-          ...(dataset ? { dataset } : {}),
-          ...(period ? { period } : {}),
-        }).toString()}`}
-      >
-        Open these transactions
-      </Link>
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         File reference: {fileId}

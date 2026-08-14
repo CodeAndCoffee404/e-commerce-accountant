@@ -31,7 +31,20 @@ function AntdTheme({ children }: { children: ReactNode }) {
         },
         components: {
           Layout: {
-            bodyBg: themeMode === "dark" ? "#141414" : "#f5f6f8",
+            // Two surfaces, deliberately: the page sits one step back and the
+            // chrome sits on top of it.
+            //
+            // The header had no colour of its own, so it kept antd's default
+            // navy in both themes — which put light-theme icons on a dark bar
+            // and made them unreadable. In dark mode the body and the cards
+            // were both #141414, so a table had no edge at all. Naming all
+            // three fixes both.
+            bodyBg: themeMode === "dark" ? "#000000" : "#f5f6f8",
+            headerBg: themeMode === "dark" ? "#141414" : "#ffffff",
+            siderBg: themeMode === "dark" ? "#141414" : "#ffffff",
+            // Matches the brand block in the sidebar, so the two line up
+            // across the gap instead of missing each other by eight pixels.
+            headerHeight: 56,
           },
         },
       }}
