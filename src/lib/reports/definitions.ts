@@ -19,6 +19,18 @@ export type ReportDefinition = {
    */
   requiresEveryDataset: boolean;
   description: string;
+  /**
+   * What the report needs, in plain words, said before anything is uploaded.
+   * Someone should be able to tell what to go and fetch without having to
+   * discover it by watching a button stay grey.
+   */
+  needs: string;
+  /**
+   * Why it refuses to build without them. Shown next to what is missing,
+   * because "you cannot" invites working around it and "here is what would go
+   * wrong" does not.
+   */
+  why: string;
 };
 
 export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
@@ -30,6 +42,8 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     // One file covers every marketplace, so there is nothing to be missing.
     requiresEveryDataset: false,
     description: "Amazon VAT transaction report, split by settlement currency, with totals.",
+    needs: "One Amazon VAT transaction report, which already covers every marketplace.",
+    why: "",
   },
   {
     id: "off_amazon_sales",
@@ -38,6 +52,10 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     granularity: ["month"],
     requiresEveryDataset: true,
     description: "Allegro, Cdiscount and Shopify normalised into one sheet.",
+    needs: "Allegro, Cdiscount and Shopify, all three for the same month.",
+    why:
+      "Built from whichever channels happen to be uploaded, the sheet looks complete and " +
+      "understates revenue by exactly the ones nobody noticed were absent.",
   },
   {
     id: "amazon_zoho_invoice",
@@ -49,6 +67,10 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
     // One dataset, but ten countries — checked separately by missingCountries.
     requiresEveryDataset: false,
     description: "Ten marketplaces aggregated into invoice lines for Zoho.",
+    needs: "Amazon Monthly for all ten marketplaces: ES, IT, FR, DE, UK, SE, PL, NL, IE, BE.",
+    why:
+      "A missing marketplace does not make a smaller invoice. It makes one that leaves a " +
+      "country's sales out in silence, and nothing downstream would show it.",
   },
 ];
 

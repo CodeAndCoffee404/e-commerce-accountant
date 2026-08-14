@@ -41,7 +41,12 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
         description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
         extra={<UploadDialog tenantId={user.tenantId} />}
       />
-      <UploadsTable rows={rows} options={options} reconciliation={reconciliation} />
+      <UploadsTable
+        rows={rows}
+        options={options}
+        reconciliation={reconciliation}
+        canDelete={user.role !== "viewer"}
+      />
     </>
   );
 }

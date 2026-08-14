@@ -1,6 +1,11 @@
 "use client";
 
-import { CloudUploadOutlined, DownloadOutlined, WarningOutlined } from "@ant-design/icons";
+import {
+  CheckCircleOutlined,
+  CloudUploadOutlined,
+  DownloadOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   App,
@@ -86,9 +91,13 @@ export function ReportsView({
                 {definition.description}
               </Typography.Paragraph>
 
+              {/* Said before anything is uploaded, not discovered afterwards by
+                  watching a button stay grey. */}
               <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-                Only periods with everything this report needs are offered. Building it again is
-                safe — each run is recorded separately with the rules and rates it used.
+                <Typography.Text strong style={{ fontSize: 12 }}>
+                  Needs:
+                </Typography.Text>{" "}
+                {definition.needs}
               </Typography.Paragraph>
 
               <Space.Compact style={{ width: "100%" }}>
@@ -102,15 +111,29 @@ export function ReportsView({
                   }
                   options={ready.map((period) => ({ value: period, label: period }))}
                 />
-                <Button
-                  type="primary"
-                  loading={pending}
-                  disabled={!canBuild || ready.length === 0}
-                  onClick={() => build(definition.id)}
-                >
-                  Build
-                </Button>
+                <Tooltip title="Building again is safe — each run is recorded separately with the rules and rates it used.">
+                  <Button
+                    type="primary"
+                    loading={pending}
+                    disabled={!canBuild || ready.length === 0}
+                    onClick={() => build(definition.id)}
+                  >
+                    Build
+                  </Button>
+                </Tooltip>
               </Space.Compact>
+
+              {ready.length > 0 ? (
+                <Typography.Paragraph
+                  type="success"
+                  style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}
+                >
+                  <CheckCircleOutlined />{" "}
+                  {ready.length === 1
+                    ? `Everything is in for ${ready[0]}.`
+                    : `Everything is in for ${ready.length} periods, newest ${ready[0]}.`}
+                </Typography.Paragraph>
+              ) : null}
 
               {/* A greyed-out card that gives no reason sends someone off to
                   re-upload files that are already here. Naming what is missing
@@ -138,6 +161,11 @@ export function ReportsView({
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                           and {waiting.length - 3} older period
                           {waiting.length - 3 === 1 ? "" : "s"}
+                        </Typography.Text>
+                      ) : null}
+                      {definition.why ? (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {definition.why}
                         </Typography.Text>
                       ) : null}
                     </Space>

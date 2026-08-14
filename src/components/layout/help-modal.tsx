@@ -87,6 +87,13 @@ export function HelpModal() {
                     <Text strong>Preview</Text> opens the first rows of the stored file, so you can
                     compare against the original.
                   </Paragraph>
+                  <Paragraph type="secondary">
+                    <Text strong>Delete</Text> removes an upload completely — the file, its rows
+                    and its stored copy. If it had replaced an earlier upload for the same period,
+                    that earlier one starts counting again. A file some report was built from is
+                    kept until that report is deleted, so no run is ever left unable to show what
+                    it used.
+                  </Paragraph>
                 </>
               ),
             },

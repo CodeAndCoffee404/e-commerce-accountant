@@ -1,11 +1,26 @@
 "use client";
 
-import { Button, Empty, Input, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Empty,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import type { UploadOptions, UploadRow } from "@/lib/uploads/queries";
 import type { FileReconciliation } from "@/lib/uploads/reconciliation";
+
+import { deleteUpload } from "@/lib/uploads/delete";
 
 import { PreviewDrawer } from "./preview-drawer";
 import { ReconciliationPanel } from "./reconciliation-panel";
@@ -29,12 +44,15 @@ export function UploadsTable({
   rows,
   options,
   reconciliation,
+  canDelete,
 }: {
   rows: UploadRow[];
   options: UploadOptions;
   reconciliation: Record<string, FileReconciliation>;
+  canDelete: boolean;
 }) {
   const router = useRouter();
+  const { message } = App.useApp();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [previewing, setPreviewing] = useState<UploadRow | null>(null);
@@ -194,14 +212,48 @@ export function UploadsTable({
           },
           {
             title: "",
-            key: "preview",
-            width: 90,
+            key: "actions",
+            width: 150,
             render: (_, row) => (
-              <Tooltip title="Show the first rows of the stored file, read on demand.">
-                <Button size="small" onClick={() => setPreviewing(row)}>
-                  Preview
-                </Button>
-              </Tooltip>
+              <Space size={4}>
+                <Tooltip title="Show the first rows of the stored file, read on demand.">
+                  <Button size="small" onClick={() => setPreviewing(row)}>
+                    Preview
+                  </Button>
+                </Tooltip>
+
+                {canDelete ? (
+                  <Popconfirm
+                    title="Delete this upload?"
+                    description={
+                      <div style={{ maxWidth: 320 }}>
+                        The file, its rows and its stored copy all go. If it replaced an earlier
+                        upload for this period, that earlier one counts again. A file a report was
+                        built from cannot be deleted until that report is.
+                      </div>
+                    }
+                    okText="Delete"
+                    okButtonProps={{ danger: true }}
+                    cancelText="Keep"
+                    onConfirm={() =>
+                      startTransition(async () => {
+                        const result = await deleteUpload(row.id);
+
+                        // Ten seconds on a refusal: it names the reports that
+                        // have to go first, which is not readable in three.
+                        if (result.ok) message.success(result.message, 6);
+                        else message.error(result.message, 10);
+
+                        router.refresh();
+                      })
+                    }
+                  >
+                    <Tooltip title="Remove this upload">
+                      <Button size="small" danger icon={<DeleteOutlined />} aria-label="Delete" />
+                    </Tooltip>
+                  </Popconfirm>
+                ) : null}
+              </Space>
             ),
           },
         ]}
