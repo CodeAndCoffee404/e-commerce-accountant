@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 
 import { accessTokenFor, disconnect, loadConnection, setFolder } from "./connection";
@@ -61,6 +62,15 @@ export async function chooseFolder(input: unknown): Promise<DriveResult> {
 
   await setFolder(user.tenantId, parsed.data.folderId, name);
 
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: "drive.folder_chosen",
+      entity: "google_connection",
+      payload: { folderId: parsed.data.folderId, folderName: name },
+    },
+  );
+
   revalidatePath("/settings");
 
   return { ok: true, message: `Reports will be written to "${name}".` };
@@ -70,6 +80,11 @@ export async function disconnectDrive(): Promise<DriveResult> {
   const user = await requireEditor();
 
   await disconnect(user.tenantId);
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    { action: "drive.disconnected", entity: "google_connection" },
+  );
 
   revalidatePath("/settings");
 

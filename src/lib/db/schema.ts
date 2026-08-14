@@ -392,6 +392,42 @@ export const fxRates = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
+ * Audit log
+ * ------------------------------------------------------------------ */
+
+/**
+ * Who did what, kept for the life of the tenant.
+ *
+ * An accounting system has to answer "who changed this rate, and when" — the
+ * reference tables deliberately keep no history of their own, so this is where
+ * that question is answered. Entries are written, never edited or removed.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Kept even if the user is later removed, so the trail does not break. */
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    userEmail: text("user_email"),
+
+    /** `upload.registered`, `report.built`, `vat_rate.saved`, … */
+    action: text("action").notNull(),
+    entity: text("entity"),
+    entityId: text("entity_id"),
+    /** What changed, enough to understand the entry without another query. */
+    payload: jsonb("payload"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("audit_log_tenant_idx").on(table.tenantId, table.createdAt)],
+);
+
+export type AuditEntry = typeof auditLog.$inferSelect;
+
+/* ------------------------------------------------------------------ *
  * Google Drive connection
  * ------------------------------------------------------------------ */
 

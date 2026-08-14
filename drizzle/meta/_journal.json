@@ -50,6 +50,13 @@
       "when": 1786697879376,
       "tag": "0006_google_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786715852968,
+      "tag": "0007_audit_log",
+      "breakpoints": true
     }
   ]
 }

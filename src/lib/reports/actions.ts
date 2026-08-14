@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
@@ -34,6 +35,20 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
     periodLabel: parsed.data.periodLabel,
     requestedBy: user.id,
   });
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: outcome.ok ? "report.built" : "report.failed",
+      entity: "report_run",
+      entityId: outcome.runId ?? undefined,
+      payload: {
+        reportType: parsed.data.reportType,
+        period: parsed.data.periodLabel,
+        ...(outcome.ok ? {} : { error: outcome.message }),
+      },
+    },
+  );
 
   revalidatePath("/reports");
 
@@ -103,6 +118,16 @@ export async function republish(runId: string): Promise<BuildResult> {
   if (user.role === "viewer") return { ok: false, message: "Not allowed." };
 
   const result = await publishRun(user.tenantId, runId);
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: "report.republished",
+      entity: "report_run",
+      entityId: runId,
+      payload: { uploaded: result.uploaded, failed: result.failed },
+    },
+  );
 
   revalidatePath("/reports");
 

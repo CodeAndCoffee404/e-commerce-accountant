@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { classify } from "@/lib/ingest/classify";
@@ -137,6 +138,22 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   // waiting on the answer, and a file that classified but never became
   // transactions is the kind of half-state that goes unnoticed for a month.
   const ingested = await ingestSourceFile(row.id, user.tenantId, parsed.grid);
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: "upload.registered",
+      entity: "source_file",
+      entityId: row.id,
+      payload: {
+        filename: input.filename,
+        dataset: classification.label,
+        period: classification.period.label,
+        transactions: ingested.inserted,
+        supersededRows: ingested.supersededRows,
+      },
+    },
+  );
 
   revalidatePath("/uploads");
   revalidatePath("/transactions");

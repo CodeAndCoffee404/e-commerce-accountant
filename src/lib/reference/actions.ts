@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { record } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
@@ -60,6 +61,7 @@ export async function saveVatRate(input: unknown): Promise<ActionResult> {
     });
   }
 
+  await audit(user, id ? "vat_rate.updated" : "vat_rate.created", "vat_rate", id, values);
   revalidatePath("/settings");
 
   return { ok: true, message: `Rate for ${values.country} saved.` };
@@ -72,6 +74,7 @@ export async function deleteVatRate(id: string): Promise<ActionResult> {
     .delete(schema.vatRates)
     .where(and(eq(schema.vatRates.id, id), eq(schema.vatRates.tenantId, user.tenantId)));
 
+  await audit(user, "vat_rate.deleted", "vat_rate", id);
   revalidatePath("/settings");
 
   return { ok: true, message: "Rate deleted." };
@@ -116,6 +119,7 @@ export async function saveSkuMapping(input: unknown): Promise<ActionResult> {
       .onConflictDoNothing();
   }
 
+  await audit(user, id ? "sku_mapping.updated" : "sku_mapping.created", "sku_mapping", id, values);
   revalidatePath("/settings");
 
   return { ok: true, message: `SKU ${values.sourceSku} saved.` };
@@ -128,6 +132,7 @@ export async function deleteSkuMapping(id: string): Promise<ActionResult> {
     .delete(schema.skuMappings)
     .where(and(eq(schema.skuMappings.id, id), eq(schema.skuMappings.tenantId, user.tenantId)));
 
+  await audit(user, "sku_mapping.deleted", "sku_mapping", id);
   revalidatePath("/settings");
 
   return { ok: true, message: "Entry deleted." };
@@ -149,17 +154,21 @@ export async function saveChannelRule(id: string, rawValue: string): Promise<Act
     .set({ value })
     .where(and(eq(schema.channelRules.id, id), eq(schema.channelRules.tenantId, user.tenantId)));
 
+  // The value itself goes into the entry: a channel rule is an assumption, and
+  // "who changed it to what" is the question that gets asked later.
+  await audit(user, "channel_rule.updated", "channel_rule", id, { value });
   revalidatePath("/settings");
 
   return { ok: true, message: "Rule saved." };
 }
 
 export async function refreshRates(full = false): Promise<ActionResult> {
-  await requireEditor();
+  const user = await requireEditor();
 
   try {
     const stored = await refreshFxRates(full ? "historical" : "recent");
 
+    await audit(user, "fx_rates.refreshed", "fx_rate", undefined, { stored, full });
     revalidatePath("/settings");
 
     return {
@@ -181,6 +190,7 @@ export async function restoreDefaults(): Promise<ActionResult> {
   const added =
     result.vatRates + result.sellerVatNumbers + result.skuMappings + result.channelRules;
 
+  await audit(user, "reference.restored", "reference", undefined, result);
   revalidatePath("/settings");
 
   return {
@@ -190,4 +200,20 @@ export async function restoreDefaults(): Promise<ActionResult> {
         ? "Nothing missing, nothing to add."
         : `Restored ${added} entries. Anything you had edited was left alone.`,
   };
+}
+
+/** Shorthand: every action here has the same actor shape. */
+async function audit(
+  user: { id: string; email: string; tenantId: string },
+  action: string,
+  entity: string,
+  entityId?: string,
+  payload?: Record<string, unknown>,
+): Promise<void> {
+  await record({ id: user.id, email: user.email, tenantId: user.tenantId }, {
+    action,
+    entity,
+    entityId,
+    payload,
+  });
 }
