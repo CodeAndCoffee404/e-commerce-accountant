@@ -20,14 +20,6 @@ export type NavItem = {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   {
-    // First and the landing page: the ritual the app exists for. Everything
-    // else is its detail view.
-    key: "close",
-    href: "/close",
-    label: "Month close",
-    icon: "CarryOutOutlined",
-  },
-  {
     key: "uploads",
     href: "/uploads",
     label: "Uploads",
@@ -46,6 +38,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: "/reports",
     label: "Reports",
     icon: "FileTextOutlined",
+  },
+  {
+    // Below Reports, where it reads as the summary of the work above it. It is
+    // still the landing page — the menu order tells the workflow story, the
+    // landing tells you where this month stands.
+    key: "close",
+    href: "/close",
+    label: "Month close",
+    icon: "CarryOutOutlined",
   },
   {
     key: "settings",

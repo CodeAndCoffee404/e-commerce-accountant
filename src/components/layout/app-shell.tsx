@@ -19,7 +19,7 @@ import type { ComponentType, ReactNode } from "react";
 import { HelpModal } from "@/components/layout/help-modal";
 import { UserMenu } from "@/components/layout/user-menu";
 import type { CurrentUser } from "@/lib/auth/session";
-import { NAV_ITEMS, type NavItem } from "@/lib/navigation";
+import { DEFAULT_ROUTE, NAV_ITEMS, type NavItem } from "@/lib/navigation";
 import { useUiStore } from "@/stores/ui-store-provider";
 
 const { Header, Sider, Content } = Layout;
@@ -105,7 +105,7 @@ export function AppShell({
         style={{ borderInlineEnd: `1px solid ${token.colorSplit}` }}
       >
         <Link
-          href={NAV_ITEMS[0].href}
+          href={DEFAULT_ROUTE}
           style={{
             height: 56,
             display: "flex",
