@@ -1,11 +1,21 @@
-import { ComingSoon } from "@/components/layout/coming-soon";
 import { PageHeader } from "@/components/layout/page-header";
+import { UploadDropzone } from "@/components/uploads/upload-dropzone";
+import { UploadsTable } from "@/components/uploads/uploads-table";
+import { requireUser } from "@/lib/auth/session";
+import { listUploads } from "@/lib/uploads/queries";
 
-export default function UploadsPage() {
+export default async function UploadsPage() {
+  const user = await requireUser();
+  const rows = await listUploads(user.tenantId);
+
   return (
     <>
-      <PageHeader title="Uploads" description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions." />
-      <ComingSoon stage="stage 1" />
+      <PageHeader
+        title="Uploads"
+        description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
+      />
+      <UploadDropzone />
+      <UploadsTable rows={rows} />
     </>
   );
 }

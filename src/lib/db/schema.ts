@@ -1,8 +1,10 @@
 import type { AdapterAccountType } from "next-auth/adapters";
 import {
   boolean,
+  date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -124,6 +126,81 @@ export const allowedEmails = pgTable(
   (table) => [uniqueIndex("allowed_emails_email_idx").on(table.email)],
 );
 
+/* ------------------------------------------------------------------ *
+ * Приём файлов
+ * ------------------------------------------------------------------ */
+
+export const datasetId = pgEnum("dataset_id", [
+  "amazon_vat",
+  "amazon_monthly",
+  "allegro",
+  "cdiscount",
+  "shopify",
+]);
+
+export const periodGranularity = pgEnum("period_granularity", ["month", "quarter"]);
+
+export const sourceFileStatus = pgEnum("source_file_status", [
+  "received",
+  "classified",
+  "parsed",
+  "superseded",
+  "rejected",
+]);
+
+export const sourceFiles = pgTable(
+  "source_files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    originalFilename: text("original_filename").notNull(),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Hex digest. Re-uploading the same bytes is rejected, see the index below. */
+    sha256: text("sha256").notNull(),
+    blobKey: text("blob_key").notNull(),
+    blobUrl: text("blob_url").notNull(),
+
+    uploadedBy: text("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+
+    dataset: datasetId("dataset"),
+    /** Legacy's own wording, because report selection matches on it verbatim. */
+    datasetLabel: text("dataset_label"),
+    countryCode: text("country_code"),
+
+    periodLabel: text("period_label"),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    periodGranularity: periodGranularity("period_granularity"),
+
+    headerRowIndex: integer("header_row_index"),
+    /** Delimiter, encoding, marketplace, how the period was found. */
+    detectionMeta: jsonb("detection_meta"),
+
+    status: sourceFileStatus("status").notNull().default("received"),
+    supersededByFileId: uuid("superseded_by_file_id"),
+    rejectCode: text("reject_code"),
+    rejectMessage: text("reject_message"),
+  },
+  (table) => [
+    // Дедупликация по содержимому: тот же файл повторно не заводится.
+    uniqueIndex("source_files_sha_idx").on(table.tenantId, table.sha256),
+    // Срез (тенант, набор, страна, период) — единица замещения, см. PLAN §2.1.
+    index("source_files_slice_idx").on(
+      table.tenantId,
+      table.dataset,
+      table.countryCode,
+      table.periodLabel,
+    ),
+    index("source_files_uploaded_idx").on(table.tenantId, table.uploadedAt),
+  ],
+);
+
+export type SourceFile = typeof sourceFiles.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type MembershipRole = (typeof membershipRole.enumValues)[number];
