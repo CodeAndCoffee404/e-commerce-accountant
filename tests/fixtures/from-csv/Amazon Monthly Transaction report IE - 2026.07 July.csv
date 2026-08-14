@@ -1,0 +1,13 @@
+"Includes Amazon Marketplace, Fulfilment by Amazon (FBA) and Amazon Webstore transactions"
+"All amounts in EUR, unless specified"
+Definitions:
+Date/Time: Posted date/time of the transaction
+"Sales tax collected: includes sales tax collected from buyers for product sales, shipping and giftwrap."
+Selling fees: includes variable closing fees and referral fees.
+"Other transaction fees: includes shipping chargebacks, shipping holdbacks, per-item fees and sales tax collection fees."
+"Other: includes non-order transaction amounts. For more details, see the “Type” and “Description” columns for each order ID."
+"Note: Reports with a start date of 1 Jan 2025 or later are indexed by the posted date, include both released and deferred transactions and have two new columns. You may need to update integrations or third-party mappings."
+date/time,settlement ID,type,order ID,sku,description,quantity,marketplace,fulfilment,order city,order state,order postal,product sales,shipping credits,giftwrap credits,promotional rebates,sales tax collected,Marketplace facilitator tax,selling fees,FBA fees,other transaction fees,other,total,Transaction status,Transaction Release Date
+19 Jul 2026 01:53:27 UTC,27319840632,Order,405-9972587-2282723,9Z-0IH0-ECWV,Geyser Water Filters Aragon Cartridge For Euro Tap Filter 1 3000L,1,amazon.ie,Amazon,Northbrook,Wicklow,,24.31,0,0,0,5.59,0,-4.49,-2.03,0,0,23.38,Released,28 Jul 2026 15:25:09 UTC
+20 Jul 2026 23:45:09 UTC,27319840632,Order,407-5621010-0307526,9Z-0IH0-ECWV,Geyser Water Filters Aragon Cartridge For Euro Tap Filter 1 3000L,1,amazon.ie,Amazon,Elmsford,Dublin,,24.31,0,0,0,5.59,0,-4.49,-2.03,0,0,23.38,Released,31 Jul 2026 19:56:41 UTC
+23 Jul 2026 08:22:18 UTC,27319840632,Order,402-8945200-7702735,9Z-0IH0-ECWV,Geyser Water Filters Aragon Cartridge For Euro Tap Filter 1 3000L,2,amazon.ie,Amazon,Westhaven,Wicklow,,48.62,0,0,0,11.18,0,-8.98,-4.06,0,0,46.76,Released,5 Aug 2026 17:31:40 UTC
