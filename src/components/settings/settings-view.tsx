@@ -51,6 +51,7 @@ export function SettingsView({
   connection,
   pickerApiKey,
   members,
+  selfEmail,
   audit,
   canEdit,
   isOwner,
@@ -60,6 +61,7 @@ export function SettingsView({
   connection: ConnectionSummary | null;
   pickerApiKey: string | null;
   members: Member[];
+  selfEmail: string;
   audit: AuditRow[];
   canEdit: boolean;
   isOwner: boolean;
@@ -138,7 +140,7 @@ export function SettingsView({
         {
           key: "team",
           label: "Team",
-          children: <MembersCard members={members} isOwner={isOwner} />,
+          children: <MembersCard members={members} isOwner={isOwner} selfEmail={selfEmail} />,
         },
         {
           key: "activity",

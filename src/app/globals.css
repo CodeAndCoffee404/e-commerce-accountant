@@ -35,3 +35,35 @@ html {
 .ant-statistic-content {
   font-variant-numeric: tabular-nums;
 }
+
+/* Sections settle into place, top to bottom — motion as arrival, not
+   decoration. Off entirely for anyone who asked their system for less. */
+@media (prefers-reduced-motion: no-preference) {
+  .ea-rise {
+    animation: ea-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .ea-rise-1 {
+    animation-delay: 70ms;
+  }
+
+  .ea-rise-2 {
+    animation-delay: 140ms;
+  }
+
+  .ea-rise-3 {
+    animation-delay: 210ms;
+  }
+}
+
+@keyframes ea-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

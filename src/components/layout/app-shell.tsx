@@ -174,10 +174,14 @@ export function AppShell({
             paddingInline: 16,
             borderBottom: `1px solid ${token.colorSplit}`,
             // Stays put while a long table scrolls, so the way out is always
-            // in reach.
+            // in reach — and lets the content glow through a blur instead of
+            // being sliced by a solid bar.
             position: "sticky",
             top: 0,
             zIndex: 10,
+            background: `color-mix(in srgb, ${token.colorBgContainer} 78%, transparent)`,
+            backdropFilter: "saturate(160%) blur(10px)",
+            WebkitBackdropFilter: "saturate(160%) blur(10px)",
           }}
         >
           <Space size={12}>

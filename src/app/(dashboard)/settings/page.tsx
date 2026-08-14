@@ -33,6 +33,7 @@ export default async function SettingsPage() {
         connection={connection}
         pickerApiKey={googlePickerApiKey()}
         members={members}
+        selfEmail={user.email}
         audit={audit}
         // The client's rule: company settings are the owner's alone. An
         // accountant still sees everything — read-only.

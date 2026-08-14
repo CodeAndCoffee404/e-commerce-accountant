@@ -176,7 +176,7 @@ export function DriveCard({
   };
 
   return (
-    <Card size="small" variant="borderless" styles={{ body: { padding: 0 } }}>
+    <Card size="small" variant="borderless">
       {outcome ? (
         <Alert type={outcome.type} showIcon message={outcome.text} style={{ marginBottom: 16 }} />
       ) : null}

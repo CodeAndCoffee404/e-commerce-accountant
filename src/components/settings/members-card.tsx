@@ -13,7 +13,17 @@ const ROLES = [
   { value: "viewer", label: "Viewer", hint: "Can look, cannot change anything." },
 ];
 
-export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: boolean }) {
+export function MembersCard({
+  members,
+  isOwner,
+  selfEmail,
+}: {
+  members: Member[];
+  isOwner: boolean;
+  /** The signed-in address, to keep the self-lockout controls off the screen. */
+  selfEmail: string;
+}) {
+  const isSelf = (email: string) => email.trim().toLowerCase() === selfEmail.trim().toLowerCase();
   const router = useRouter();
   const { message } = App.useApp();
   const [pending, startTransition] = useTransition();
@@ -30,7 +40,7 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
     });
 
   return (
-    <Card size="small" variant="borderless" styles={{ body: { padding: 0 } }}>
+    <Card size="small" variant="borderless">
       <Typography.Paragraph type="secondary">
         Google decides who a person is; this list decides whether they may come in. An address
         here can sign in with its Google account — no password is ever set.
@@ -57,7 +67,7 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
           <Form.Item
             name="email"
             rules={[{ required: true, message: "Email is required" }]}
-            style={{ flex: "1 1 240px", marginInlineEnd: 8 }}
+            style={{ flex: "1 1 240px", maxWidth: 460, marginInlineEnd: 8 }}
           >
             <Input placeholder="name@company.com" />
           </Form.Item>
@@ -121,13 +131,22 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
             width: 170,
             render: (role: string, row) =>
               isOwner ? (
-                <Select
-                  size="small"
-                  style={{ width: 140 }}
-                  value={role}
-                  options={ROLES.map(({ value, label }) => ({ value, label }))}
-                  onChange={(next) => run(() => updateMember({ id: row.id, role: next }))}
-                />
+                <Tooltip
+                  title={
+                    isSelf(row.email)
+                      ? "Your own role — another owner changes it, so nobody locks themselves out."
+                      : undefined
+                  }
+                >
+                  <Select
+                    size="small"
+                    style={{ width: 140 }}
+                    value={role}
+                    disabled={isSelf(row.email)}
+                    options={ROLES.map(({ value, label }) => ({ value, label }))}
+                    onChange={(next) => run(() => updateMember({ id: row.id, role: next }))}
+                  />
+                </Tooltip>
               ) : (
                 <Tag>{role}</Tag>
               ),
@@ -152,7 +171,9 @@ export function MembersCard({ members, isOwner }: { members: Member[]; isOwner: 
             key: "actions",
             width: 120,
             render: (_, row) =>
-              isOwner ? (
+              isOwner && isSelf(row.email) ? (
+                <Tag style={{ marginInlineEnd: 0 }}>you</Tag>
+              ) : isOwner ? (
                 <Button
                   size="small"
                   danger={row.isActive}

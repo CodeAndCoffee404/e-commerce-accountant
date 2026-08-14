@@ -15,7 +15,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   theme,
   Tooltip,
   Typography,
@@ -55,6 +54,7 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [building, startTransition] = useTransition();
 
   const requiredItems = data.items.filter((item) => item.requirement === "required");
@@ -178,6 +178,7 @@ export function DashboardView({
       {/* Side by side: the two halves of the ritual — what went in, what came
           out — read as one row, not a scroll. */}
       <div
+        className="ea-rise ea-rise-1"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))",
@@ -236,7 +237,7 @@ export function DashboardView({
         </div>
       </div>
 
-      <Card size="small" title="History">
+      <Card size="small" title="History" className="ea-rise ea-rise-2">
         <MatrixTable matrix={data.matrix} selected={data.month} />
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
           Every month on record: a dot is a file that is there, a dash is one that is not.
@@ -249,6 +250,7 @@ export function DashboardView({
       <Card
         size="small"
         title="Activity"
+        className="ea-rise ea-rise-3"
         extra={
           <Link href="/settings?tab=activity" style={{ fontSize: 12 }}>
             All activity
@@ -262,9 +264,10 @@ export function DashboardView({
             {activity.map((row) => (
               <div
                 key={row.id}
-                style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}
+                style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
               >
-                <Text type="secondary" style={{ fontSize: 12, minWidth: 130 }}>
+                <Dot color={activityTone(row.action, token)} size={6} />
+                <Text type="secondary" style={{ fontSize: 12, minWidth: 96 }}>
                   {new Date(row.createdAt).toLocaleString("en-GB", {
                     day: "2-digit",
                     month: "2-digit",
@@ -272,7 +275,7 @@ export function DashboardView({
                     minute: "2-digit",
                   })}
                 </Text>
-                <Tag style={{ marginInlineEnd: 0 }}>{row.action}</Tag>
+                <Text style={{ fontSize: 12 }}>{row.action}</Text>
                 <Text type="secondary" style={{ fontSize: 12 }} ellipsis>
                   {row.userEmail ?? ""}
                 </Text>
@@ -307,6 +310,7 @@ function Hero({
 
   return (
     <section
+      className="ea-rise"
       style={{
         position: "relative",
         overflow: "hidden",
@@ -343,7 +347,17 @@ function Hero({
       >
         <div style={{ flex: "1 1 320px", minWidth: 0 }}>
           <Title level={2} style={{ margin: 0 }}>
-            Hey, {firstName} <span aria-hidden>👋</span>
+            <span
+              style={{
+                background: `linear-gradient(90deg, ${token.colorText} 30%, ${token.colorPrimary})`,
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              Hey, {firstName}
+            </span>{" "}
+            <span aria-hidden>👋</span>
           </Title>
           <Text type="secondary" style={{ display: "block", marginTop: 6 }}>
             {intro}
@@ -400,22 +414,8 @@ function Hero({
 
         {rings ? (
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-            <Ring
-              label="files in"
-              done={rings.files.done}
-              total={rings.files.total}
-              color={token.colorPrimary}
-            />
-            <Ring
-              label="reports built"
-              done={rings.reports.done}
-              total={rings.reports.total}
-              color={
-                rings.reports.total > 0 && rings.reports.done === rings.reports.total
-                  ? token.colorSuccess
-                  : token.colorPrimary
-              }
-            />
+            <Ring label="files in" done={rings.files.done} total={rings.files.total} />
+            <Ring label="reports built" done={rings.reports.done} total={rings.reports.total} />
           </div>
         ) : null}
       </div>
@@ -423,26 +423,23 @@ function Hero({
   );
 }
 
-function Ring({
-  label,
-  done,
-  total,
-  color,
-}: {
-  label: string;
-  done: number;
-  total: number;
-  color: string;
-}) {
+function Ring({ label, done, total }: { label: string; done: number; total: number }) {
   const { token } = theme.useToken();
   const percent = total === 0 ? 100 : Math.round((done / total) * 100);
+  const complete = total > 0 && done === total;
 
   return (
     <Progress
       type="dashboard"
       size={118}
       percent={percent}
-      strokeColor={color}
+      // The arc sweeps primary into success; a finished ring settles on
+      // success alone.
+      strokeColor={
+        complete
+          ? token.colorSuccess
+          : { "0%": token.colorPrimary, "100%": token.colorSuccess }
+      }
       strokeWidth={9}
       format={() => (
         <div style={{ lineHeight: 1.25 }}>
@@ -457,6 +454,17 @@ function Ring({
       )}
     />
   );
+}
+
+/** Colour by what the action did, not by which table it touched. */
+function activityTone(action: string, token: { colorError: string; colorPrimary: string; colorSuccess: string; colorTextQuaternary: string }): string {
+  if (action.endsWith(".deleted") || action.endsWith(".failed") || action.endsWith(".suspended")) {
+    return token.colorError;
+  }
+  if (action.startsWith("report.")) return token.colorPrimary;
+  if (action.startsWith("upload.")) return token.colorSuccess;
+
+  return token.colorTextQuaternary;
 }
 
 function Dot({ color, size = 7 }: { color: string; size?: number }) {
