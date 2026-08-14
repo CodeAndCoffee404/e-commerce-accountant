@@ -1,0 +1,76 @@
+import Decimal from "decimal.js";
+
+import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "./types";
+
+/** The column the totals row sums, and the one legacy puts its total under. */
+export const TOTAL_COLUMN = "TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL";
+
+/**
+ * Sales report by currency: the Amazon VAT report split into one sheet per
+ * settlement currency, rows unchanged, with a total underneath.
+ *
+ * Rows are passed through exactly as the file had them. This report is read
+ * against Amazon's own figures, so reformatting a column — even into a better
+ * form — would make the two impossible to compare by eye.
+ */
+export function generateSalesByCurrency(
+  rows: readonly LedgerRow[],
+  context: ReportContext,
+  sourceHeaders: readonly string[],
+): GeneratorResult {
+  const byCurrency = new Map<string, LedgerRow[]>();
+  const skipped: { reason: string; count: number }[] = [];
+  let withoutCurrency = 0;
+
+  for (const row of rows) {
+    if (row.dataset !== "amazon_vat") continue;
+
+    const currency = row.currency?.trim();
+
+    if (!currency) {
+      withoutCurrency += 1;
+      continue;
+    }
+
+    const bucket = byCurrency.get(currency);
+
+    if (bucket) bucket.push(row);
+    else byCurrency.set(currency, [row]);
+  }
+
+  if (withoutCurrency > 0) {
+    skipped.push({ reason: "Amazon VAT: строка без валюты", count: withoutCurrency });
+  }
+
+  const totalIndex = sourceHeaders.indexOf(TOTAL_COLUMN);
+  const headers = [...sourceHeaders];
+
+  const sheets: ReportSheet[] = [...byCurrency.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, currencyRows]) => {
+      const body = currencyRows.map((row) => headers.map((header) => row.raw[header] ?? ""));
+
+      if (totalIndex !== -1) {
+        let total = new Decimal(0);
+
+        for (const row of currencyRows) {
+          const value = row.raw[TOTAL_COLUMN];
+
+          if (value) total = total.plus(new Decimal(value.replace(",", ".")));
+        }
+
+        // Decimal, not a running float. The legacy total for July reads
+        // 913.8299999999998 — the same sum, carrying the error of binary
+        // addition. See docs/known-deviations.md §3.
+        const totals = headers.map(() => "");
+        totals[totalIndex] = total.toFixed();
+        body.push(totals);
+      }
+
+      return { name: currency, headers, rows: body };
+    });
+
+  void context;
+
+  return { sheets, skipped, warnings: [] };
+}

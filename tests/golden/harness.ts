@@ -92,11 +92,22 @@ const decimal = (value: string | null) => (value === null ? null : new Decimal(v
  * CSV is preferred where both formats exist: the pair is the same export saved
  * twice, and the XLSX copy has been through Google Sheets.
  */
+/**
+ * A re-upload carries the moment it was taken in its name:
+ * `… 2026.07 July - 2026.08.11 09-45-56.csv`. A file without one is the
+ * original, so it sorts oldest.
+ */
+function reuploadStamp(name: string): string {
+  const match = name.match(/ - (\d{4}\.\d{2}\.\d{2} \d{2}-\d{2}-\d{2})\./);
+
+  return match ? match[1] : "";
+}
+
 export async function ledgerForPeriod(
   periodLabel: string,
   datasets: readonly string[],
 ): Promise<LedgerRow[]> {
-  const byName = new Map<string, string>();
+  const candidates: { file: string; name: string }[] = [];
 
   for (const file of findFiles(CORPUS)) {
     const name = path.basename(file);
@@ -105,17 +116,44 @@ export async function ledgerForPeriod(
     // The archive keeps duplicates as `… July(1).xlsx`; they are the same file.
     if (/\(\d+\)\.(csv|xlsx)$/i.test(name)) continue;
 
-    const key = name.replace(/\.(csv|xlsx)$/i, "");
-    const existing = byName.get(key);
+    candidates.push({ file, name });
+  }
 
-    if (!existing || (existing.endsWith(".xlsx") && file.endsWith(".csv"))) {
-      byName.set(key, file);
-    }
+  // One file per slice, exactly as the ledger does it: a second upload for the
+  // same country and month supersedes the first. Belgium's July is in the
+  // corpus twice, and taking both doubled its quantities.
+  const bySlice = new Map<string, { file: string; name: string; stamp: string }>();
+
+  for (const candidate of candidates) {
+    const parsed = await parseSpreadsheet(readFileSync(candidate.file), candidate.name);
+
+    if (!parsed.ok) throw new Error(`${candidate.name}: ${parsed.message}`);
+
+    const classification = classify(parsed.grid, candidate.name);
+
+    if (!classification.ok) throw new Error(`${candidate.name}: ${classification.message}`);
+    if (!datasets.includes(classification.dataset)) continue;
+
+    const slice = [
+      classification.dataset,
+      classification.country ?? "",
+      classification.period.label,
+    ].join("|");
+    const stamp = reuploadStamp(candidate.name);
+    const chosen = bySlice.get(slice);
+
+    const better =
+      !chosen ||
+      stamp > chosen.stamp ||
+      // Same version in both formats: the CSV has not been through Sheets.
+      (stamp === chosen.stamp && chosen.file.endsWith(".xlsx") && candidate.file.endsWith(".csv"));
+
+    if (better) bySlice.set(slice, { ...candidate, stamp });
   }
 
   const rows: LedgerRow[] = [];
 
-  for (const file of byName.values()) {
+  for (const { file } of bySlice.values()) {
     const name = path.basename(file);
     const parsed = await parseSpreadsheet(readFileSync(file), name);
 
