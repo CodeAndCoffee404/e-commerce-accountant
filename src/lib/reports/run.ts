@@ -168,7 +168,7 @@ export async function runReport(input: {
         `Channel rules are missing: ${absent
           .map((rule) => `${rule.channel} / ${rule.key}`)
           .join(", ")}. Every row from those channels would be skipped as unrecognised and the ` +
-          "report would come out nearly empty. Settings -> Reference data -> Restore missing " +
+          "report would come out nearly empty. Settings -> Channel rules -> Restore missing " +
           "defaults puts them back without touching anything you have edited.",
       );
     }

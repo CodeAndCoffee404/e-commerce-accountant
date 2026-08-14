@@ -1,9 +1,4 @@
-import { Space } from "antd";
-
 import { PageHeader } from "@/components/layout/page-header";
-import { AuditCard } from "@/components/settings/audit-card";
-import { DriveCard } from "@/components/settings/drive-card";
-import { MembersCard } from "@/components/settings/members-card";
 import { SettingsView } from "@/components/settings/settings-view";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
@@ -29,23 +24,19 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="VAT rates, seller registrations, SKU mapping and channel rules. Nothing here is hard-coded — changing a rate does not need a developer."
+        description="How the reports work, the numbers they use, where they go, and who may touch them. Nothing here is hard-coded — changing a rate does not need a developer."
       />
 
-      <Space direction="vertical" size="middle" style={{ width: "100%", marginBottom: 24 }}>
-        <DriveCard
-          connection={connection}
-          apiKey={googlePickerApiKey()}
-          canEdit={user.role !== "viewer"}
-        />
-        <MembersCard members={members} isOwner={user.role === "owner"} />
-      </Space>
-
-      <SettingsView data={data} reports={reports} canEdit={user.role !== "viewer"} />
-
-      <div style={{ marginTop: 24 }}>
-        <AuditCard rows={audit} />
-      </div>
+      <SettingsView
+        data={data}
+        reports={reports}
+        connection={connection}
+        pickerApiKey={googlePickerApiKey()}
+        members={members}
+        audit={audit}
+        canEdit={user.role !== "viewer"}
+        isOwner={user.role === "owner"}
+      />
     </>
   );
 }

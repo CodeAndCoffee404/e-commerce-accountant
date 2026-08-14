@@ -29,9 +29,17 @@ import {
   saveVatRate,
   type ActionResult,
 } from "@/lib/reference/actions";
+import { useSearchParams } from "next/navigation";
+
+import type { AuditRow } from "@/lib/audit/record";
+import type { ConnectionSummary } from "@/lib/google/connection";
+import type { Member } from "@/lib/members/queries";
 import type { ReferenceData } from "@/lib/reference/queries";
 import type { AllReportSettings } from "@/lib/reports/settings";
 
+import { AuditCard } from "./audit-card";
+import { DriveCard } from "./drive-card";
+import { MembersCard } from "./members-card";
 import { ReportSettingsTab } from "./report-settings";
 
 type VatRate = ReferenceData["vatRates"][number];
@@ -40,13 +48,24 @@ type SkuMapping = ReferenceData["skuMappings"][number];
 export function SettingsView({
   data,
   reports,
+  connection,
+  pickerApiKey,
+  members,
+  audit,
   canEdit,
+  isOwner,
 }: {
   data: ReferenceData;
   reports: AllReportSettings;
+  connection: ConnectionSummary | null;
+  pickerApiKey: string | null;
+  members: Member[];
+  audit: AuditRow[];
   canEdit: boolean;
+  isOwner: boolean;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
   const { message } = App.useApp();
   const [pending, startTransition] = useTransition();
 
@@ -61,9 +80,21 @@ export function SettingsView({
     });
   };
 
+  // Deep-linkable, and the OAuth callback's ?drive= outcome must land on the
+  // tab that can show it.
+  const requestedTab = params.get("tab") ?? (params.get("drive") ? "drive" : "reports");
+
   return (
     <Tabs
+      defaultActiveKey={requestedTab}
       items={[
+        {
+          key: "reports",
+          label: "Reports",
+          children: (
+            <ReportSettingsTab settings={reports} canEdit={canEdit} run={run} pending={pending} />
+          ),
+        },
         {
           key: "vat",
           label: "VAT rates",
@@ -71,15 +102,18 @@ export function SettingsView({
         },
         {
           key: "sku",
-          label: "SKU",
+          label: "SKU mapping",
           children: <Skus data={data.skuMappings} canEdit={canEdit} run={run} pending={pending} />,
         },
         {
-          key: "reports",
-          label: "Reports",
-          children: (
-            <ReportSettingsTab settings={reports} canEdit={canEdit} run={run} pending={pending} />
-          ),
+          key: "seller",
+          label: "Seller VAT",
+          children: <SellerVat data={data.sellerVatNumbers} />,
+        },
+        {
+          key: "fx",
+          label: "Exchange rates",
+          children: <Fx data={data.fx} canEdit={canEdit} run={run} pending={pending} />,
         },
         {
           key: "rules",
@@ -97,14 +131,19 @@ export function SettingsView({
           ),
         },
         {
-          key: "seller",
-          label: "Seller VAT",
-          children: <SellerVat data={data.sellerVatNumbers} />,
+          key: "drive",
+          label: "Google Drive",
+          children: <DriveCard connection={connection} apiKey={pickerApiKey} canEdit={canEdit} />,
         },
         {
-          key: "fx",
-          label: "Exchange rates",
-          children: <Fx data={data.fx} canEdit={canEdit} run={run} pending={pending} />,
+          key: "team",
+          label: "Team",
+          children: <MembersCard members={members} isOwner={isOwner} />,
+        },
+        {
+          key: "activity",
+          label: "Activity",
+          children: <AuditCard rows={audit} />,
         },
       ]}
     />

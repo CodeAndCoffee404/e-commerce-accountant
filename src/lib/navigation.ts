@@ -3,7 +3,12 @@ export type NavItem = {
   href: string;
   label: string;
   /** Name of the icon exported from @ant-design/icons. */
-  icon: "InboxOutlined" | "SwapOutlined" | "FileTextOutlined" | "SettingOutlined";
+  icon:
+    | "CarryOutOutlined"
+    | "InboxOutlined"
+    | "SwapOutlined"
+    | "FileTextOutlined"
+    | "SettingOutlined";
   /**
    * Present in the menu but not reachable. The page and its code stay as they
    * are — this only takes it out of the way until it earns its place back.
@@ -14,6 +19,14 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
+  {
+    // First and the landing page: the ritual the app exists for. Everything
+    // else is its detail view.
+    key: "close",
+    href: "/close",
+    label: "Month close",
+    icon: "CarryOutOutlined",
+  },
   {
     key: "uploads",
     href: "/uploads",
@@ -42,4 +55,4 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
 ] as const;
 
-export const DEFAULT_ROUTE = "/uploads";
+export const DEFAULT_ROUTE = "/close";

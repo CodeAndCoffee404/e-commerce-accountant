@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CarryOutOutlined,
   FileTextOutlined,
   InboxOutlined,
   MenuFoldOutlined,
@@ -24,6 +25,7 @@ import { useUiStore } from "@/stores/ui-store-provider";
 const { Header, Sider, Content } = Layout;
 
 const ICONS: Record<NavItem["icon"], ComponentType> = {
+  CarryOutOutlined,
   InboxOutlined,
   SwapOutlined,
   FileTextOutlined,

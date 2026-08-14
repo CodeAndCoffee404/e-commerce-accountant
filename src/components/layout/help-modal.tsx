@@ -39,8 +39,10 @@ export function HelpModal() {
         }
       >
         <Paragraph type="secondary">
-          One month of work, start to finish: upload the channel exports, check they landed,
-          build the reports, and find them in Drive.
+          <Text strong>Month close</Text>, the first page, is the whole month at a glance: which
+          files are still missing, which reports can be built — one button builds everything
+          ready — what moved against last month, and what has reached Drive. The steps below are
+          the same work in detail, on the pages the sidebar lists.
         </Paragraph>
 
         <Steps
@@ -176,14 +178,14 @@ export function HelpModal() {
 
         <Space direction="vertical" size="small">
           <Paragraph style={{ marginBottom: 0 }}>
-            <Text strong>Connecting Drive.</Text> On <Text strong>Settings</Text>, connect the
-            Google account and then choose the folder. The app asks only for the files it creates
+            <Text strong>Connecting Drive.</Text> On <Text strong>Settings &rarr; Google
+            Drive</Text>, connect the account and then choose the folder. The app asks only for the files it creates
             itself and the folder you point it at — the rest of your Drive stays invisible to it.
           </Paragraph>
 
           <Paragraph style={{ marginBottom: 0 }}>
-            <Text strong>Rates and rules.</Text> VAT rates, seller registrations, SKU mapping and
-            the per-channel rules all live on <Text strong>Settings</Text> and are edited there. To
+            <Text strong>Rates and rules.</Text> VAT rates, SKU mapping, channel rules and the
+            report configuration each have a tab on <Text strong>Settings</Text>. To
             change a rate, add a row with the date it takes effect rather than editing the old
             one — otherwise recalculating a closed month would give different figures.
           </Paragraph>

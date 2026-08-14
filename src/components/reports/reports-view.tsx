@@ -121,8 +121,8 @@ export function ReportsView({
                   Restore missing defaults now
                 </Button>
               ) : (
-                <Link href="/settings">
-                  Settings &rarr; Reference data &rarr; Restore missing defaults
+                <Link href="/settings?tab=rules">
+                  Settings &rarr; Channel rules &rarr; Restore missing defaults
                 </Link>
               )}
               <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
