@@ -81,13 +81,11 @@ export function encryptionKeyHex(): string {
 }
 
 /**
- * Kept out of `serverSchema` deliberately: the Blob store is only needed when
- * a file is uploaded, and demanding it up front would break signing in on a
- * machine that has no store connected yet.
+ * Blob storage has no entry here on purpose. The project authenticates to it
+ * by OIDC — `VERCEL_OIDC_TOKEN` plus `BLOB_STORE_ID`, both injected by Vercel
+ * and refreshed by `vercel env pull` locally — so there is no static
+ * BLOB_READ_WRITE_TOKEN to validate, and nothing long-lived to leak.
  */
-export function blobReadWriteToken(): string {
-  return firstDefined(["BLOB_READ_WRITE_TOKEN"], "BLOB_READ_WRITE_TOKEN");
-}
 
 function firstDefined(names: readonly string[], description: string): string {
   for (const name of names) {

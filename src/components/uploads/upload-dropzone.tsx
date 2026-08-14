@@ -1,7 +1,7 @@
 "use client";
 
 import { InboxOutlined } from "@ant-design/icons";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { App, Upload, type UploadProps } from "antd";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -28,9 +28,9 @@ export function UploadDropzone() {
     setBusy(true);
 
     try {
-      // Straight to Blob storage. A Server Action would cap the file at the
-      // 4.5 MB request body limit of Vercel functions.
-      const blob = await upload(`uploads/${file.name}`, file, {
+      // Straight to Blob storage over a presigned URL. A Server Action would
+      // cap the file at the 4.5 MB request body limit of Vercel functions.
+      const blob = await uploadPresigned(`uploads/${file.name}`, file, {
         access: "private",
         handleUploadUrl: "/api/uploads/blob",
         contentType: file.type || undefined,
