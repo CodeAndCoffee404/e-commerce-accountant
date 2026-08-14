@@ -197,3 +197,29 @@ export async function availablePeriods(
 
   return result;
 }
+
+/**
+ * Required channel rules a tenant does not have.
+ *
+ * Worth asking before a build rather than after one: a missing rule is not a
+ * property of a period, it stops every period at once, and the fix is one
+ * button on another page. Saying so up front beats letting someone select a
+ * period and press Build to find out.
+ */
+export async function missingChannelRules(tenantId: string): Promise<string[]> {
+  const present = await getDb()
+    .select({ channel: schema.channelRules.channel, key: schema.channelRules.key })
+    .from(schema.channelRules)
+    .where(eq(schema.channelRules.tenantId, tenantId));
+
+  const have = new Set(present.map((rule) => `${rule.channel}/${rule.key}`));
+  const absent = new Set<string>();
+
+  for (const definition of REPORT_DEFINITIONS) {
+    for (const rule of definition.requiredRules) {
+      if (!have.has(`${rule.channel}/${rule.key}`)) absent.add(`${rule.channel} / ${rule.key}`);
+    }
+  }
+
+  return [...absent].sort();
+}

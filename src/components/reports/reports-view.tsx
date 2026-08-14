@@ -21,12 +21,14 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportRunCard } from "@/lib/reports/queries";
+import { summariseWarnings } from "@/lib/reports/warnings";
 
 const STATUS_COLOURS: Record<string, string> = {
   queued: "default",
@@ -38,10 +40,13 @@ const STATUS_COLOURS: Record<string, string> = {
 export function ReportsView({
   runs,
   periods,
+  missingRules,
   canBuild,
 }: {
   runs: ReportRunCard[];
   periods: Record<ReportTypeId, ReportAvailability>;
+  /** Required channel rules this tenant does not have. Usually empty. */
+  missingRules: string[];
   canBuild: boolean;
 }) {
   const router = useRouter();
@@ -49,6 +54,8 @@ export function ReportsView({
   const { token } = theme.useToken();
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<Record<string, string | undefined>>({});
+  // Which report is being built, so the other two cards stay still.
+  const [building, setBuilding] = useState<ReportTypeId | null>(null);
 
   const build = (reportType: ReportTypeId) => {
     const periodLabel = choice[reportType];
@@ -58,18 +65,53 @@ export function ReportsView({
       return;
     }
 
+    setBuilding(reportType);
+
     startTransition(async () => {
-      const result = await buildReport({ reportType, periodLabel });
+      try {
+        const result = await buildReport({ reportType, periodLabel });
 
-      if (result.ok) message.success(result.message, 6);
-      else message.error(result.message, 10);
+        // Ten seconds on a failure: it names the rule or the upload that is
+        // missing, which is not readable in three.
+        if (result.ok) message.success(result.message, 6);
+        else message.error(result.message, 10);
 
-      router.refresh();
+        router.refresh();
+      } finally {
+        setBuilding(null);
+      }
     });
   };
 
   return (
     <>
+      {/* Above the cards, because a missing rule is not a property of one
+          period — it stops every report from every channel that needs it, and
+          the fix is one button on another page. */}
+      {missingRules.length > 0 ? (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Channel rules are missing"
+          description={
+            <>
+              <Typography.Paragraph style={{ marginBottom: 8 }}>
+                {missingRules.join(", ")}. Without these, every row from those channels is skipped
+                as unrecognised — the report would come out nearly empty rather than fail, so it
+                is refused instead.
+              </Typography.Paragraph>
+              <Link href="/settings">
+                Settings &rarr; Reference data &rarr; Restore missing defaults
+              </Link>
+              <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
+                Restoring adds only what is absent. Anything you have edited is left alone.
+              </Typography.Paragraph>
+            </>
+          }
+        />
+      ) : null}
+
       {/* Grid rather than a row of fixed cards: at 330px each they ran off the
           side of a phone. */}
       <div
@@ -114,8 +156,8 @@ export function ReportsView({
                 <Tooltip title="Building again is safe — each run is recorded separately with the rules and rates it used.">
                   <Button
                     type="primary"
-                    loading={pending}
-                    disabled={!canBuild || ready.length === 0}
+                    loading={building === definition.id}
+                    disabled={building !== null || !canBuild || ready.length === 0}
                     onClick={() => build(definition.id)}
                   >
                     Build
@@ -218,9 +260,10 @@ export function ReportsView({
               <Space size={4}>
                 <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
                 {(run.stats?.warnings?.length ?? 0) > 0 ? (
-                  <Tooltip title={run.stats?.warnings?.join("; ")}>
-                    <WarningOutlined style={{ color: token.colorWarning }} />
-                  </Tooltip>
+                  <WarningOutlined
+                    style={{ color: token.colorWarning }}
+                    aria-label={`${run.stats?.warnings?.length} warnings — expand this row`}
+                  />
                 ) : null}
               </Space>
             ),
@@ -350,21 +393,33 @@ export function ReportsView({
 }
 
 function RunDetails({ run }: { run: ReportRunCard }) {
+  // Collapsed here as well as when stored, because runs built before this
+  // existed still hold their original three hundred lines.
+  const warnings = summariseWarnings(run.stats?.warnings ?? []);
+  const shown = warnings.slice(0, 20);
+
   return (
     <Space direction="vertical" style={{ width: "100%" }}>
       {run.errorMessage ? <Alert type="error" showIcon message={run.errorMessage} /> : null}
 
-      {(run.stats?.warnings?.length ?? 0) > 0 ? (
+      {warnings.length > 0 ? (
         <Alert
           type="warning"
           showIcon
-          message="Warnings"
+          message={warnings.length === 1 ? "Warning" : `Warnings (${warnings.length})`}
           description={
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {run.stats?.warnings?.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
+            <>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {shown.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              {warnings.length > shown.length ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  and {warnings.length - shown.length} more
+                </Typography.Text>
+              ) : null}
+            </>
           }
         />
       ) : null}

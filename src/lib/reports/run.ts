@@ -10,8 +10,10 @@ import { euroRateOn } from "@/lib/reference/fx";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
 import { generateOffAmazonSales } from "./off-amazon";
+import { channelRule } from "./rules";
 import { generateSalesByCurrency } from "./sales-by-currency";
 import type { FxSnapshot, GeneratorResult, LedgerRow, RulesSnapshot } from "./types";
+import { summariseWarnings } from "./warnings";
 import { buildWorkbook, reportFilename } from "./workbook";
 import { generateZohoInvoice, missingCountries } from "./zoho-invoice";
 
@@ -131,6 +133,24 @@ export async function runReport(input: {
     }
 
     const rules = await loadRules(input.tenantId);
+
+    // Before anything is built. A missing channel rule does not make a smaller
+    // report — it makes one where every row of that channel is skipped as
+    // unrecognised, while the run still reports success.
+    const absent = definition.requiredRules.filter(
+      (required) => channelRule(rules, required.channel, required.key) === null,
+    );
+
+    if (absent.length > 0) {
+      throw new Error(
+        `Channel rules are missing: ${absent
+          .map((rule) => `${rule.channel} / ${rule.key}`)
+          .join(", ")}. Every row from those channels would be skipped as unrecognised and the ` +
+          "report would come out nearly empty. Settings -> Reference data -> Restore missing " +
+          "defaults puts them back without touching anything you have edited.",
+      );
+    }
+
     const fx = await loadFx(rows, period);
 
     const result = build(input.reportType, rows, { period, rules, fx }, files);
@@ -149,7 +169,7 @@ export async function runReport(input: {
           outputRows: result.sheets.reduce((total, sheet) => total + sheet.rows.length, 0),
           sheets: result.sheets.map((sheet) => ({ name: sheet.name, rows: sheet.rows.length })),
           skipped: result.skipped,
-          warnings: result.warnings,
+          warnings: summariseWarnings(result.warnings),
           sourceFiles: files.length,
         },
       })
