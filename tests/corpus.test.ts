@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { classify } from "@/lib/ingest/classify";
-import { mapTransactions } from "@/lib/ingest/mappers";
+import { channelModule } from "@/modules/channels/registry";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
 /**
@@ -110,7 +110,7 @@ describe.skipIf(files.length === 0)("the real export corpus", () => {
       const classification = classify(parsed.grid, name);
       if (!classification.ok) continue;
 
-      const result = mapTransactions(classification.dataset, {
+      const result = channelModule(classification.dataset).map({
         grid: parsed.grid,
         headerRowIndex: classification.headerRowIndex,
         country: classification.country,

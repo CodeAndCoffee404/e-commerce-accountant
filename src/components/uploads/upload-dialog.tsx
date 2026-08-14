@@ -24,6 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
+import { formatSize } from "@/lib/format";
 import { MAX_UPLOAD_BYTES, UPLOAD_ACCEPT } from "@/lib/uploads/constants";
 import { uploadPath } from "@/lib/uploads/paths";
 import { registerUpload } from "@/lib/uploads/register";
@@ -39,13 +40,6 @@ type Item = {
   summary?: string;
   error?: string;
 };
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export function UploadDialog({ tenantId }: { tenantId: string }) {
   const router = useRouter();

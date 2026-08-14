@@ -3,11 +3,8 @@
 import { Alert, Card, Segmented, Space, Switch, Tag, Typography } from "antd";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
-import {
-  DATASET_NAMES,
-  type AllReportSettings,
-  type Requirement,
-} from "@/lib/reports/settings";
+import type { AllReportSettings, Requirement } from "@/lib/reports/settings";
+import { DATASET_NAMES } from "@/modules/channels/registry";
 import {
   saveReportSettings,
   type SettingsActionResult,

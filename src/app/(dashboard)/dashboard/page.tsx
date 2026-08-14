@@ -1,15 +1,12 @@
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
+import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
 import { countNeedsAttention } from "@/lib/transactions/queries";
 
 export const metadata = { title: "Dashboard — E-commerce Accountant" };
-
-function one(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();

@@ -1,15 +1,12 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
+import { one } from "@/lib/params";
 import { requireUser } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
 export const metadata = { title: "Uploads — E-commerce Accountant" };
-
-function one(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 export default async function UploadsPage({ searchParams }: PageProps<"/uploads">) {
   const user = await requireUser();

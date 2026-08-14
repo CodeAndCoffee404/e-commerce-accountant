@@ -3,7 +3,8 @@ import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { getDb, schema } from "@/lib/db";
 import type { Grid } from "@/lib/ingest/classify";
-import { mapTransactions, type MappedTransaction } from "@/lib/ingest/mappers";
+import type { MappedTransaction } from "@/lib/ingest/mappers/types";
+import { channelModule } from "@/modules/channels/registry";
 import { toNumeric } from "@/lib/ingest/numbers";
 import type { Period } from "@/lib/ingest/period";
 import type { AmazonCountry } from "@/lib/ingest/datasets";
@@ -70,7 +71,7 @@ export async function ingestSourceFile(
     end: file.periodEnd,
   };
 
-  const mapped = mapTransactions(file.dataset, {
+  const mapped = channelModule(file.dataset).map({
     grid,
     headerRowIndex: file.headerRowIndex ?? 0,
     country: (file.countryCode as AmazonCountry | null) ?? null,

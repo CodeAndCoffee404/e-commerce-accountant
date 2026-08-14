@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { TransactionsView } from "@/components/transactions/transactions-view";
+import { one } from "@/lib/params";
 import { requireUser } from "@/lib/auth/session";
 import {
   filterOptions,
@@ -7,10 +8,6 @@ import {
   transactionTotals,
   type TransactionFilters,
 } from "@/lib/transactions/queries";
-
-function one(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 export const metadata = { title: "Transactions — E-commerce Accountant" };
 

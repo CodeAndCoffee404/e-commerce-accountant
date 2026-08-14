@@ -27,8 +27,6 @@ export type ReportSettings = {
 
 export type AllReportSettings = Record<ReportTypeId, ReportSettings>;
 
-/** Short names for the UI, one per channel module. */
-export { DATASET_NAMES } from "@/modules/channels/registry";
 
 
 /**

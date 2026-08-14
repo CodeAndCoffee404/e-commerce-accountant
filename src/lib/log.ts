@@ -49,30 +49,3 @@ export const log = {
       stack: error instanceof Error ? error.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
     }),
 };
-
-/**
- * Times an operation and logs how it ended, whichever way that was.
- *
- * The duration is the point: a report that takes four seconds and one that
- * takes four minutes fail in different ways, and only one of them is visible
- * without a number.
- */
-export async function logged<T>(
-  event: string,
-  context: LogContext,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const started = Date.now();
-
-  try {
-    const result = await operation();
-
-    log.info(`${event}.ok`, { ...context, ms: Date.now() - started });
-
-    return result;
-  } catch (error) {
-    log.error(`${event}.failed`, error, { ...context, ms: Date.now() - started });
-
-    throw error;
-  }
-}

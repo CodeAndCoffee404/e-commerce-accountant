@@ -4,7 +4,8 @@ import { getDb, schema } from "@/lib/db";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import { availablePeriods, loadReportSettings } from "@/lib/reports/queries";
-import { DATASET_NAMES, requiredCountries, requiredDatasets } from "@/lib/reports/settings";
+import { requiredCountries, requiredDatasets } from "@/lib/reports/settings";
+import { DATASET_NAMES } from "@/modules/channels/registry";
 import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 /** One thing the month needs: a file, either present or still wanted. */
@@ -66,7 +67,8 @@ export async function loadDashboard(
 ): Promise<DashboardData> {
   const db = getDb();
 
-  const [files, settings, availability] = await Promise.all([
+  const settings = await loadReportSettings(tenantId);
+  const [files, availability] = await Promise.all([
     db
       .select({
         dataset: schema.sourceFiles.dataset,
@@ -81,8 +83,7 @@ export async function loadDashboard(
       .where(
         and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
       ),
-    loadReportSettings(tenantId),
-    availablePeriods(tenantId),
+    availablePeriods(tenantId, settings),
   ]);
 
   const monthly = files.filter((file) => (file.granularity ?? "month") === "month");

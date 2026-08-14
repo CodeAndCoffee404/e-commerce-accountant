@@ -3,8 +3,9 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
+import { DATASET_NAMES } from "@/modules/channels/registry";
+
 import {
-  DATASET_NAMES,
   defaultSettings,
   describeNeeds,
   normaliseSettings,
@@ -152,6 +153,7 @@ export async function loadReportSettings(tenantId: string): Promise<AllReportSet
  */
 export async function availablePeriods(
   tenantId: string,
+  preloadedSettings?: AllReportSettings,
 ): Promise<Record<ReportTypeId, ReportAvailability>> {
   const [rows, settings] = await Promise.all([
     getDb()
@@ -165,7 +167,9 @@ export async function availablePeriods(
       .where(
         and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
       ),
-    loadReportSettings(tenantId),
+    // Callers that already hold the settings pass them in; the read happens
+    // once per request, not once per helper.
+    preloadedSettings ?? loadReportSettings(tenantId),
   ]);
 
   const result = {} as Record<ReportTypeId, ReportAvailability>;
@@ -249,13 +253,16 @@ export async function availablePeriods(
  * with data still needs its rules, but that is caught at build time with the
  * same message — this banner is for what must be fixed before anything works.
  */
-export async function missingChannelRules(tenantId: string): Promise<string[]> {
+export async function missingChannelRules(
+  tenantId: string,
+  preloadedSettings?: AllReportSettings,
+): Promise<string[]> {
   const [present, settings] = await Promise.all([
     getDb()
       .select({ channel: schema.channelRules.channel, key: schema.channelRules.key })
       .from(schema.channelRules)
       .where(eq(schema.channelRules.tenantId, tenantId)),
-    loadReportSettings(tenantId),
+    preloadedSettings ?? loadReportSettings(tenantId),
   ]);
 
   const have = new Set(present.map((rule) => `${rule.channel}/${rule.key}`));

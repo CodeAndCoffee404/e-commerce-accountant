@@ -4,7 +4,7 @@ import path from "node:path";
 import Decimal from "decimal.js";
 
 import { classify } from "@/lib/ingest/classify";
-import { mapTransactions } from "@/lib/ingest/mappers";
+import { channelModule } from "@/modules/channels/registry";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 import {
   ALLEGRO_CURRENCY_MAP,
@@ -164,7 +164,7 @@ export async function ledgerForPeriod(
     if (!classification.ok) throw new Error(`${name}: ${classification.message}`);
     if (!datasets.includes(classification.dataset)) continue;
 
-    const mapped = mapTransactions(classification.dataset, {
+    const mapped = channelModule(classification.dataset).map({
       grid: parsed.grid,
       headerRowIndex: classification.headerRowIndex,
       country: classification.country,
