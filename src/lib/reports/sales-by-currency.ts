@@ -39,7 +39,7 @@ export function generateSalesByCurrency(
   }
 
   if (withoutCurrency > 0) {
-    skipped.push({ reason: "Amazon VAT: строка без валюты", count: withoutCurrency });
+    skipped.push({ reason: "Amazon VAT: row without a currency", count: withoutCurrency });
   }
 
   const totalIndex = sourceHeaders.indexOf(TOTAL_COLUMN);

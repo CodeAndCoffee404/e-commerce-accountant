@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Empty, Table, Tag, Typography } from "antd";
+import { Button, Empty, Table, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 
 import type { UploadRow } from "@/lib/uploads/queries";
@@ -59,7 +59,11 @@ export function UploadsTable({ rows }: { rows: UploadRow[] }) {
             ),
           },
           {
-            title: "Detected type",
+            title: (
+              <Tooltip title="Matched on the required headers inside the file. The filename is never used to decide the type.">
+                Detected type
+              </Tooltip>
+            ),
             dataIndex: "label",
             render: (label: string | null) =>
               label ?? <Typography.Text type="secondary">—</Typography.Text>,
@@ -72,7 +76,11 @@ export function UploadsTable({ rows }: { rows: UploadRow[] }) {
               country ? <Tag>{country}</Tag> : "—",
           },
           {
-            title: "Period",
+            title: (
+              <Tooltip title="A file covers one month or one whole quarter. Reports select by this period, so it decides which report a file feeds.">
+                Period
+              </Tooltip>
+            ),
             dataIndex: "period",
             width: 170,
             render: (period: string | null, row) => (
@@ -110,9 +118,11 @@ export function UploadsTable({ rows }: { rows: UploadRow[] }) {
             key: "preview",
             width: 90,
             render: (_, row) => (
-              <Button size="small" onClick={() => setPreviewing(row)}>
-                Preview
-              </Button>
+              <Tooltip title="Show the first rows of the stored file, read on demand.">
+                <Button size="small" onClick={() => setPreviewing(row)}>
+                  Preview
+                </Button>
+              </Tooltip>
             ),
           },
         ]}

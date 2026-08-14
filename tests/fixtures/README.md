@@ -1,27 +1,27 @@
-# Обезличенные фикстуры
+# Anonymised fixtures
 
-Копии реальных выгрузок клиента, из которых удалены персональные данные
-покупателей. Строит их `npm run fixtures` — см. `scripts/anonymise-fixtures.mts`.
+Copies of the client's real exports with the buyers' personal data removed.
+Built by `npm run fixtures` — see `scripts/anonymise-fixtures.mts`.
 
-Что сохраняется: суммы, даты, SKU, названия товаров, номера заказов, ставки
-налога, структура файла и порядок колонок. Иначе фикстура перестаёт проверять
-то, ради чего существует.
+Kept: amounts, dates, SKUs, product names, order numbers, tax rates, the
+structure of the file and the order of its columns. A fixture that loses them
+stops testing what it exists to test.
 
-Что заменяется: имена, адреса почты, телефоны, адреса, города и индексы.
-Замена детерминированная, поэтому один покупатель остаётся одним покупателем
-в нескольких строках. Все адреса почты ведут на `example.invalid` — домен,
-который никогда не резолвится.
+Replaced: names, email addresses, phone numbers, street addresses, cities and
+postcodes. Replacement is deterministic, so one buyer stays one buyer across
+several rows. Every email address points at `example.invalid`, a domain that
+never resolves.
 
-`from-csv/` и `from-xlsx/` — по формату источника. Один и тот же отчёт часто
-выгружен в обоих, и содержимое их различается: в XLSX даты приходят ячейками
-дат, в CSV строками. Оба варианта нужны.
+`from-csv/` and `from-xlsx/` split by source format. The same report is often
+exported as both, and their contents differ: the XLSX carries dates as date
+cells, the CSV as text. Both are needed.
 
-## Чего здесь нет
+## What is not here
 
-Квартальной выгрузки Amazon VAT — она весит 8.5 МБ и раздувает репозиторий.
-Квартальная логика покрыта юнит-тестами `src/lib/ingest/period.test.ts`, а на
-настоящем файле — тестом `tests/corpus.test.ts`, который идёт по приватному
-корпусу. Понадобится фикстура — одна команда:
+The quarterly Amazon VAT export. It weighs 8.5 MB and would bloat the
+repository. Quarter handling is covered by the unit tests in
+`src/lib/ingest/period.test.ts`, and on the real file by `tests/corpus.test.ts`,
+which runs over the private corpus. If a fixture is ever needed, one command:
 
 ```bash
 npm run fixtures -- "Amazon VAT transaction report - 2026.Q2.csv"

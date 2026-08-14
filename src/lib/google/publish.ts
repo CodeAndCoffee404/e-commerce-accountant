@@ -27,7 +27,7 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
   const connection = await loadConnection(tenantId);
 
   if (!connection?.folderId) {
-    return { uploaded: 0, failed: 0, message: "Google Drive не подключён — выгрузка пропущена." };
+    return { uploaded: 0, failed: 0, message: "Google Drive is not connected — upload skipped." };
   }
 
   const [run] = await db
@@ -39,7 +39,7 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
     .where(and(eq(schema.reportRuns.id, runId), eq(schema.reportRuns.tenantId, tenantId)))
     .limit(1);
 
-  if (!run) return { uploaded: 0, failed: 0, message: "Прогон не найден." };
+  if (!run) return { uploaded: 0, failed: 0, message: "Run not found." };
 
   const artifacts = await db
     .select()
@@ -47,18 +47,18 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
     .where(eq(schema.reportArtifacts.reportRunId, runId));
 
   if (artifacts.length === 0) {
-    return { uploaded: 0, failed: 0, message: "У прогона нет файлов." };
+    return { uploaded: 0, failed: 0, message: "The run produced no files." };
   }
 
   const token = await accessTokenFor(tenantId);
 
   if (!token) {
-    await markFailed(artifacts, "Доступ к Google отозван.");
+    await markFailed(artifacts, "Google access was revoked.");
 
     return {
       uploaded: 0,
       failed: artifacts.length,
-      message: "Доступ к Google отозван — подключите аккаунт заново.",
+      message: "Google access was revoked — connect the account again.",
     };
   }
 
@@ -83,7 +83,7 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
     try {
       const stored = await get(artifact.blobKey, { access: "private" });
 
-      if (!stored?.stream) throw new Error("Файл отчёта недоступен в хранилище.");
+      if (!stored?.stream) throw new Error("The report file is not available in storage.");
 
       const bytes = new Uint8Array(await new Response(stored.stream).arrayBuffer());
 
@@ -125,8 +125,8 @@ export async function publishRun(tenantId: string, runId: string): Promise<Publi
     failed,
     message:
       failed === 0
-        ? `Выгружено в Drive: ${uploaded}.`
-        : `Выгружено ${uploaded}, не удалось ${failed}. Файлы можно скачать здесь и повторить выгрузку.`,
+        ? `Uploaded to Drive: ${uploaded}.`
+        : `Uploaded ${uploaded}, failed ${failed}. The files are downloadable here and the upload can be retried.`,
   };
 }
 

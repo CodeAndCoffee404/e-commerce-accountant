@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { MAX_UPLOAD_BYTES, UPLOAD_ACCEPT } from "@/lib/uploads/constants";
+import { uploadPath } from "@/lib/uploads/paths";
 import { registerUpload } from "@/lib/uploads/register";
 
-export function UploadDropzone() {
+export function UploadDropzone({ tenantId }: { tenantId: string }) {
   const router = useRouter();
   const { message } = App.useApp();
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export function UploadDropzone() {
     const file = options.file as File;
 
     if (file.size > MAX_UPLOAD_BYTES) {
-      const failure = new Error("Файл больше 20 МБ.");
+      const failure = new Error("The file is larger than 20 MB.");
 
       message.error(failure.message);
       options.onError?.(failure);
@@ -30,7 +31,10 @@ export function UploadDropzone() {
     try {
       // Straight to Blob storage over a presigned URL. A Server Action would
       // cap the file at the 4.5 MB request body limit of Vercel functions.
-      const blob = await uploadPresigned(`uploads/${file.name}`, file, {
+      // Scoped to the tenant and unique per upload: the server refuses to sign
+      // anything else, and reusing a key would leave an earlier record pointing
+      // at another file's bytes.
+      const blob = await uploadPresigned(uploadPath(tenantId, file.name, crypto.randomUUID()), file, {
         access: "private",
         handleUploadUrl: "/api/uploads/blob",
         contentType: file.type || undefined,
@@ -58,7 +62,7 @@ export function UploadDropzone() {
       options.onSuccess?.(result);
       router.refresh();
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось загрузить файл.";
+      const text = error instanceof Error ? error.message : "The file could not be uploaded.";
 
       message.error(text, 8);
       options.onError?.(error as Error);
@@ -82,7 +86,12 @@ export function UploadDropzone() {
       </p>
       <p className="ant-upload-text">Drop channel exports here, or click to choose</p>
       <p className="ant-upload-hint">
-        CSV and XLSX, up to 20 MB. The type, country and period are detected from the file itself.
+        CSV and XLSX, up to 20 MB. Upload the file exactly as the channel exported it — the
+        type, country and period are read from its contents, not from its name.
+      </p>
+      <p className="ant-upload-hint">
+        Re-uploading a corrected file for a period you already have replaces it. The old rows
+        are kept but stop counting, so reports stay traceable.
       </p>
     </Upload.Dragger>
   );

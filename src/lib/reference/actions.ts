@@ -20,7 +20,7 @@ export type ActionResult = { ok: true; message: string } | { ok: false; message:
 async function requireEditor() {
   const user = await requireUser();
 
-  if (user.role === "viewer") throw new Error("Недостаточно прав для изменения справочников.");
+  if (user.role === "viewer") throw new Error("Not allowed to change reference data.");
 
   return user;
 }
@@ -29,7 +29,7 @@ const vatRateSchema = z.object({
   id: z.string().uuid().optional(),
   country: z.string().trim().min(2).max(2).toUpperCase(),
   // A rate is a percent. Stored as text so it never passes through a float.
-  rate: z.string().trim().regex(/^\d+(\.\d+)?$/, "Ставка — число, например 21 или 5.5"),
+  rate: z.string().trim().regex(/^\d+(\.\d+)?$/, "A rate is a number, for example 21 or 5.5"),
   validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   note: z.string().trim().max(300).nullable().optional(),
@@ -62,7 +62,7 @@ export async function saveVatRate(input: unknown): Promise<ActionResult> {
 
   revalidatePath("/settings");
 
-  return { ok: true, message: `Ставка ${values.country} сохранена.` };
+  return { ok: true, message: `Rate for ${values.country} saved.` };
 }
 
 export async function deleteVatRate(id: string): Promise<ActionResult> {
@@ -74,7 +74,7 @@ export async function deleteVatRate(id: string): Promise<ActionResult> {
 
   revalidatePath("/settings");
 
-  return { ok: true, message: "Ставка удалена." };
+  return { ok: true, message: "Rate deleted." };
 }
 
 const skuSchema = z.object({
@@ -118,7 +118,7 @@ export async function saveSkuMapping(input: unknown): Promise<ActionResult> {
 
   revalidatePath("/settings");
 
-  return { ok: true, message: `SKU ${values.sourceSku} сохранён.` };
+  return { ok: true, message: `SKU ${values.sourceSku} saved.` };
 }
 
 export async function deleteSkuMapping(id: string): Promise<ActionResult> {
@@ -130,7 +130,7 @@ export async function deleteSkuMapping(id: string): Promise<ActionResult> {
 
   revalidatePath("/settings");
 
-  return { ok: true, message: "Запись удалена." };
+  return { ok: true, message: "Entry deleted." };
 }
 
 export async function saveChannelRule(id: string, rawValue: string): Promise<ActionResult> {
@@ -141,7 +141,7 @@ export async function saveChannelRule(id: string, rawValue: string): Promise<Act
   try {
     value = JSON.parse(rawValue);
   } catch {
-    return { ok: false, message: "Значение должно быть корректным JSON." };
+    return { ok: false, message: "The value has to be valid JSON." };
   }
 
   await getDb()
@@ -151,7 +151,7 @@ export async function saveChannelRule(id: string, rawValue: string): Promise<Act
 
   revalidatePath("/settings");
 
-  return { ok: true, message: "Правило сохранено." };
+  return { ok: true, message: "Rule saved." };
 }
 
 export async function refreshRates(full = false): Promise<ActionResult> {
@@ -166,8 +166,8 @@ export async function refreshRates(full = false): Promise<ActionResult> {
       ok: true,
       message:
         stored === 0
-          ? "Новых курсов нет — кэш уже полный."
-          : `Загружено новых котировок: ${stored}.`,
+          ? "No new rates — the cache is already up to date."
+          : `Stored ${stored} new quotes.`,
     };
   } catch (error) {
     return { ok: false, message: (error as Error).message };
@@ -187,7 +187,7 @@ export async function restoreDefaults(): Promise<ActionResult> {
     ok: true,
     message:
       added === 0
-        ? "Всё на месте, добавлять нечего."
-        : `Восстановлено записей: ${added}. Изменённые значения не тронуты.`,
+        ? "Nothing missing, nothing to add."
+        : `Restored ${added} entries. Anything you had edited was left alone.`,
   };
 }

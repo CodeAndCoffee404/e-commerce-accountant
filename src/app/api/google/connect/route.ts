@@ -8,9 +8,19 @@ import { connectUrl } from "@/lib/google/oauth";
 
 export const STATE_COOKIE = "ea-google-state";
 
-/** The address Google returns to; it has to match the console exactly. */
+/**
+ * The address Google returns to. It has to match one registered in the console
+ * character for character.
+ *
+ * Built from AUTH_URL rather than the request host: every preview deployment
+ * answers on its own hostname, and Google was never told about those, so a
+ * connection started from one would come back to an unregistered address and
+ * fail. AUTH_URL is pinned per environment for the same reason sign-in needs it.
+ */
 export function callbackUrl(request: Request): string {
-  return new URL("/api/google/callback", request.url).toString();
+  const base = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
+
+  return new URL("/api/google/callback", base ?? request.url).toString();
 }
 
 export async function GET(request: Request): Promise<NextResponse> {

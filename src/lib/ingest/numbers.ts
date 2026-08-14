@@ -7,7 +7,7 @@ export class NumberFormatError extends Error {
     readonly raw: string,
     readonly column: string,
   ) {
-    super(`Значение «${raw}» в колонке «${column}» не разобрано как число.`);
+    super(`Value "${raw}" in column "${column}" is not a number.`);
     this.name = "NumberFormatError";
   }
 }

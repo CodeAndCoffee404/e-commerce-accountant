@@ -10,19 +10,19 @@ import type { ConnectionSummary } from "@/lib/google/connection";
 
 /** Messages for the outcomes the OAuth callback can redirect back with. */
 const OUTCOMES: Record<string, { type: "success" | "error" | "warning"; text: string }> = {
-  connected: { type: "success", text: "Google подключён. Осталось выбрать папку." },
-  cancelled: { type: "warning", text: "Вы отменили доступ в окне Google." },
+  connected: { type: "success", text: "Google connected. Now choose a folder." },
+  cancelled: { type: "warning", text: "You cancelled the consent in Google's window." },
   state: {
     type: "error",
-    text: "Проверка запроса не прошла. Начните подключение заново с этой страницы.",
+    text: "The request failed its check. Start connecting again from this page.",
   },
-  nocode: { type: "error", text: "Google не вернул код авторизации." },
+  nocode: { type: "error", text: "Google returned no authorisation code." },
   norefresh: {
     type: "error",
-    text: "Google не выдал долгосрочный токен. Отзовите доступ приложению в аккаунте Google и подключите заново.",
+    text: "Google issued no long-lived token. Revoke this app in your Google account, then connect again.",
   },
-  failed: { type: "error", text: "Не удалось обменять код на токен." },
-  forbidden: { type: "error", text: "Недостаточно прав для подключения Drive." },
+  failed: { type: "error", text: "The code could not be exchanged for a token." },
+  forbidden: { type: "error", text: "Not allowed to connect Drive." },
 };
 
 type PickerApi = {
@@ -89,7 +89,7 @@ function loadPicker(): Promise<void> {
     script.async = true;
     script.dataset.googleApi = "true";
     script.onload = onReady;
-    script.onerror = () => reject(new Error("Не удалось загрузить Google Picker."));
+    script.onerror = () => reject(new Error("Could not load the Google picker."));
 
     document.head.append(script);
   });
@@ -114,7 +114,7 @@ export function DriveCard({
 
   const pick = async () => {
     if (!apiKey) {
-      message.error("Не задан GOOGLE_PICKER_API_KEY — без него окно выбора папки не откроется.", 10);
+      message.error("GOOGLE_PICKER_API_KEY is not set — the folder chooser cannot open without it.", 10);
       return;
     }
 
@@ -141,7 +141,7 @@ export function DriveCard({
         .enableFeature(picker.Feature.SUPPORT_DRIVES)
         .setOAuthToken(token.token)
         .setDeveloperKey(apiKey)
-        .setTitle("Куда складывать отчёты")
+        .setTitle("Where reports should be written")
         .setCallback((data) => {
           if (data.action !== picker.Action.PICKED) return;
 
@@ -174,9 +174,9 @@ export function DriveCard({
       ) : null}
 
       <Typography.Paragraph type="secondary">
-        Готовые отчёты складываются в вашу папку на Google Drive. Приложение просит доступ
-        только к тем файлам, которые само создало, и к той папке, которую вы укажете — прочее
-        содержимое диска ему не видно.
+        Finished reports are written to a folder in your Google Drive. The app asks only for
+        the files it creates itself and the folder you point it at — the rest of your Drive
+        stays invisible to it.
       </Typography.Paragraph>
 
       {connection === null ? (
@@ -199,10 +199,10 @@ export function DriveCard({
 
           {connection.folderName ? (
             <Typography.Text>
-              Папка: <b>{connection.folderName}</b>
+              Folder: <b>{connection.folderName}</b>
             </Typography.Text>
           ) : (
-            <Alert type="warning" showIcon message="Папка не выбрана — отчёты пока никуда не выгружаются." />
+            <Alert type="warning" showIcon message="No folder chosen — reports are not being uploaded anywhere yet." />
           )}
 
           {connection.lastError ? (
@@ -224,8 +224,8 @@ export function DriveCard({
             </Button>
 
             <Popconfirm
-              title="Отключить Google Drive?"
-              description="Уже выгруженные файлы останутся на месте."
+              title="Disconnect Google Drive?"
+              description="Files already uploaded stay where they are."
               disabled={!canEdit}
               onConfirm={() =>
                 startTransition(async () => {

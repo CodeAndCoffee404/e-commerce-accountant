@@ -15,7 +15,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Строка, вытесненная более поздней загрузкой того же периода. */
+/* A row superseded by a later upload of the same period. */
 .ea-superseded td {
   opacity: 0.55;
 }

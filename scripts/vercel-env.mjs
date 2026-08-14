@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Раскладывает переменные окружения по Vercel из docs/secrets.local.md.
+ * Applies the environment variables in docs/secrets.local.md to Vercel.
  *
- * Файл с секретами в .gitignore и является резервной копией: в Vercel
- * production- и preview-значения помечены Sensitive и обратно не читаются.
+ * That file is gitignored and serves as the backup copy: in Vercel the
+ * production and preview values are Sensitive and cannot be read back.
  *
- *   node scripts/vercel-env.mjs --dry-run   показать, что будет сделано
- *   node scripts/vercel-env.mjs             применить
+ *   node scripts/vercel-env.mjs --dry-run   show what would happen
+ *   node scripts/vercel-env.mjs             apply
  *
- * Требует `npx vercel login`.
+ * Requires `npx vercel login`.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -17,12 +17,13 @@ const SECRETS_FILE = "docs/secrets.local.md";
 const ENVIRONMENTS = ["production", "preview", "development"];
 
 /**
- * Имена, которые заводят интеграции Vercel (Neon, Blob).
+ * Names owned by Vercel's own integrations (Neon, Blob).
  *
- * Скрипт их только показывает и никогда не трогает. Первая версия удаляла их,
- * чтобы освободить имя для интеграции — и это было верно ровно один раз, пока
- * интеграций ещё не было. На следующем прогоне тот же код снёс уже настоящие
- * значения: прод остался без строки подключения и без токена хранилища.
+ * The script reports them and never touches them. The first version deleted
+ * them to free the name for the integration, which was right exactly once —
+ * before the integrations existed. On the next run the same code removed the
+ * real values, and production lost both its connection string and its storage
+ * token.
  */
 const INTEGRATION_MANAGED = ["DATABASE_URL", "BLOB_READ_WRITE_TOKEN"];
 
@@ -30,8 +31,8 @@ const dryRun = process.argv.includes("--dry-run");
 
 function vercel(args, { input, tolerate = false } = {}) {
   try {
-    // --non-interactive, иначе при разлогине или непривязанном проекте CLI
-    // уходит в бесконечное ожидание ответа на приглашение.
+    // --non-interactive, or the CLI waits forever on a prompt when the user is
+    // signed out or the project is not linked.
     return execFileSync("npx", ["--yes", "vercel", ...args, "--non-interactive"], {
       input: input ?? "",
       encoding: "utf8",
@@ -41,11 +42,11 @@ function vercel(args, { input, tolerate = false } = {}) {
   } catch (error) {
     if (tolerate) return null;
     process.stderr.write(error.stderr ?? String(error));
-    throw new Error(`vercel ${args.join(" ")} — не удалось`);
+    throw new Error(`vercel ${args.join(" ")} failed`);
   }
 }
 
-/** Строки вида `| \`NAME\` | production | \`value\` |`. */
+/** Rows of the form `| \`NAME\` | production | \`value\` |`. */
 function parseSecrets(markdown) {
   const rows = [];
 
@@ -73,25 +74,25 @@ function parseSecrets(markdown) {
 }
 
 if (!existsSync(SECRETS_FILE)) {
-  throw new Error(`Нет ${SECRETS_FILE} — брать значения неоткуда`);
+  throw new Error(`${SECRETS_FILE} is missing — there are no values to apply`);
 }
 
-// Разбор до любых сетевых вызовов: испорченный файл должен ронять скрипт
-// раньше, чем он начнёт удалять переменные в Vercel.
+// Parsed before any network call: a broken file must stop the script before it
+// starts deleting variables in Vercel.
 const rows = parseSecrets(readFileSync(SECRETS_FILE, "utf8"));
 if (rows.length === 0) {
-  throw new Error(`В ${SECRETS_FILE} не нашлось ни одной строки со значением`);
+  throw new Error(`No row in ${SECRETS_FILE} carries a value`);
 }
 
-console.log(`Разобрано строк: ${rows.length}`);
+console.log(`Rows parsed: ${rows.length}`);
 for (const { name, environment, value } of rows) {
-  console.log(`  ${name} → ${environment} (${value.length} символов)`);
+  console.log(`  ${name} → ${environment} (${value.length} characters)`);
 }
 
-// Переменная удаляется целиком перед пересозданием: Vercel хранит одну запись
-// на несколько окружений, и выборочно снять с неё одно окружение нельзя.
-// Значит, в таблице должны быть все три — иначе прогон молча оставит
-// production без значения.
+// A variable is deleted whole before being recreated: Vercel keeps one record
+// spanning several environments and gives no way to detach a single one. All
+// three therefore have to be listed, or a run would silently leave production
+// without a value.
 for (const name of new Set(rows.map((row) => row.name))) {
   const missing = ENVIRONMENTS.filter(
     (environment) => !rows.some((row) => row.name === name && row.environment === environment),
@@ -99,58 +100,58 @@ for (const name of new Set(rows.map((row) => row.name))) {
 
   if (missing.length > 0) {
     throw new Error(
-      `${name}: в ${SECRETS_FILE} нет строк для ${missing.join(", ")}. ` +
-        "Перечислите все окружения, иначе прогон снесёт недостающие.",
+      `${name}: ${SECRETS_FILE} has no rows for ${missing.join(", ")}. ` +
+        "List every environment, or the run would remove the missing ones.",
     );
   }
 }
 
 if (dryRun) {
-  console.log("\n--dry-run: ничего не меняю.");
-  console.log(`Не трогаю переменные интеграций: ${INTEGRATION_MANAGED.join(", ")}`);
+  console.log("\n--dry-run: nothing was changed.");
+  console.log(`Leaving integration-owned variables alone: ${INTEGRATION_MANAGED.join(", ")}`);
   process.exit(0);
 }
 
-// Та же защита, что и для окружений: скрипт не должен уметь удалить то, чем
-// не владеет, даже если такое имя окажется в таблице секретов.
+// The same guard as for environments: the script must not be able to delete
+// what it does not own, even if such a name turns up in the secrets table.
 for (const name of new Set(rows.map((row) => row.name))) {
   if (INTEGRATION_MANAGED.includes(name)) {
-    throw new Error(`${name} задаёт интеграция Vercel — уберите строку из ${SECRETS_FILE}.`);
+    throw new Error(`${name} is set by a Vercel integration — remove the row from ${SECRETS_FILE}.`);
   }
 }
 
 const whoami = vercel(["whoami"], { tolerate: true });
 if (whoami === null || /logged out/i.test(whoami)) {
-  throw new Error("Vercel CLI разлогинен — выполните `npx vercel login`");
+  throw new Error("The Vercel CLI is signed out — run `npx vercel login`");
 }
 console.log(`\nVercel: ${whoami.trim().split("\n").pop()}`);
 
 if (!existsSync(".vercel/project.json")) {
-  console.log("Проект не привязан, выполняю vercel link…");
+  console.log("Project not linked, running vercel link…");
   vercel(["link", "--yes"]);
 }
 
-console.log("\nТекущее состояние:\n");
-console.log(vercel(["env", "ls"], { tolerate: true }) ?? "(не удалось прочитать)");
+console.log("\nCurrent state:\n");
+console.log(vercel(["env", "ls"], { tolerate: true }) ?? "(could not be read)");
 
 for (const name of INTEGRATION_MANAGED) {
-  console.log(`- ${name}: не трогаю, этим владеет интеграция`);
+  console.log(`- ${name}: left alone, an integration owns it`);
 }
 
 const names = [...new Set(rows.map((row) => row.name))];
 
 for (const name of names) {
-  console.log(`- ${name}: пересоздаю по окружениям`);
+  console.log(`- ${name}: recreating per environment`);
   vercel(["env", "rm", name, "--yes"], { tolerate: true });
 }
 
 for (const { name, environment, value } of rows) {
-  // Sensitive нельзя ставить на development: такое значение не отдаётся
-  // обратно, а `vercel env pull` должен наполнять локальный .env.local.
+  // Sensitive is wrong for development: such a value is never returned, and
+  // `vercel env pull` has to be able to fill the local .env.local.
   const flags = environment === "development" ? ["--no-sensitive"] : ["--sensitive"];
   console.log(`  ${name} → ${environment}`);
   vercel(["env", "add", name, environment, "--force", ...flags], { input: value });
 }
 
-console.log("\nИтог:\n");
-console.log(vercel(["env", "ls"], { tolerate: true }) ?? "(не удалось прочитать)");
+console.log("\nResult:\n");
+console.log(vercel(["env", "ls"], { tolerate: true }) ?? "(could not be read)");

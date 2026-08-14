@@ -62,7 +62,7 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<T
   };
 
   if (!response.ok || !body.access_token) {
-    throw new Error(body.error_description ?? body.error ?? "Google не выдал токен.");
+    throw new Error(body.error_description ?? body.error ?? "Google did not return a token.");
   }
 
   return {
@@ -96,7 +96,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
   if (!response.ok || !body.access_token) {
     // `invalid_grant` means the user revoked access or the token expired from
     // disuse. The caller marks the connection revoked rather than retrying.
-    throw new Error(body.error_description ?? body.error ?? "Не удалось обновить токен Google.");
+    throw new Error(body.error_description ?? body.error ?? "Could not refresh the Google token.");
   }
 
   return body.access_token;

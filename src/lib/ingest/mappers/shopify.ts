@@ -37,7 +37,7 @@ export function mapShopify({ grid, headerRowIndex }: MapContext): MapResult {
       currentDate = parseIsoDate(reader.text(rowIndex, "Created at"));
     }
 
-    if (currentDate === null) attention.add("Не удалось определить дату заказа.");
+    if (currentDate === null) attention.add("The order date could not be read.");
 
     const price = attention.take(reader.decimal(rowIndex, "Lineitem price"));
     const quantity = attention.take(reader.decimal(rowIndex, "Lineitem quantity"));

@@ -14,7 +14,7 @@ export default async function UploadsPage() {
         title="Uploads"
         description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
       />
-      <UploadDropzone />
+      <UploadDropzone tenantId={user.tenantId} />
       <UploadsTable rows={rows} />
     </>
   );

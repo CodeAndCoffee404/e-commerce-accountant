@@ -30,7 +30,7 @@ function periodOf(label: string) {
   const [year, rest] = label.split(".");
   const month = monthByNumber(Number(rest.slice(0, 2)));
 
-  if (!month) throw new Error(`не разобран период ${label}`);
+  if (!month) throw new Error(`could not read the period ${label}`);
 
   const built = buildPeriod(collectPeriods([{ year: Number(year), month }]));
 
@@ -81,7 +81,7 @@ function isCdiscountRefundSign(ours: string, theirs: string): boolean {
   return columns.join("|") === theirs;
 }
 
-describe.skipIf(!corpusAvailable)("Off-Amazon Sales против эталона", () => {
+describe.skipIf(!corpusAvailable)("Off-Amazon Sales against the reference", () => {
   it.each(PERIODS)("%s", async (label) => {
     const golden = await readGolden(
       path.join(REPORTS, `Off-Amazon Sales - ${label}`, `Off-Amazon Sales - ${label}.xlsx`),
@@ -113,7 +113,7 @@ describe.skipIf(!corpusAvailable)("Off-Amazon Sales против эталона"
       (row) => !theirsUnmatched.some((golden) => isCdiscountRefundSign(row, golden)),
     );
 
-    expect(unexplained, `не объяснённые расхождения:\n${unexplained.join("\n")}`).toEqual([]);
+    expect(unexplained, `unexplained differences:\n${unexplained.join("\n")}`).toEqual([]);
     expect(unmatched.length).toBe(theirsUnmatched.length);
 
     // Totals agree once the recorded deviation is undone.

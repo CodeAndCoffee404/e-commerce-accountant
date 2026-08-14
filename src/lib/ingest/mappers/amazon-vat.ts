@@ -26,7 +26,7 @@ export function mapAmazonVat({ grid, headerRowIndex }: MapContext): MapResult {
     const occurredOn = parseAmazonVatDate(reader.text(rowIndex, "TRANSACTION_COMPLETE_DATE"))
       ?? parseAmazonVatDate(reader.text(rowIndex, "TAX_CALCULATION_DATE"));
 
-    if (occurredOn === null) attention.add("Не удалось определить дату транзакции.");
+    if (occurredOn === null) attention.add("The transaction date could not be read.");
 
     rows.push({
       sourceRowNumber: rowIndex + 1,

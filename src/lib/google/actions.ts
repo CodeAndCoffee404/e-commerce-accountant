@@ -13,7 +13,7 @@ export type DriveResult = { ok: true; message: string } | { ok: false; message: 
 async function requireEditor() {
   const user = await requireUser();
 
-  if (user.role === "viewer") throw new Error("Недостаточно прав.");
+  if (user.role === "viewer") throw new Error("Not allowed.");
 
   return user;
 }
@@ -31,7 +31,7 @@ export async function pickerToken(): Promise<{ ok: true; token: string } | { ok:
   const token = await accessTokenFor(user.tenantId);
 
   if (!token) {
-    return { ok: false, message: "Доступ к Google отозван — подключите аккаунт заново." };
+    return { ok: false, message: "Google access was revoked — connect the account again." };
   }
 
   return { ok: true, token };
@@ -45,25 +45,25 @@ export async function chooseFolder(input: unknown): Promise<DriveResult> {
   const user = await requireEditor();
   const parsed = folderSchema.safeParse(input);
 
-  if (!parsed.success) return { ok: false, message: "Папка не выбрана." };
+  if (!parsed.success) return { ok: false, message: "No folder chosen." };
 
   const token = await accessTokenFor(user.tenantId);
 
-  if (!token) return { ok: false, message: "Доступ к Google отозван — подключите аккаунт заново." };
+  if (!token) return { ok: false, message: "Google access was revoked — connect the account again." };
 
   // Checked now rather than at the first report: a folder that cannot be
   // reached should say so while the client is still looking at the screen.
   const name = await folderName(token, parsed.data.folderId);
 
   if (!name) {
-    return { ok: false, message: "Не удалось открыть выбранную папку. Выберите её ещё раз." };
+    return { ok: false, message: "That folder could not be opened. Please choose it again." };
   }
 
   await setFolder(user.tenantId, parsed.data.folderId, name);
 
   revalidatePath("/settings");
 
-  return { ok: true, message: `Отчёты будут складываться в «${name}».` };
+  return { ok: true, message: `Reports will be written to "${name}".` };
 }
 
 export async function disconnectDrive(): Promise<DriveResult> {
@@ -75,7 +75,7 @@ export async function disconnectDrive(): Promise<DriveResult> {
 
   return {
     ok: true,
-    message: "Google Drive отключён. Уже выгруженные файлы остаются на месте.",
+    message: "Google Drive disconnected. Files already uploaded stay where they are.",
   };
 }
 

@@ -70,7 +70,9 @@ export function TransactionsView({
             checked={params.get("attention") === "1"}
             onChange={(checked) => update("attention", checked ? "1" : null)}
           />
-          <Typography.Text>Needs attention</Typography.Text>
+          <Tooltip title="Rows where a number or a date could not be read. Fix them in the source file and upload it again — values are never edited here.">
+            <Typography.Text>Needs attention</Typography.Text>
+          </Tooltip>
         </Space>
 
         <Space>
@@ -85,7 +87,10 @@ export function TransactionsView({
       </Space>
 
       {totals.length > 0 ? (
-        <Space wrap style={{ marginBottom: 16 }}>
+        <Space wrap style={{ marginBottom: 16 }} align="center">
+          <Tooltip title="Totals for the current filter, one line per currency. Currencies are never added together.">
+            <Typography.Text type="secondary">Totals</Typography.Text>
+          </Tooltip>
           {totals.map((total) => (
             <Tag key={total.currency} style={{ padding: "4px 10px" }}>
               <b>{total.currency}</b> · gross {trim(total.gross)} · VAT {trim(total.vat)} ·{" "}
@@ -129,7 +134,15 @@ export function TransactionsView({
               </Space>
             ),
           },
-          { title: "Period", dataIndex: "periodLabel", width: 140 },
+          {
+            title: (
+              <Tooltip title="Inherited from the file, not derived per row. Reports select on it.">
+                Period
+              </Tooltip>
+            ),
+            dataIndex: "periodLabel",
+            width: 140,
+          },
           {
             title: "Type",
             dataIndex: "transactionType",
@@ -139,7 +152,11 @@ export function TransactionsView({
           },
           { title: "SKU", dataIndex: "sku", width: 170, ellipsis: true },
           {
-            title: "Gross",
+            title: (
+              <Tooltip title="The amount as the channel reported it, tax included. Refunds are negative in every channel.">
+                Gross
+              </Tooltip>
+            ),
             dataIndex: "gross",
             align: "right",
             width: 120,
@@ -175,9 +192,11 @@ export function TransactionsView({
             key: "source",
             width: 90,
             render: (_, row) => (
-              <Button size="small" onClick={() => setDrilling(row.id)}>
-                Source
-              </Button>
+              <Tooltip title="Open the original file row this figure came from.">
+                <Button size="small" onClick={() => setDrilling(row.id)}>
+                  Source
+                </Button>
+              </Tooltip>
             ),
           },
         ]}

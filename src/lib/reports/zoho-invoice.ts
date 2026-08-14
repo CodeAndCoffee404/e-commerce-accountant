@@ -83,14 +83,14 @@ export function generateZohoInvoice(
     const country = row.countryCode;
 
     if (!country) {
-      skip("Amazon Monthly: строка без страны");
+      skip("Amazon Monthly: row without a country");
       continue;
     }
 
     const orderType = ORDER_TYPES[country];
 
     if (row.transactionType !== orderType) {
-      skip(`Amazon Monthly ${country}: не заказ`);
+      skip(`Amazon Monthly ${country}: not an order`);
       continue;
     }
 
@@ -99,28 +99,28 @@ export function generateZohoInvoice(
     const sales = row.netAmount;
 
     if (sales === null || sales.toDecimalPlaces(2).isZero()) {
-      skip(`Amazon Monthly ${country}: нулевая сумма продажи`);
+      skip(`Amazon Monthly ${country}: zero product sales`);
       continue;
     }
 
     const quantity = row.quantity;
 
     if (quantity === null || quantity.isZero()) {
-      skip(`Amazon Monthly ${country}: нет количества`);
+      skip(`Amazon Monthly ${country}: no quantity`);
       continue;
     }
 
     const sku = row.sku?.trim();
 
     if (!sku) {
-      skip(`Amazon Monthly ${country}: нет SKU`);
+      skip(`Amazon Monthly ${country}: no SKU`);
       continue;
     }
 
     const decision = decideSku(context.rules, "amazon", sku);
 
     if (decision.kind === "ignore") {
-      skip(`Amazon Monthly ${country}: SKU в списке исключений`);
+      skip(`Amazon Monthly ${country}: SKU is on the ignore list`);
       continue;
     }
 
@@ -150,7 +150,7 @@ export function generateZohoInvoice(
     const rate = context.fx[currency];
 
     if (!rate && currency !== "EUR") {
-      warnings.push(`Нет курса ${currency} на ${context.period.end} — счёт ${group.country}`);
+      warnings.push(`No ${currency} rate as at ${context.period.end} — invoice ${group.country}`);
     }
 
     const decision = decideSku(context.rules, "amazon", group.sku);

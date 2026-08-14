@@ -124,7 +124,7 @@ function readPeriodFromColumn(
   if (columnIndex === -1) {
     return reject(
       "PERIOD_COLUMN_NOT_FOUND",
-      `Колонка «${dataset.periodColumn}» не найдена.`,
+      `Column "${dataset.periodColumn}" not found.`,
       dataset,
       headerRowIndex,
     );
@@ -137,7 +137,7 @@ function readPeriodFromColumn(
   if (dataset.periodFilterColumn && filterIndex === -1) {
     return reject(
       "PERIOD_COLUMN_NOT_FOUND",
-      `Колонка «${dataset.periodFilterColumn}» не найдена.`,
+      `Column "${dataset.periodFilterColumn}" not found.`,
       dataset,
       headerRowIndex,
     );
@@ -164,7 +164,7 @@ function readPeriodFromColumn(
     if (!parsed) {
       return reject(
         "PERIOD_INVALID",
-        `Значение «${raw}» в колонке «${dataset.periodColumn}» не разобрано как дата.`,
+        `Value "${raw}" in column "${dataset.periodColumn}" is not a date this channel writes.`,
         dataset,
         headerRowIndex,
       );
@@ -174,7 +174,7 @@ function readPeriodFromColumn(
   }
 
   if (!sawUsableRow) {
-    return reject("PERIOD_INVALID", "В файле нет строк с датой.", dataset, headerRowIndex);
+    return reject("PERIOD_INVALID", "The file has no dated rows.", dataset, headerRowIndex);
   }
 
   const period = buildPeriod(collectPeriods(found));
@@ -189,17 +189,17 @@ function readPeriodFromColumn(
 function periodFailureMessage(reason: string): string {
   switch (reason) {
     case "NO_PERIOD_VALUES":
-      return "В файле нет дат, по которым можно определить период.";
+      return "The file has no dates to derive a period from.";
     case "INVALID_NUMBER_OF_MONTHS":
-      return "Файл должен покрывать один месяц или полный квартал — найдено другое число месяцев.";
+      return "A file must cover one month or one whole quarter, and this covers neither.";
     case "MULTIPLE_YEARS":
-      return "Файл покрывает месяцы разных лет.";
+      return "The file spans months in different years.";
     case "MULTIPLE_QUARTERS":
-      return "Файл покрывает месяцы разных кварталов.";
+      return "The file spans months in different quarters.";
     case "INCOMPLETE_QUARTER":
-      return "Найдены три месяца, но они не составляют полный календарный квартал.";
+      return "Three months, but not a whole calendar quarter.";
     default:
-      return "Период не определён.";
+      return "The period could not be determined.";
   }
 }
 
@@ -309,7 +309,7 @@ function classifyAmazonMonthly(
     if (!country) {
       return reject(
         "COUNTRY_NOT_DETECTED",
-        `Маркетплейс «${marketplace}» не входит в список поддерживаемых.`,
+        `Marketplace "${marketplace}" is not one this system knows.`,
         null,
         match.headerRowIndex,
       );
@@ -321,7 +321,7 @@ function classifyAmazonMonthly(
   if (!country) {
     return reject(
       "COUNTRY_NOT_DETECTED",
-      "Тип распознан, но страну определить не удалось: колонка маркетплейса пуста.",
+      "The report type was recognised but not its country: the marketplace column is empty.",
       null,
       match.headerRowIndex,
     );
@@ -357,7 +357,7 @@ function classifyAmazonMonthly(
   if (dateColumnIndex === -1) {
     return reject(
       "PERIOD_COLUMN_NOT_FOUND",
-      `Колонка «${match.profile.dateHeader}» не найдена, а имя файла периода не содержит.`,
+      `Column "${match.profile.dateHeader}" is missing and the filename carries no period.`,
       dataset,
       match.headerRowIndex,
     );
@@ -374,7 +374,7 @@ function classifyAmazonMonthly(
     if (!parsed) {
       return reject(
         "PERIOD_INVALID",
-        `Значение «${raw}» в колонке даты не разобрано.`,
+        `Value "${raw}" in the date column could not be read.`,
         dataset,
         match.headerRowIndex,
       );
@@ -412,7 +412,7 @@ function classifyAmazonMonthly(
 
 export function classify(grid: Grid, filename: string): Classification {
   if (grid.length === 0) {
-    return reject("EMPTY_FILE", "Файл пуст.", null, null);
+    return reject("EMPTY_FILE", "The file is empty.", null, null);
   }
 
   // Amazon Monthly first: its header sits below a preamble, and checking the
@@ -446,7 +446,7 @@ export function classify(grid: Grid, filename: string): Classification {
 
   return reject(
     "TYPE_NOT_DETECTED",
-    "Тип отчёта не распознан: ни один набор обязательных заголовков не совпал.",
+    "Report type not recognised: no set of required headers matched.",
     null,
     null,
   );

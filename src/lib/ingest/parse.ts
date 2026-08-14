@@ -96,7 +96,7 @@ function parseCsvGrid(bytes: Uint8Array): ParseResult {
     return {
       ok: false,
       code: "UNREADABLE",
-      message: `Не удалось разобрать CSV: ${(error as Error).message}`,
+      message: `Could not read the CSV: ${(error as Error).message}`,
     };
   }
 }
@@ -175,9 +175,19 @@ async function stripNamespacePrefixes(bytes: Uint8Array): Promise<Uint8Array> {
 async function loadWorkbook(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
 
-  // Copy into a fresh ArrayBuffer: a Uint8Array view of a larger buffer would
-  // hand exceljs bytes that are not the file.
-  await workbook.xlsx.load(bytes.slice().buffer as ArrayBuffer);
+  // A genuine copy, byte by byte.
+  //
+  // `bytes.slice().buffer` looks like one and is not: Node's Buffer overrides
+  // slice to return a view on the same memory, and small files come out of a
+  // shared allocation pool. Handing exceljs `.buffer` therefore handed it the
+  // whole pool — including whatever file was read before. It parsed a different
+  // workbook depending on what else the process had touched, which is how a
+  // Polish report came back classified as Irish.
+  const copy = new Uint8Array(bytes.byteLength);
+
+  copy.set(bytes);
+
+  await workbook.xlsx.load(copy.buffer);
 
   return workbook;
 }
@@ -193,7 +203,7 @@ async function parseXlsxGrid(bytes: Uint8Array): Promise<ParseResult> {
     const sheet = workbook.worksheets[0];
 
     if (!sheet) {
-      return { ok: false, code: "UNREADABLE", message: "В книге нет ни одного листа." };
+      return { ok: false, code: "UNREADABLE", message: "The workbook has no sheets." };
     }
 
     const grid: string[][] = [];
@@ -218,7 +228,7 @@ async function parseXlsxGrid(bytes: Uint8Array): Promise<ParseResult> {
     return {
       ok: false,
       code: "UNREADABLE",
-      message: `Не удалось разобрать XLSX: ${(error as Error).message}`,
+      message: `Could not read the XLSX: ${(error as Error).message}`,
     };
   }
 }
@@ -236,7 +246,7 @@ export async function parseSpreadsheet(bytes: Uint8Array, filename: string): Pro
       ok: false,
       code: "LEGACY_XLS",
       message:
-        "Старый формат .xls не поддерживается. Откройте файл в Excel и сохраните как .xlsx или .csv.",
+        "The old .xls format is not supported. Open the file in Excel and save it as .xlsx or .csv.",
     };
   }
 
@@ -248,6 +258,6 @@ export async function parseSpreadsheet(bytes: Uint8Array, filename: string): Pro
   return {
     ok: false,
     code: "UNSUPPORTED_FORMAT",
-    message: `Формат «.${extension}» не поддерживается. Загрузите .csv или .xlsx.`,
+    message: `The ".${extension}" format is not supported. Upload a .csv or .xlsx file.`,
   };
 }

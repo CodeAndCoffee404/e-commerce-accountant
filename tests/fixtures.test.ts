@@ -32,8 +32,8 @@ function collect(): string[] {
 
 const files = collect();
 
-describe("обезличенные фикстуры", () => {
-  it("покрывают каждый канал и каждую страну Amazon", () => {
+describe("the anonymised fixtures", () => {
+  it("cover every channel and every Amazon country", () => {
     const covered = new Set(files.map((file) => path.basename(file).split(" - ")[0]));
 
     const expected = [
@@ -49,7 +49,7 @@ describe("обезличенные фикстуры", () => {
     expect([...covered].sort()).toEqual([...expected].sort());
   });
 
-  it("покрывают оба формата источника, они сериализуют даты по-разному", () => {
+  it("cover both source formats, which serialise dates differently", () => {
     const directories = new Set(files.map((file) => path.basename(path.dirname(file))));
 
     expect([...directories].sort()).toEqual(["from-csv", "from-xlsx"]);
@@ -76,7 +76,7 @@ describe("обезличенные фикстуры", () => {
     },
   );
 
-  it("не содержит настоящих адресов почты", () => {
+  it("contain no real email addresses", () => {
     for (const file of files) {
       const text = readFileSync(file, "utf8");
       const domains = [...text.matchAll(/[\w.+-]+@([\w.-]+)/g)].map((match) => match[1]);

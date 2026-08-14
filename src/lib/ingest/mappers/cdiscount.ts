@@ -24,7 +24,7 @@ export function mapCdiscount({ grid, headerRowIndex }: MapContext): MapResult {
     const vat = attention.take(reader.decimal(rowIndex, "VAT amount"));
     const occurredOn = parseIsoDate(reader.text(rowIndex, "Accounting date"));
 
-    if (occurredOn === null) attention.add("Не удалось определить дату учёта.");
+    if (occurredOn === null) attention.add("The accounting date could not be read.");
 
     rows.push({
       sourceRowNumber: rowIndex + 1,

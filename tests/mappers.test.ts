@@ -50,7 +50,7 @@ async function mapFixture(file: string) {
 
 const files = collect();
 
-describe("мапперы каналов", () => {
+describe("the channel mappers", () => {
   it.each(files.map((file) => [path.basename(file), file]))("%s", async (_name, file) => {
     const { result } = await mapFixture(file);
 
@@ -58,7 +58,7 @@ describe("мапперы каналов", () => {
     expect(result.rows.length).toBeGreaterThan(0);
   });
 
-  it("не оставляет строк без даты", async () => {
+  it("leave no row without a date", async () => {
     const undated: string[] = [];
 
     for (const file of files) {
@@ -71,22 +71,22 @@ describe("мапперы каналов", () => {
     expect(undated).toEqual([]);
   });
 
-  it("не оставляет строк, требующих внимания", async () => {
-    // Любая такая строка — это либо непонятое число, либо неразобранная дата.
-    // На чистом корпусе их быть не должно.
+  it("leave no row needing attention", async () => {
+    // Any such row is either a number that was not understood or a date that
+    // was not parsed. A clean corpus should produce none.
     const flagged: string[] = [];
 
     for (const file of files) {
       const { name, result } = await mapFixture(file);
       const row = result.rows.find((candidate) => candidate.needsAttention);
 
-      if (row) flagged.push(`${name} строка ${row.sourceRowNumber}: ${row.attentionReason}`);
+      if (row) flagged.push(`${name} row ${row.sourceRowNumber}: ${row.attentionReason}`);
     }
 
     expect(flagged).toEqual([]);
   });
 
-  it("складывает суммы Amazon Monthly без потери копеек", async () => {
+  it("adds Amazon Monthly amounts without losing cents", async () => {
     const file = files.find((candidate) => candidate.includes("Amazon Monthly Transaction report DE"));
 
     expect(file).toBeDefined();
@@ -96,7 +96,7 @@ describe("мапперы каналов", () => {
 
     expect(withSales.length).toBeGreaterThan(0);
 
-    // Ровно тот случай, где legacy получал ноль: «25,13» с запятой.
+    // Exactly where legacy produced zero: "25,13" with a comma.
     for (const row of withSales.slice(0, 20)) {
       expect(row.netAmount!.isZero() && row.gross?.isZero()).toBe(false);
     }

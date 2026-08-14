@@ -14,6 +14,7 @@ import { parseSpreadsheet } from "@/lib/ingest/parse";
 
 import { MAX_UPLOAD_BYTES } from "./constants";
 import { ingestSourceFile } from "./ingest";
+import { isOwnUpload } from "./paths";
 
 const inputSchema = z.object({
   pathname: z.string().min(1),
@@ -49,15 +50,23 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
   const input = inputSchema.parse(raw);
   const db = getDb();
 
+  // Checked before a single byte is touched. `pathname` comes from the browser,
+  // and this function both reads it and deletes it when a file is refused —
+  // without this, naming another tenant's object would disclose it or destroy
+  // it.
+  if (!isOwnUpload(input.pathname, user.tenantId)) {
+    return { ok: false, message: "That file does not belong to this account." };
+  }
+
   const bytes = await readBlob(input.pathname);
 
   if (!bytes) {
-    return { ok: false, message: "Файл не найден в хранилище — попробуйте загрузить ещё раз." };
+    return { ok: false, message: "The file is not in storage — try uploading it again." };
   }
 
   if (bytes.byteLength > MAX_UPLOAD_BYTES) {
     await discard(input.pathname);
-    return { ok: false, message: "Файл больше 20 МБ." };
+    return { ok: false, message: "The file is larger than 20 MB." };
   }
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -75,7 +84,7 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
 
     return {
       ok: false,
-      message: `Такой файл уже загружен ранее как «${duplicate.filename}» — содержимое совпадает побайтово.`,
+      message: `Already uploaded as "${duplicate.filename}" — the contents are byte for byte identical.`,
     };
   }
 

@@ -49,9 +49,9 @@ export async function ingestSourceFile(
     .where(and(eq(schema.sourceFiles.id, fileId), eq(schema.sourceFiles.tenantId, tenantId)))
     .limit(1);
 
-  if (!file) throw new Error("Файл не найден.");
+  if (!file) throw new Error("File not found.");
   if (!file.dataset || !file.periodLabel || !file.periodStart || !file.periodEnd) {
-    throw new Error("Файл не классифицирован — раскладывать нечего.");
+    throw new Error("The file has not been classified — there is nothing to parse.");
   }
 
   const period: Period = {

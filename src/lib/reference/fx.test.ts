@@ -23,7 +23,7 @@ const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 </gesmes:Envelope>`;
 
 describe("parseEcbFeed", () => {
-  it("читает все дни и все валюты", () => {
+  it("reads every day and every currency", () => {
     const quotes = parseEcbFeed(FEED);
 
     expect(quotes).toHaveLength(8);
@@ -32,7 +32,7 @@ describe("parseEcbFeed", () => {
     );
   });
 
-  it("сохраняет курс строкой, без потерь на double", () => {
+  it("keeps the rate as a string, with nothing lost to a double", () => {
     const quotes = parseEcbFeed(FEED);
     const huf = quotes.find((quote) => quote.quote === "HUF" && quote.rateDate === "2026-07-31");
 
@@ -40,16 +40,16 @@ describe("parseEcbFeed", () => {
     expect(quotes.find((quote) => quote.quote === "GBP")?.rate).toBe("0.84255");
   });
 
-  it("проставляет базу — котировки ЕЦБ всегда к евро", () => {
+  it("sets the base — ECB quotes are always against the euro", () => {
     expect(parseEcbFeed(FEED).every((quote) => quote.base === "EUR")).toBe(true);
   });
 
-  it("на пустом или чужом документе возвращает пусто, а не мусор", () => {
+  it("returns nothing rather than rubbish for an empty or foreign document", () => {
     expect(parseEcbFeed("")).toEqual([]);
     expect(parseEcbFeed("<html><body>Service unavailable</body></html>")).toEqual([]);
   });
 
-  it("переживает двойные кавычки и самозакрывающийся день", () => {
+  it("survives double quotes and a self-closing day", () => {
     const alternative = `<Cube time="2026-01-02"><Cube currency="USD" rate="1.1"></Cube></Cube>`;
 
     expect(parseEcbFeed(alternative)).toEqual([

@@ -22,11 +22,11 @@ const buildSchema = z.object({
 export async function buildReport(input: unknown): Promise<BuildResult> {
   const user = await requireUser();
 
-  if (user.role === "viewer") return { ok: false, message: "Недостаточно прав." };
+  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
 
   const parsed = buildSchema.safeParse(input);
 
-  if (!parsed.success) return { ok: false, message: "Не указан тип отчёта или период." };
+  if (!parsed.success) return { ok: false, message: "No report type or period given." };
 
   const outcome = await runReport({
     tenantId: user.tenantId,
@@ -47,8 +47,8 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
     runId: outcome.runId,
     message:
       warnings === 0
-        ? `Готово: ${rows} строк.`
-        : `Готово: ${rows} строк, предупреждений: ${warnings}.`,
+        ? `Done: ${rows} rows.`
+        : `Done: ${rows} rows, ${warnings} warnings.`,
   };
 }
 
@@ -81,11 +81,11 @@ export async function downloadArtifact(
     )
     .limit(1);
 
-  if (!artifact?.blobKey) return { ok: false, message: "Файл не найден." };
+  if (!artifact?.blobKey) return { ok: false, message: "File not found." };
 
   const stored = await get(artifact.blobKey, { access: "private" }).catch(() => null);
 
-  if (!stored?.stream) return { ok: false, message: "Файл недоступен в хранилище." };
+  if (!stored?.stream) return { ok: false, message: "The file is not available in storage." };
 
   const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
 
@@ -100,7 +100,7 @@ export async function downloadArtifact(
 export async function republish(runId: string): Promise<BuildResult> {
   const user = await requireUser();
 
-  if (user.role === "viewer") return { ok: false, message: "Недостаточно прав." };
+  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
 
   const result = await publishRun(user.tenantId, runId);
 

@@ -19,7 +19,7 @@ function periodOf(label: string) {
   const [year, rest] = label.split(".");
   const month = monthByNumber(Number(rest.slice(0, 2)));
 
-  if (!month) throw new Error(`не разобран период ${label}`);
+  if (!month) throw new Error(`could not read the period ${label}`);
 
   const built = buildPeriod(collectPeriods([{ year: Number(year), month }]));
 
@@ -38,7 +38,7 @@ async function sourceHeaders(label: string): Promise<string[]> {
     (entry) => entry.includes(label) && entry.endsWith(".csv"),
   );
 
-  if (!name) throw new Error(`нет исходника Amazon VAT за ${label}`);
+  if (!name) throw new Error(`no Amazon VAT source for ${label}`);
 
   const parsed = await parseSpreadsheet(readFileSync(path.join(directory, name)), name);
 
@@ -53,7 +53,7 @@ async function sourceHeaders(label: string): Promise<string[]> {
   );
 }
 
-describe.skipIf(!corpusAvailable)("Sales report by currency против эталона", () => {
+describe.skipIf(!corpusAvailable)("Sales report by currency against the reference", () => {
   it.each(PERIODS)("%s", async (label) => {
     const headers = await sourceHeaders(label);
     const ledger = await ledgerForPeriod(label, ["amazon_vat"]);
@@ -81,7 +81,7 @@ describe.skipIf(!corpusAvailable)("Sales report by currency против эта�
       const ourBody = sheet.rows.slice(0, -1);
       const theirBody = golden.rows.slice(0, -1);
 
-      expect(ourBody.length, `${sheet.name}: число строк`).toBe(theirBody.length);
+      expect(ourBody.length, `${sheet.name}: row count`).toBe(theirBody.length);
 
       const totalIndex = headers.indexOf(TOTAL_COLUMN);
       const sum = (rows: (string | number | null)[][]) =>
@@ -95,12 +95,12 @@ describe.skipIf(!corpusAvailable)("Sales report by currency против эта�
 
       // Ours is the exact sum of its own rows; legacy's carries float drift, so
       // the two are compared within a cent. See docs/known-deviations.md §3.
-      expect(ourTotal.toFixed(), `${sheet.name}: итог — точная сумма строк`).toBe(
+      expect(ourTotal.toFixed(), `${sheet.name}: the total is the exact sum of its rows`).toBe(
         sum(ourBody).toFixed(),
       );
       expect(
         ourTotal.minus(theirTotal).abs().lte("0.005"),
-        `${sheet.name}: итог ${ourTotal.toFixed()} против ${theirTotal.toFixed()}`,
+        `${sheet.name}: total ${ourTotal.toFixed()} against ${theirTotal.toFixed()}`,
       ).toBe(true);
     }
   }, 180_000);

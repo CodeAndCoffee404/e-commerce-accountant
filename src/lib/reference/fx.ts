@@ -53,7 +53,7 @@ export async function fetchEcbRates(feed: keyof typeof FEEDS = "recent"): Promis
   });
 
   if (!response.ok) {
-    throw new Error(`ЕЦБ ответил ${response.status} на запрос курсов.`);
+    throw new Error(`The ECB answered ${response.status} to the rate request.`);
   }
 
   return parseEcbFeed(await response.text());

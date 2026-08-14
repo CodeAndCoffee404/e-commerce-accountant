@@ -34,7 +34,7 @@ export function mapAmazonMonthly({ grid, headerRowIndex, country }: MapContext):
   );
 
   if (!profile) {
-    return { rows, missingColumns: ["не распознана языковая раскладка заголовков"] };
+    return { rows, missingColumns: ["the header layout matches no known marketplace language"] };
   }
 
   const [dateHeader, settlementHeader, typeHeader, orderHeader, skuHeader] =
@@ -52,7 +52,7 @@ export function mapAmazonMonthly({ grid, headerRowIndex, country }: MapContext):
 
     const occurredOn = parseAmazonMonthlyTimestamp(reader.text(rowIndex, dateHeader));
 
-    if (occurredOn === null) attention.add("Не удалось определить дату транзакции.");
+    if (occurredOn === null) attention.add("The transaction date could not be read.");
 
     rows.push({
       sourceRowNumber: rowIndex + 1,

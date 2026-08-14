@@ -42,7 +42,7 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
 export function reportDefinition(id: ReportTypeId): ReportDefinition {
   const found = REPORT_DEFINITIONS.find((definition) => definition.id === id);
 
-  if (!found) throw new Error(`Неизвестный тип отчёта: ${id}`);
+  if (!found) throw new Error(`Unknown report type: ${id}`);
 
   return found;
 }

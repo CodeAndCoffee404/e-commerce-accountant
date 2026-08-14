@@ -38,11 +38,11 @@ export async function previewUpload(fileId: string): Promise<Preview> {
     )
     .limit(1);
 
-  if (!file) return { ok: false, message: "Файл не найден." };
+  if (!file) return { ok: false, message: "File not found." };
 
   const result = await get(file.blobKey, { access: "private" }).catch(() => null);
 
-  if (!result?.stream) return { ok: false, message: "Файл недоступен в хранилище." };
+  if (!result?.stream) return { ok: false, message: "The file is not available in storage." };
 
   const bytes = new Uint8Array(await new Response(result.stream).arrayBuffer());
   const parsed = await parseSpreadsheet(bytes, file.filename);

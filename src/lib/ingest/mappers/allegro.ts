@@ -21,7 +21,7 @@ export function mapAllegro({ grid, headerRowIndex, period }: MapContext): MapRes
     const amount = attention.take(reader.decimal(rowIndex, "kwota"));
     const occurredOn = parseAllegroTimestamp(reader.text(rowIndex, "data"));
 
-    if (occurredOn === null) attention.add("Не удалось определить дату операции.");
+    if (occurredOn === null) attention.add("The operation date could not be read.");
 
     rows.push({
       sourceRowNumber: rowIndex + 1,

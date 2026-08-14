@@ -60,7 +60,7 @@ export function generateOffAmazonSales(
           ? cdiscountRow(row, context, skipped, warnings)
           : row.dataset === "shopify"
             ? shopifyRow(row, context, skipped, warnings)
-            : skip(skipped, `Канал ${row.dataset} не входит в этот отчёт`);
+            : skip(skipped, `Channel ${row.dataset} is not part of this report`);
 
     if (mapped) output.push(mapped);
   }
@@ -90,7 +90,7 @@ function allegroRow(
 ): (string | number | null)[] | null {
   // Only lines with a buyer are sales. The rest are Allegro's own fees, and
   // the statement mixes them into the same list.
-  if (!row.raw["kupujący"]) return skip(skipped, "Allegro: строка без покупателя — комиссия");
+  if (!row.raw["kupujący"]) return skip(skipped, "Allegro: no buyer on the line, so it is a fee");
 
   const operations = channelRule<Record<string, string>>(
     context.rules,
@@ -103,31 +103,31 @@ function allegroRow(
   if (!type) {
     // Legacy aborts the whole report here. Skipping one row and naming it is
     // more useful: the operator sees what to fix instead of nothing at all.
-    warnings.push(`Allegro: неизвестная операция «${operation}» в строке ${row.sourceRowNumber}`);
+    warnings.push(`Allegro: unknown operation "${operation}" on row ${row.sourceRowNumber}`);
 
-    return skip(skipped, "Allegro: неизвестный тип операции");
+    return skip(skipped, "Allegro: unknown operation type");
   }
 
-  if (row.gross === null) return skip(skipped, "Allegro: сумма не разобрана");
+  if (row.gross === null) return skip(skipped, "Allegro: amount could not be read");
 
   const currency = row.currency;
 
-  if (!currency) return skip(skipped, "Allegro: валюта не определена");
+  if (!currency) return skip(skipped, "Allegro: currency not determined");
 
   const rule = allegroCurrencyRule(context.rules, currency);
 
   if (!rule) {
-    warnings.push(`Allegro: нет правила для валюты ${currency}`);
+    warnings.push(`Allegro: no rule for currency ${currency}`);
 
-    return skip(skipped, "Allegro: валюта без правила");
+    return skip(skipped, "Allegro: currency has no rule");
   }
 
   const rate = vatRateOn(context.rules, rule.country, row.occurredOn ?? context.period.end);
 
   if (!rate) {
-    warnings.push(`Allegro: нет ставки НДС для ${rule.country}`);
+    warnings.push(`Allegro: no VAT rate for ${rule.country}`);
 
-    return skip(skipped, "Allegro: нет ставки НДС");
+    return skip(skipped, "Allegro: no VAT rate");
   }
 
   // A refund is negative, whatever sign the statement used. Single rule across
@@ -168,9 +168,9 @@ function cdiscountRow(
   const type = types?.[invoiceType];
 
   // Subscriptions, commission credits and guarantee reserves are not sales.
-  if (!type) return skip(skipped, `Cdiscount: тип «${invoiceType}» не является продажей`);
+  if (!type) return skip(skipped, `Cdiscount: type "${invoiceType}" is not a sale`);
 
-  if (row.gross === null) return skip(skipped, "Cdiscount: сумма не разобрана");
+  if (row.gross === null) return skip(skipped, "Cdiscount: amount could not be read");
 
   const defaults = channelRule<{
     currency: string;
@@ -181,9 +181,9 @@ function cdiscountRow(
   }>(context.rules, "cdiscount", "defaults");
 
   if (!defaults) {
-    warnings.push("Cdiscount: нет правила defaults");
+    warnings.push("Cdiscount: the defaults rule is missing");
 
-    return skip(skipped, "Cdiscount: нет правила defaults");
+    return skip(skipped, "Cdiscount: the defaults rule is missing");
   }
 
   const rate = vatRateOn(
@@ -193,9 +193,9 @@ function cdiscountRow(
   );
 
   if (!rate) {
-    warnings.push(`Cdiscount: нет ставки НДС для ${defaults.arrivalCountry}`);
+    warnings.push(`Cdiscount: no VAT rate for ${defaults.arrivalCountry}`);
 
-    return skip(skipped, "Cdiscount: нет ставки НДС");
+    return skip(skipped, "Cdiscount: no VAT rate");
   }
 
   const total = type === "REFUND" ? row.gross.abs().negated() : row.gross;
@@ -248,12 +248,12 @@ function shopifyRow(
   // the rest, so their presence is what identifies that first line.
   const orderTotal = row.raw["Total"];
 
-  if (!orderTotal) return skip(skipped, "Shopify: позиция заказа, итог берётся с первой строки");
+  if (!orderTotal) return skip(skipped, "Shopify: a line item; the order total comes from the first row");
 
   const excluded = channelRule<string[]>(context.rules, "shopify", "excluded_sources") ?? [];
 
   if (excluded.includes(row.raw["Source"] ?? "")) {
-    return skip(skipped, "Shopify: черновик заказа");
+    return skip(skipped, "Shopify: draft order");
   }
 
   const defaults = channelRule<{
@@ -265,9 +265,9 @@ function shopifyRow(
   }>(context.rules, "shopify", "defaults");
 
   if (!defaults) {
-    warnings.push("Shopify: нет правила defaults");
+    warnings.push("Shopify: the defaults rule is missing");
 
-    return skip(skipped, "Shopify: нет правила defaults");
+    return skip(skipped, "Shopify: the defaults rule is missing");
   }
 
   const aliases = channelRule<Record<string, string>>(context.rules, "shopify", "country_aliases") ?? {};
@@ -279,16 +279,16 @@ function shopifyRow(
 
   // Swiss orders are out of scope by agreement, and silently — no marker in
   // the report, see the rules table in PLAN §1.
-  if (skippedCountries.includes(arrival)) return skip(skipped, `Shopify: доставка в ${arrival}`);
+  if (skippedCountries.includes(arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
 
   let total: Decimal;
 
   try {
     total = new Decimal(orderTotal.replace(",", "."));
   } catch {
-    warnings.push(`Shopify: итог заказа «${orderTotal}» не разобран, строка ${row.sourceRowNumber}`);
+    warnings.push(`Shopify: order total "${orderTotal}" could not be read, row ${row.sourceRowNumber}`);
 
-    return skip(skipped, "Shopify: итог заказа не разобран");
+    return skip(skipped, "Shopify: order total could not be read");
   }
 
   const departure = defaults.departureCountry;
@@ -304,7 +304,7 @@ function shopifyRow(
     // Legacy highlights the cell yellow and leaves it to a human. The agreed
     // replacement is a flag on the row: the fix is in the source file.
     warnings.push(
-      `Shopify: ставка НДС не определена для ${arrival}, строка ${row.sourceRowNumber}`,
+      `Shopify: no VAT rate for ${arrival}, row ${row.sourceRowNumber}`,
     );
   }
 

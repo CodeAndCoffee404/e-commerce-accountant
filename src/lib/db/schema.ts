@@ -128,7 +128,7 @@ export const allowedEmails = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
- * Приём файлов
+ * Uploaded files
  * ------------------------------------------------------------------ */
 
 export const datasetId = pgEnum("dataset_id", [
@@ -188,9 +188,10 @@ export const sourceFiles = pgTable(
     rejectMessage: text("reject_message"),
   },
   (table) => [
-    // Дедупликация по содержимому: тот же файл повторно не заводится.
+    // Deduplication by content: the same bytes are never recorded twice.
     uniqueIndex("source_files_sha_idx").on(table.tenantId, table.sha256),
-    // Срез (тенант, набор, страна, период) — единица замещения, см. PLAN §2.1.
+    // The slice (tenant, dataset, country, period) is the unit of replacement,
+    // see PLAN §2.1.
     index("source_files_slice_idx").on(
       table.tenantId,
       table.dataset,
@@ -202,7 +203,7 @@ export const sourceFiles = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
- * Журнал транзакций
+ * Transaction ledger
  * ------------------------------------------------------------------ */
 
 export const transactions = pgTable(
@@ -279,10 +280,10 @@ export const transactions = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
- * Справочники
+ * Reference data
  *
- * Ставки, номера и соответствия — данные, а не константы в коде. Иначе
- * смена ставки НДС или новый SKU означают правку кода разработчиком.
+ * Rates, registrations and mappings are rows, not constants in code. Otherwise
+ * a VAT change or a new SKU means a developer has to edit and deploy.
  * ------------------------------------------------------------------ */
 
 /**
@@ -305,8 +306,8 @@ export const vatRates = pgTable(
     note: text("note"),
   },
   (table) => [
-    // Одна ставка на страну и дату начала. Без этого ограничения повторное
-    // наполнение справочников не находило конфликта и плодило дубли.
+    // One rate per country and start date. Without this constraint a repeat
+    // seed found no conflict to skip and duplicated every rate.
     uniqueIndex("vat_rates_period_idx").on(table.tenantId, table.country, table.validFrom),
   ],
 );
@@ -391,7 +392,7 @@ export const fxRates = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
- * Подключение Google Drive
+ * Google Drive connection
  * ------------------------------------------------------------------ */
 
 export const googleConnectionStatus = pgEnum("google_connection_status", [
@@ -437,7 +438,7 @@ export const googleConnections = pgTable(
 export type GoogleConnection = typeof googleConnections.$inferSelect;
 
 /* ------------------------------------------------------------------ *
- * Отчёты
+ * Reports
  * ------------------------------------------------------------------ */
 
 export const reportType = pgEnum("report_type", [

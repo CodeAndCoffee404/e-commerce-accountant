@@ -58,19 +58,19 @@ function expectationFromName(file: string): { label: string; period: string } | 
 
 const files = await collectFiles(CORPUS);
 
-describe.skipIf(files.length === 0)("корпус реальных выгрузок", () => {
-  it("содержит ожидаемое число файлов", () => {
+describe.skipIf(files.length === 0)("the real export corpus", () => {
+  it("holds the expected number of files", () => {
     expect(files.length).toBeGreaterThanOrEqual(98);
   });
 
-  it("классифицирует каждую выгрузку", async () => {
+  it("classifies every export", async () => {
     const failures: string[] = [];
 
     for (const file of files) {
       const parsed = await parseSpreadsheet(readFileSync(file), path.basename(file));
 
       if (!parsed.ok) {
-        failures.push(`${path.basename(file)} — разбор: ${parsed.code}`);
+        failures.push(`${path.basename(file)} — parse: ${parsed.code}`);
         continue;
       }
 
@@ -85,12 +85,12 @@ describe.skipIf(files.length === 0)("корпус реальных выгруз�
       if (!expected) continue;
 
       if (result.label !== expected.label) {
-        failures.push(`${path.basename(file)} — тип «${result.label}», ожидался «${expected.label}»`);
+        failures.push(`${path.basename(file)} — type "${result.label}", expected "${expected.label}"`);
       }
 
       if (result.period.label !== expected.period) {
         failures.push(
-          `${path.basename(file)} — период «${result.period.label}», ожидался «${expected.period}»`,
+          `${path.basename(file)} — period "${result.period.label}", expected "${expected.period}"`,
         );
       }
     }
@@ -98,7 +98,7 @@ describe.skipIf(files.length === 0)("корпус реальных выгруз�
     expect(failures).toEqual([]);
   }, 120_000);
 
-  it("раскладывает каждую выгрузку в транзакции", async () => {
+  it("maps every export into transactions", async () => {
     const failures: string[] = [];
     let totalRows = 0;
 
@@ -120,17 +120,17 @@ describe.skipIf(files.length === 0)("корпус реальных выгруз�
       totalRows += result.rows.length;
 
       if (result.missingColumns.length > 0) {
-        failures.push(`${name} — нет колонок: ${result.missingColumns.join(", ")}`);
+        failures.push(`${name} — missing columns: ${result.missingColumns.join(", ")}`);
       }
 
       if (result.rows.length === 0) {
-        failures.push(`${name} — ни одной транзакции`);
+        failures.push(`${name} — no transactions at all`);
       }
 
       const flagged = result.rows.find((row) => row.needsAttention);
 
       if (flagged) {
-        failures.push(`${name} строка ${flagged.sourceRowNumber}: ${flagged.attentionReason}`);
+        failures.push(`${name} row ${flagged.sourceRowNumber}: ${flagged.attentionReason}`);
       }
     }
 

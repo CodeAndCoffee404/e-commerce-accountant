@@ -33,7 +33,7 @@ function periodOf(label: string) {
   const [year, rest] = label.split(".");
   const month = monthByNumber(Number(rest.slice(0, 2)));
 
-  if (!month) throw new Error(`не разобран период ${label}`);
+  if (!month) throw new Error(`could not read the period ${label}`);
 
   const built = buildPeriod(collectPeriods([{ year: Number(year), month }]));
 
@@ -58,7 +58,7 @@ function quantities(rows: readonly (readonly (string | number | null)[])[]) {
   return totals;
 }
 
-describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho против эталона", () => {
+describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho against the reference", () => {
   it.each(PERIODS)("%s", async (label) => {
     const golden = await readGolden(
       path.join(
@@ -72,7 +72,7 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho против этал
 
     const ledger = await ledgerForPeriod(label, ["amazon_monthly"]);
 
-    expect(missingCountries(ledger), "не хватает стран").toEqual([]);
+    expect(missingCountries(ledger), "marketplaces are missing").toEqual([]);
 
     const result = generateZohoInvoice(ledger, {
       period: periodOf(label),
@@ -95,13 +95,13 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho против этал
     expect([...oursByItem.keys()].sort()).toEqual([...theirsByItem.keys()].sort());
 
     for (const [key, quantity] of oursByItem) {
-      expect(quantity.toFixed(), `количество, ${key}`).toBe(theirsByItem.get(key)?.toFixed());
+      expect(quantity.toFixed(), `quantity, ${key}`).toBe(theirsByItem.get(key)?.toFixed());
     }
 
     // Where legacy managed to price an invoice, the lines must agree exactly.
     const priced = pricedInvoices(golden.rows);
 
-    expect(priced.size, "эталон не содержит ни одного счёта с ценой").toBeGreaterThanOrEqual(0);
+    expect(priced.size, "the reference has no priced invoice at all").toBeGreaterThanOrEqual(0);
 
     const oursCorrect = ours.filter((row) => priced.has(text(row[1])));
     const theirsCorrect = golden.rows.filter((row) => priced.has(text(row[1])));
@@ -130,21 +130,21 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho против этал
       // space for thousands, which the spreadsheet could not coerce even though
       // `279,20` beside it worked. Ours must not be zero there.
       if (total.isZero()) {
-        expect(oursRevenue.get(key)?.isZero(), `обнулено в legacy, у нас нет: ${key}`).toBe(false);
+        expect(oursRevenue.get(key)?.isZero(), `zeroed in legacy, must not be zero here: ${key}`).toBe(false);
         continue;
       }
 
       const ours = oursRevenue.get(key);
 
-      expect(ours, `нет нашей выручки по ${key}`).toBeDefined();
+      expect(ours, `no revenue of ours for ${key}`).toBeDefined();
       expect(
         ours!.minus(total).abs().lte("0.02"),
-        `выручка по ${key}: ${ours?.toFixed(2)} против ${total.toFixed(2)}`,
+        `revenue for ${key}: ${ours?.toFixed(2)} against ${total.toFixed(2)}`,
       ).toBe(true);
     }
   }, 180_000);
 
-  it("цена позиции больше не ноль — тот самый баг", async () => {
+  it("the item price is no longer zero — the bug itself", async () => {
     const label = "2026.07 July";
     const ledger = await ledgerForPeriod(label, ["amazon_monthly"]);
     const result = generateZohoInvoice(ledger, {
@@ -164,10 +164,10 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho против этал
     const zeroPriced = (rows: readonly (readonly (string | number | null)[])[]) =>
       rows.filter((row) => new Decimal(text(row[9]) || "0").isZero());
 
-    // Эталон: больше половины строк счёта ушли в Zoho с нулевой ценой.
+    // Reference: more than half the invoice lines went to Zoho priced at zero.
     expect(zeroPriced(golden.rows).length).toBeGreaterThan(golden.rows.length / 2);
 
-    // У нас цена есть у каждой строки.
+    // Every line of ours carries a price.
     expect(zeroPriced(result.sheets[0].rows)).toEqual([]);
   }, 180_000);
 });

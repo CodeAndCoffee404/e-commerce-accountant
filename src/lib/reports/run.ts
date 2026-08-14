@@ -63,7 +63,7 @@ export async function runReport(input: {
     return {
       ok: false,
       runId: null,
-      message: `За период ${input.periodLabel} нет разобранных выгрузок для «${definition.label}».`,
+      message: `No parsed uploads for "${definition.label}" in ${input.periodLabel}.`,
     };
   }
 
@@ -73,7 +73,7 @@ export async function runReport(input: {
     return {
       ok: false,
       runId: null,
-      message: `«${definition.label}» строится только за ${definition.granularity.join(" или ")}, а ${input.periodLabel} — это ${granularity}.`,
+      message: `"${definition.label}" is built per ${definition.granularity.join(" or ")}, and ${input.periodLabel} is a ${granularity}.`,
     };
   }
 
@@ -111,7 +111,7 @@ export async function runReport(input: {
       if (missing.length > 0) {
         // Legacy refuses too, and rightly: a missing marketplace does not make
         // a smaller invoice, it makes one that omits a country in silence.
-        throw new Error(`Не хватает выгрузок Amazon Monthly: ${missing.join(", ")}.`);
+        throw new Error(`Missing Amazon Monthly uploads: ${missing.join(", ")}.`);
       }
     }
 
@@ -151,7 +151,7 @@ export async function runReport(input: {
 
     return { ok: true, runId: run.id, result, published };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Не удалось построить отчёт.";
+    const message = error instanceof Error ? error.message : "The report could not be built.";
 
     // The run stays, marked failed. A report that vanished on error tells the
     // operator nothing about why.
@@ -225,7 +225,7 @@ function build(
       // file rather than from a list kept in the code.
       const headers = Object.keys(rows.find((row) => row.dataset === "amazon_vat")?.raw ?? {});
 
-      if (headers.length === 0) throw new Error("В выгрузке Amazon VAT нет ни одной строки.");
+      if (headers.length === 0) throw new Error("The Amazon VAT upload has no rows.");
 
       void files;
 

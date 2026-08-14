@@ -1,6 +1,21 @@
 "use client";
 
-import { App, Button, Card, Form, Input, Modal, Popconfirm, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Space,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -85,7 +100,7 @@ function VatRates({
 
   return (
     <>
-      <Space style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16 }} wrap>
         <Button
           type="primary"
           disabled={!canEdit}
@@ -93,6 +108,11 @@ function VatRates({
         >
           Add rate
         </Button>
+        <Typography.Text type="secondary">
+          A rate applies from its start date onwards, so recalculating an old month uses the rate
+          that applied then. To change a rate, add a new row with the date it takes effect rather
+          than editing the old one.
+        </Typography.Text>
       </Space>
 
       <Table<VatRate>
@@ -184,7 +204,8 @@ function Skus({
           Add SKU
         </Button>
         <Typography.Text type="secondary">
-          Ignored SKUs are sold but never invoiced — the connectors.
+          Maps a channel SKU to the name and code the invoice should carry. An unmapped SKU still
+          reaches the invoice under its raw code. Ignored ones are sold but never invoiced.
         </Typography.Text>
       </Space>
 
@@ -278,6 +299,12 @@ function Rules({
 
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="middle">
+      <Typography.Paragraph type="secondary">
+        How each channel is read: which country a currency implies, which arrival countries are
+        skipped, what counts as a sale. These are assumptions as much as facts, which is why they
+        are here rather than buried in the code. Edit as JSON — a malformed value is refused.
+      </Typography.Paragraph>
+
       {data.map((rule) => {
         const stored = JSON.stringify(rule.value, null, 2);
         const draft = drafts[rule.id] ?? stored;
@@ -331,6 +358,12 @@ function Rules({
 
 function SellerVat({ data }: { data: ReferenceData["sellerVatNumbers"] }) {
   return (
+    <>
+    <Typography.Paragraph type="secondary">
+      The registrations reports quote as the seller. Which one a row gets follows from the
+      channel rule for its country and scheme.
+    </Typography.Paragraph>
+
     <Table
       dataSource={data}
       rowKey="id"
@@ -343,6 +376,7 @@ function SellerVat({ data }: { data: ReferenceData["sellerVatNumbers"] }) {
         { title: "Note", dataIndex: "note", ellipsis: true },
       ]}
     />
+    </>
   );
 }
 
@@ -382,9 +416,11 @@ function Fx({
         <Button disabled={!canEdit} loading={pending} onClick={() => run(() => refreshRates(true))}>
           Load full history
         </Button>
-        <Button disabled={!canEdit} loading={pending} onClick={() => run(() => restoreDefaults())}>
-          Restore missing defaults
-        </Button>
+        <Tooltip title="Adds back anything missing from the original rule set. Values you have edited are left as they are.">
+          <Button disabled={!canEdit} loading={pending} onClick={() => run(() => restoreDefaults())}>
+            Restore missing defaults
+          </Button>
+        </Tooltip>
       </Space>
     </Card>
   );
@@ -434,7 +470,7 @@ function EditModal({
             key={field.name}
             name={field.name}
             label={field.label}
-            rules={field.required ? [{ required: true, message: `${field.label} — обязательно` }] : []}
+            rules={field.required ? [{ required: true, message: `${field.label} is required` }] : []}
             valuePropName={field.type === "switch" ? "checked" : "value"}
           >
             {field.type === "switch" ? <Switch /> : <Input placeholder={field.placeholder} />}

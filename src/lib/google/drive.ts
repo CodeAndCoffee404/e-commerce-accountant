@@ -51,7 +51,7 @@ export async function uploadFile(
   );
 
   if (!response.ok) {
-    throw new Error(`Google Drive отказал: ${response.status} ${await response.text()}`);
+    throw new Error(`Google Drive refused: ${response.status} ${await response.text()}`);
   }
 
   return (await response.json()) as DriveFile;
@@ -100,7 +100,7 @@ export async function ensureFolder(
   });
 
   if (!created.ok) {
-    throw new Error(`Не удалось создать папку в Drive: ${await created.text()}`);
+    throw new Error(`Could not create the Drive folder: ${await created.text()}`);
   }
 
   return ((await created.json()) as { id: string }).id;

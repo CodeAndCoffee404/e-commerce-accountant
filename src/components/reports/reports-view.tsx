@@ -34,7 +34,7 @@ export function ReportsView({
     const periodLabel = choice[reportType];
 
     if (!periodLabel) {
-      message.warning("Выберите период.");
+      message.warning("Choose a period.");
       return;
     }
 
@@ -84,10 +84,15 @@ export function ReportsView({
                 {definition.description}
               </Typography.Paragraph>
 
+              <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+                Only periods with parsed uploads for this report are offered. Building it again
+                is safe — each run is recorded separately with the rules and rates it used.
+              </Typography.Paragraph>
+
               <Space.Compact style={{ width: "100%" }}>
                 <Select
                   style={{ width: "100%" }}
-                  placeholder={available.length === 0 ? "Нет данных" : "Период"}
+                  placeholder={available.length === 0 ? "No data" : "Period"}
                   disabled={available.length === 0}
                   value={choice[definition.id]}
                   onChange={(value) =>
@@ -139,7 +144,11 @@ export function ReportsView({
             ),
           },
           {
-            title: "Rows",
+            title: (
+              <Tooltip title="Rows written into the report, after the channel rules dropped what does not belong in it.">
+                Rows
+              </Tooltip>
+            ),
             dataIndex: "stats",
             width: 100,
             render: (stats: ReportRunCard["stats"]) => stats?.outputRows ?? "—",
@@ -165,7 +174,7 @@ export function ReportsView({
                       {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
                     </Button>
                     {artifact.driveUrl ? (
-                      <Tooltip title="Открыть в Google Drive">
+                      <Tooltip title="Open in Google Drive">
                         <Button
                           size="small"
                           href={artifact.driveUrl}
@@ -183,7 +192,11 @@ export function ReportsView({
             ),
           },
           {
-            title: "Drive",
+            title: (
+              <Tooltip title="Whether the files reached the client's Google Drive. A failed upload does not affect the report — the files are here and can be sent again.">
+                Drive
+              </Tooltip>
+            ),
             key: "drive",
             width: 120,
             render: (_, run) => {
@@ -244,6 +257,10 @@ function RunDetails({ run }: { run: ReportRunCard }) {
 
       <div>
         <Typography.Text strong>Sources</Typography.Text>
+        <br />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          The uploads this run read. Rebuilding after a new upload uses whatever is current then.
+        </Typography.Text>
         <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
           {run.sources.map((source) => (
             <li key={source}>
@@ -256,6 +273,10 @@ function RunDetails({ run }: { run: ReportRunCard }) {
       {(run.stats?.skipped?.length ?? 0) > 0 ? (
         <div>
           <Typography.Text strong>Skipped rows</Typography.Text>
+          <br />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Deliberate, not lost: fees, draft orders and anything the channel rules exclude.
+          </Typography.Text>
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
             {run.stats?.skipped?.map((entry) => (
               <li key={entry.reason}>

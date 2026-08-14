@@ -11,10 +11,10 @@
 export const RULES_EFFECTIVE_FROM = "2020-01-01";
 
 export const VAT_RATES: readonly { country: string; rate: string; note?: string }[] = [
-  { country: "PL", rate: "23", note: "Allegro, продажи в злотых" },
-  { country: "CZ", rate: "21", note: "Allegro, продажи в кронах" },
-  { country: "SK", rate: "20", note: "Allegro, продажи в евро — согласованное допущение" },
-  { country: "HU", rate: "27", note: "Allegro, продажи в форинтах" },
+  { country: "PL", rate: "23", note: "Allegro, sales settled in złoty" },
+  { country: "CZ", rate: "21", note: "Allegro, sales settled in koruna" },
+  { country: "SK", rate: "20", note: "Allegro, sales settled in euro — an agreed assumption" },
+  { country: "HU", rate: "27", note: "Allegro, sales settled in forint" },
   { country: "FR", rate: "20", note: "Cdiscount" },
   { country: "ES", rate: "21" },
   { country: "DE", rate: "19" },
@@ -23,7 +23,7 @@ export const VAT_RATES: readonly { country: string; rate: string; note?: string 
   { country: "BE", rate: "21" },
   { country: "IE", rate: "23" },
   { country: "SE", rate: "25" },
-  { country: "GB", rate: "20", note: "Shopify: при отсутствии ставки в файле берётся эта" },
+  { country: "GB", rate: "20", note: "Shopify: used when the file carries no rate" },
 ];
 
 export const SELLER_VAT_NUMBERS: readonly {
@@ -31,10 +31,10 @@ export const SELLER_VAT_NUMBERS: readonly {
   vatNumber: string;
   note?: string;
 }[] = [
-  { country: "PL", vatNumber: "PL5263307678", note: "Allegro, схема REGULAR" },
+  { country: "PL", vatNumber: "PL5263307678", note: "Allegro, REGULAR scheme" },
   { country: "EE", vatNumber: "EE102013089", note: "UNION-OSS" },
-  { country: "FR", vatNumber: "FR23888800463", note: "Cdiscount, схема REGULAR" },
-  { country: "ES", vatNumber: "ESN0531416F", note: "Shopify, отгрузка внутри Испании" },
+  { country: "FR", vatNumber: "FR23888800463", note: "Cdiscount, REGULAR scheme" },
+  { country: "ES", vatNumber: "ESN0531416F", note: "Shopify, shipped within Spain" },
 ];
 
 /**
@@ -60,19 +60,19 @@ export const CHANNEL_RULES: readonly {
     channel: "allegro",
     key: "currency_map",
     value: ALLEGRO_CURRENCY_MAP,
-    note: "Валюта определяет страну получения, ставку и VAT-номер продавца.",
+    note: "The currency decides the arrival country, the rate and the seller VAT number.",
   },
   {
     channel: "allegro",
     key: "departure_country",
     value: "PL",
-    note: "Отгрузка всегда из Польши.",
+    note: "Always ships from Poland.",
   },
   {
     channel: "allegro",
     key: "operation_types",
     value: { wpłata: "B2C SALE", zwrot: "REFUND" },
-    note: "Прочие операции — комиссии Allegro, в отчёт не попадают.",
+    note: "Anything else is an Allegro fee and does not belong in the report.",
   },
   {
     channel: "cdiscount",
@@ -84,13 +84,13 @@ export const CHANNEL_RULES: readonly {
       scheme: "REGULAR",
       sellerVat: "FR23888800463",
     },
-    note: "Cdiscount продаёт только во Франции.",
+    note: "Cdiscount sells in France only.",
   },
   {
     channel: "cdiscount",
     key: "invoice_types",
     value: { Vente: "B2C SALE", "Remboursement client": "REFUND" },
-    note: "Абонентская плата и комиссионные авуары в отчёт не попадают.",
+    note: "Subscriptions and commission credits are not sales.",
   },
   {
     channel: "shopify",
@@ -102,34 +102,34 @@ export const CHANNEL_RULES: readonly {
       exportScheme: "UNION-OSS",
       exportSellerVat: "EE102013089",
     },
-    note: "Отгрузка всегда из Испании; внутри Испании — REGULAR, иначе UNION-OSS.",
+    note: "Always ships from Spain; REGULAR within Spain, UNION-OSS otherwise.",
   },
   {
     channel: "shopify",
     key: "skipped_arrival_countries",
     value: ["CH"],
-    note: "Заказы в Швейцарию в отчёт не идут — согласованное правило.",
+    note: "Orders to Switzerland stay out of the report — an agreed rule.",
   },
   {
     channel: "shopify",
     key: "country_aliases",
     value: { UK: "GB" },
-    note: "Shopify пишет UK, отчётность требует GB.",
+    note: "Shopify writes UK; reporting needs GB.",
   },
   {
     channel: "shopify",
     key: "recompute_zero_tax_countries",
     value: ["GB"],
     note:
-      "Британские заказы приходят с нулевым налогом и без ставки в подписи — " +
-      "НДС досчитывается из суммы заказа. Для остальных стран нулевой налог " +
-      "означает именно ноль, и досчитывать его нельзя.",
+      "British orders arrive with zero tax and no rate in the label, so the VAT " +
+      "is computed from the order total. Elsewhere a zero means zero and must " +
+      "not be filled in.",
   },
   {
     channel: "shopify",
     key: "excluded_sources",
     value: ["shopify_draft_order"],
-    note: "Черновики заказов — не продажи.",
+    note: "Draft orders are not sales.",
   },
 ];
 
