@@ -14,3 +14,8 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* Строка, вытесненная более поздней загрузкой того же периода. */
+.ea-superseded td {
+  opacity: 0.55;
+}

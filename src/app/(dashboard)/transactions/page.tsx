@@ -1,11 +1,44 @@
-import { ComingSoon } from "@/components/layout/coming-soon";
 import { PageHeader } from "@/components/layout/page-header";
+import { TransactionsView } from "@/components/transactions/transactions-view";
+import { requireUser } from "@/lib/auth/session";
+import {
+  filterOptions,
+  listTransactions,
+  transactionTotals,
+  type TransactionFilters,
+} from "@/lib/transactions/queries";
 
-export default function TransactionsPage() {
+function one(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function TransactionsPage({ searchParams }: PageProps<"/transactions">) {
+  const user = await requireUser();
+  const params = await searchParams;
+
+  const filters: TransactionFilters = {
+    dataset: one(params.dataset),
+    country: one(params.country),
+    period: one(params.period),
+    type: one(params.type),
+    attention: one(params.attention) === "1",
+    includeSuperseded: one(params.superseded) === "1",
+    page: Number(one(params.page) ?? 1) || 1,
+  };
+
+  const [page, options, totals] = await Promise.all([
+    listTransactions(user.tenantId, filters),
+    filterOptions(user.tenantId),
+    transactionTotals(user.tenantId, filters),
+  ]);
+
   return (
     <>
-      <PageHeader title="Transactions" description="Every parsed transaction across all channels, traceable back to its source row." />
-      <ComingSoon stage="stage 2" />
+      <PageHeader
+        title="Transactions"
+        description="Every uploaded file, parsed into one ledger. Any figure leads back to the row it came from."
+      />
+      <TransactionsView page={page} options={options} totals={totals} />
     </>
   );
 }
