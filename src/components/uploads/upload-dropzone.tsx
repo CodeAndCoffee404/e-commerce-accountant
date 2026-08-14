@@ -49,7 +49,12 @@ export function UploadDropzone() {
         return;
       }
 
-      message.success(`${file.name}: ${result.label}, ${result.period}`);
+      const parts = [`${result.label}, ${result.period}`, `${result.transactions} rows`];
+
+      if (result.supersededRows > 0) parts.push(`replaced ${result.supersededRows}`);
+      if (result.needsAttention > 0) parts.push(`${result.needsAttention} need attention`);
+
+      message.success(`${file.name}: ${parts.join(" · ")}`, 6);
       options.onSuccess?.(result);
       router.refresh();
     } catch (error) {

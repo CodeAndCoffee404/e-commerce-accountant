@@ -13,6 +13,7 @@ import { classify } from "@/lib/ingest/classify";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
 import { MAX_UPLOAD_BYTES } from "./constants";
+import { ingestSourceFile } from "./ingest";
 
 const inputSchema = z.object({
   pathname: z.string().min(1),
@@ -24,7 +25,15 @@ const inputSchema = z.object({
 export type RegisterInput = z.infer<typeof inputSchema>;
 
 export type RegisterResult =
-  | { ok: true; id: string; label: string; period: string }
+  | {
+      ok: true;
+      id: string;
+      label: string;
+      period: string;
+      transactions: number;
+      supersededRows: number;
+      needsAttention: number;
+    }
   | { ok: false; message: string };
 
 /**
@@ -115,13 +124,22 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
     })
     .returning({ id: schema.sourceFiles.id });
 
+  // Parsed in the same call rather than by a background job: the operator is
+  // waiting on the answer, and a file that classified but never became
+  // transactions is the kind of half-state that goes unnoticed for a month.
+  const ingested = await ingestSourceFile(row.id, user.tenantId, parsed.grid);
+
   revalidatePath("/uploads");
+  revalidatePath("/transactions");
 
   return {
     ok: true,
     id: row.id,
     label: classification.label,
     period: classification.period.label,
+    transactions: ingested.inserted,
+    supersededRows: ingested.supersededRows,
+    needsAttention: ingested.needsAttention,
   };
 }
 

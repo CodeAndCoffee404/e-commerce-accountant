@@ -15,6 +15,13 @@
       "when": 1786689023860,
       "tag": "0001_source_files",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786693733933,
+      "tag": "0002_transactions",
+      "breakpoints": true
     }
   ]
 }

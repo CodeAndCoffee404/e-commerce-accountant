@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { classify } from "@/lib/ingest/classify";
+import { mapTransactions } from "@/lib/ingest/mappers";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
 /**
@@ -96,4 +97,44 @@ describe.skipIf(files.length === 0)("корпус реальных выгруз�
 
     expect(failures).toEqual([]);
   }, 120_000);
+
+  it("раскладывает каждую выгрузку в транзакции", async () => {
+    const failures: string[] = [];
+    let totalRows = 0;
+
+    for (const file of files) {
+      const name = path.basename(file);
+      const parsed = await parseSpreadsheet(readFileSync(file), name);
+      if (!parsed.ok) continue;
+
+      const classification = classify(parsed.grid, name);
+      if (!classification.ok) continue;
+
+      const result = mapTransactions(classification.dataset, {
+        grid: parsed.grid,
+        headerRowIndex: classification.headerRowIndex,
+        country: classification.country,
+        period: classification.period,
+      });
+
+      totalRows += result.rows.length;
+
+      if (result.missingColumns.length > 0) {
+        failures.push(`${name} — нет колонок: ${result.missingColumns.join(", ")}`);
+      }
+
+      if (result.rows.length === 0) {
+        failures.push(`${name} — ни одной транзакции`);
+      }
+
+      const flagged = result.rows.find((row) => row.needsAttention);
+
+      if (flagged) {
+        failures.push(`${name} строка ${flagged.sourceRowNumber}: ${flagged.attentionReason}`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+    expect(totalRows).toBeGreaterThan(10_000);
+  }, 180_000);
 });

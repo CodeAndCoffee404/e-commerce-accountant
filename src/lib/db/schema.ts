@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -200,6 +201,85 @@ export const sourceFiles = pgTable(
   ],
 );
 
+/* ------------------------------------------------------------------ *
+ * Журнал транзакций
+ * ------------------------------------------------------------------ */
+
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    sourceFileId: uuid("source_file_id")
+      .notNull()
+      .references(() => sourceFiles.id, { onDelete: "cascade" }),
+    /** 1-based row in the source file, so any figure leads back to its line. */
+    sourceRowNumber: integer("source_row_number").notNull(),
+
+    dataset: datasetId("dataset").notNull(),
+    channel: text("channel").notNull(),
+    countryCode: text("country_code"),
+
+    // Inherited from the file, not derived per row: reports select by the
+    // period assigned at upload, exactly as legacy does. See PLAN §4.
+    periodLabel: text("period_label").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+
+    /** The channel's own identifier. Indexed for search, never for dedup. */
+    naturalKey: text("natural_key"),
+
+    occurredOn: date("occurred_on"),
+    transactionType: text("transaction_type"),
+
+    currency: text("currency"),
+    // numeric, never float: a cent lost to binary rounding is a cent that has
+    // to be explained to an accountant.
+    gross: numeric("gross", { precision: 18, scale: 6 }),
+    vatAmount: numeric("vat_amount", { precision: 18, scale: 6 }),
+    netAmount: numeric("net_amount", { precision: 18, scale: 6 }),
+    vatRate: numeric("vat_rate", { precision: 9, scale: 6 }),
+
+    departureCountry: text("departure_country"),
+    arrivalCountry: text("arrival_country"),
+    sellerVatNumber: text("seller_vat_number"),
+    buyerVatNumber: text("buyer_vat_number"),
+    taxScheme: text("tax_scheme"),
+
+    sku: text("sku"),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }),
+
+    needsAttention: boolean("needs_attention").notNull().default(false),
+    attentionReason: text("attention_reason"),
+
+    /**
+     * False once a later upload for the same slice supersedes this row.
+     * Nothing is deleted: the drill-down from an old report has to keep
+     * working, and so does the audit trail.
+     */
+    isCurrent: boolean("is_current").notNull().default(true),
+
+    raw: jsonb("raw"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("transactions_slice_idx").on(
+      table.tenantId,
+      table.dataset,
+      table.countryCode,
+      table.periodStart,
+      table.isCurrent,
+    ),
+    index("transactions_natural_key_idx").on(table.tenantId, table.naturalKey),
+    index("transactions_file_idx").on(table.sourceFileId),
+  ],
+);
+
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;
 export type SourceFile = typeof sourceFiles.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
