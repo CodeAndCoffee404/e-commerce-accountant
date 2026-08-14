@@ -19,3 +19,13 @@ body {
 .ea-superseded td {
   opacity: 0.55;
 }
+
+/* The hero's attention pills jump to cards below a sticky header. */
+html {
+  scroll-behavior: smooth;
+}
+
+#dashboard-files,
+#dashboard-reports {
+  scroll-margin-top: 72px;
+}

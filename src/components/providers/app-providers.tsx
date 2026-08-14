@@ -18,7 +18,12 @@ function AntdTheme({ children }: { children: ReactNode }) {
         // Emits the palette as CSS variables, so plain CSS and inline styles can
         // reach a theme token instead of hard-coding a colour that then ignores
         // dark mode. Also lets one stylesheet serve both themes.
-        cssVar: { prefix: "ant" },
+        //
+        // The key must change with the mode. With a constant key the
+        // server-rendered light variables and the client's dark ones dedupe
+        // into one stylesheet, and half the components keep the wrong palette —
+        // dark layout, white selects. Seen in production on a phone.
+        cssVar: { prefix: "ant", key: themeMode },
         hashed: false,
         algorithm:
           themeMode === "dark"
@@ -30,6 +35,13 @@ function AntdTheme({ children }: { children: ReactNode }) {
           borderRadius: 6,
         },
         components: {
+          Menu: {
+            // The dark menu defaults to antd's navy (#001529); the sider it
+            // sits in is #141414. Same surface, same colour.
+            darkItemBg: "#141414",
+            darkSubMenuItemBg: "#141414",
+            darkPopupBg: "#141414",
+          },
           Layout: {
             // Two surfaces, deliberately: the page sits one step back and the
             // chrome sits on top of it.

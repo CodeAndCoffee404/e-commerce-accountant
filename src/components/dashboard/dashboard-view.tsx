@@ -5,7 +5,6 @@ import {
   CloseCircleOutlined,
   CloudOutlined,
   MinusOutlined,
-  SmileOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
@@ -13,7 +12,6 @@ import {
   App,
   Button,
   Card,
-  Empty,
   Progress,
   Select,
   Space,
@@ -56,23 +54,6 @@ export function DashboardView({
   const router = useRouter();
   const { message } = App.useApp();
   const [building, startTransition] = useTransition();
-
-  if (data.months.length === 0) {
-    return (
-      <>
-        <Greeting firstName={firstName} attention={[]} allClear={false} intro="Nothing here yet." />
-        <Empty
-          style={{ marginTop: 48 }}
-          description={
-            <span>
-              Press <b>Upload files</b> above and drop a month&rsquo;s exports — the month appears
-              here the moment the first file lands.
-            </span>
-          }
-        />
-      </>
-    );
-  }
 
   const requiredItems = data.items.filter((item) => item.requirement === "required");
   const requiredIn = requiredItems.filter((item) => item.uploaded).length;
@@ -131,49 +112,64 @@ export function DashboardView({
     });
   };
 
+  const empty = data.months.length === 0;
+
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <Greeting
+      <Hero
         firstName={firstName}
+        intro={
+          empty
+            ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
+            : `${data.month} · ${requiredIn} of ${requiredItems.length} required files in · ${built} of ${data.reports.length} reports built`
+        }
         attention={attention}
-        allClear={allClear}
-        intro={`${data.month}: ${requiredIn} of ${requiredItems.length} required files in, ${built} of ${data.reports.length} reports built.`}
+        allClear={!empty && allClear}
+        rings={
+          empty
+            ? null
+            : {
+                files: { done: requiredIn, total: requiredItems.length },
+                reports: { done: built, total: data.reports.length },
+              }
+        }
+        toolbar={
+          empty ? null : (
+            <Space wrap>
+              <Select
+                value={data.month ?? undefined}
+                style={{ minWidth: 170 }}
+                options={data.months.map((month) => ({ value: month, label: month }))}
+                onChange={(month) => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
+              />
+              {canBuild ? (
+                <Tooltip
+                  title={
+                    data.buildable === 0
+                      ? "Everything ready is already built. Rebuilds and quarters live on Reports."
+                      : "Builds every report this month is ready for. Each run is recorded separately."
+                  }
+                >
+                  <Button
+                    type="primary"
+                    icon={<ThunderboltOutlined />}
+                    loading={building}
+                    disabled={data.buildable === 0}
+                    onClick={buildAll}
+                  >
+                    {data.buildable === 0
+                      ? "All built"
+                      : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
+                  </Button>
+                </Tooltip>
+              ) : null}
+            </Space>
+          )
+        }
       />
 
-      <Space wrap align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-        <Space wrap>
-          <Text strong>Month</Text>
-          <Select
-            value={data.month ?? undefined}
-            style={{ minWidth: 180 }}
-            options={data.months.map((month) => ({ value: month, label: month }))}
-            onChange={(month) => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
-          />
-        </Space>
-
-        {canBuild ? (
-          <Tooltip
-            title={
-              data.buildable === 0
-                ? "Everything ready is already built. Rebuilds and quarters live on Reports."
-                : "Builds every report this month is ready for. Each run is recorded separately."
-            }
-          >
-            <Button
-              type="primary"
-              icon={<ThunderboltOutlined />}
-              loading={building}
-              disabled={data.buildable === 0}
-              onClick={buildAll}
-            >
-              {data.buildable === 0
-                ? "All built"
-                : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
-            </Button>
-          </Tooltip>
-        ) : null}
-      </Space>
-
+      {empty ? null : (
+        <>
       {/* Side by side: the two halves of the ritual — what went in, what came
           out — read as one row, not a scroll. */}
       <div
@@ -239,6 +235,9 @@ export function DashboardView({
         </Typography.Paragraph>
       </Card>
 
+        </>
+      )}
+
       <Card
         size="small"
         title="Activity"
@@ -278,51 +277,177 @@ export function DashboardView({
   );
 }
 
-function Greeting({
+function Hero({
   firstName,
+  intro,
   attention,
   allClear,
-  intro,
+  rings,
+  toolbar,
 }: {
   firstName: string;
+  intro: string;
   attention: { key: string; text: string; href: string }[];
   allClear: boolean;
-  intro: string;
+  rings: {
+    files: { done: number; total: number };
+    reports: { done: number; total: number };
+  } | null;
+  toolbar: React.ReactNode;
 }) {
   const { token } = theme.useToken();
 
   return (
-    <div style={{ marginBottom: 8 }}>
-      <Title level={3} style={{ marginBottom: 4 }}>
-        Hey, {firstName}
-      </Title>
-      <Text type="secondary">{intro}</Text>
+    <section
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 16,
+        border: `1px solid ${token.colorSplit}`,
+        background: token.colorBgContainer,
+        padding: "clamp(18px, 3vw, 28px)",
+      }}
+    >
+      {/* Colour lives in an overlay, not the surface: the tokens stay in
+          charge of contrast in both themes. */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            `linear-gradient(130deg, ${token.colorPrimaryBg} 0%, transparent 55%),` +
+            `radial-gradient(560px 220px at 90% -10%, ${token.colorSuccessBg}, transparent 70%)`,
+          opacity: 0.9,
+        }}
+      />
 
-      {allClear ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-          <SmileOutlined style={{ color: token.colorSuccess, fontSize: 20 }} />
-          <Text strong style={{ color: token.colorSuccess }}>
-            Everything is in order — nothing needs you. Have a great day.
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 24,
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          <Title level={2} style={{ margin: 0 }}>
+            Hey, {firstName} <span aria-hidden>👋</span>
+          </Title>
+          <Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+            {intro}
           </Text>
+
+          {allClear ? (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 16,
+                padding: "6px 14px",
+                borderRadius: 999,
+                background: token.colorSuccessBg,
+                border: `1px solid ${token.colorSuccessBorder}`,
+              }}
+            >
+              <CheckCircleFilled style={{ color: token.colorSuccess }} />
+              <Text strong style={{ color: token.colorSuccessText }}>
+                Everything is in order — nothing needs you. Have a great day.
+              </Text>
+            </div>
+          ) : attention.length > 0 ? (
+            <Space size={[8, 8]} wrap style={{ marginTop: 16 }}>
+              {attention.map((item) =>
+                item.href.startsWith("#") ? (
+                  <Button
+                    key={item.key}
+                    size="small"
+                    shape="round"
+                    icon={<WarningOutlined style={{ color: token.colorWarning }} />}
+                    href={item.href}
+                  >
+                    {item.text}
+                  </Button>
+                ) : (
+                  <Link key={item.key} href={item.href}>
+                    <Button
+                      size="small"
+                      shape="round"
+                      icon={<WarningOutlined style={{ color: token.colorWarning }} />}
+                    >
+                      {item.text}
+                    </Button>
+                  </Link>
+                ),
+              )}
+            </Space>
+          ) : null}
+
+          {toolbar ? <div style={{ marginTop: 20 }}>{toolbar}</div> : null}
         </div>
-      ) : attention.length > 0 ? (
-        <Space size={[8, 8]} wrap style={{ marginTop: 12 }}>
-          {attention.map((item) =>
-            item.href.startsWith("#") ? (
-              <Button key={item.key} size="small" icon={<WarningOutlined />} href={item.href}>
-                {item.text}
-              </Button>
-            ) : (
-              <Link key={item.key} href={item.href}>
-                <Button size="small" icon={<WarningOutlined />}>
-                  {item.text}
-                </Button>
-              </Link>
-            ),
-          )}
-        </Space>
-      ) : null}
-    </div>
+
+        {rings ? (
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <Ring
+              label="files in"
+              done={rings.files.done}
+              total={rings.files.total}
+              color={token.colorPrimary}
+            />
+            <Ring
+              label="reports built"
+              done={rings.reports.done}
+              total={rings.reports.total}
+              color={
+                rings.reports.total > 0 && rings.reports.done === rings.reports.total
+                  ? token.colorSuccess
+                  : token.colorPrimary
+              }
+            />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function Ring({
+  label,
+  done,
+  total,
+  color,
+}: {
+  label: string;
+  done: number;
+  total: number;
+  color: string;
+}) {
+  const { token } = theme.useToken();
+  const percent = total === 0 ? 100 : Math.round((done / total) * 100);
+
+  return (
+    <Progress
+      type="dashboard"
+      size={118}
+      percent={percent}
+      strokeColor={color}
+      strokeWidth={9}
+      format={() => (
+        <div style={{ lineHeight: 1.25 }}>
+          <div style={{ fontSize: 22, fontWeight: 650, color: token.colorText }}>
+            {done}
+            <Text type="secondary" style={{ fontSize: 15, fontWeight: 400 }}>
+              /{total}
+            </Text>
+          </div>
+          <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{label}</div>
+        </div>
+      )}
+    />
   );
 }
 
@@ -470,7 +595,7 @@ function MatrixTable({
           title: "",
           dataIndex: "label",
           fixed: "left",
-          width: 250,
+          width: 210,
           render: (label: string) => (
             <Text style={{ fontSize: 12 }}>
               {label.replace("Amazon Monthly Transaction report", "Amazon")}

@@ -128,14 +128,20 @@ export function UploadsTable({
           />
         ),
       }}
-        scroll={{ x: 900 }}
+        scroll={{ x: 1180 }}
         columns={[
           {
             title: "File",
             dataIndex: "filename",
+            // A width, or the column takes whatever the fixed ones leave — on
+            // a phone that was four characters, and filenames wrapped letter
+            // by letter.
+            width: 280,
             render: (filename: string, row) => (
               <div>
-                <Typography.Text>{filename}</Typography.Text>
+                <Typography.Text ellipsis={{ tooltip: filename }} style={{ maxWidth: 250 }}>
+                  {filename}
+                </Typography.Text>
                 <br />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {formatSize(row.sizeBytes)}
@@ -152,6 +158,7 @@ export function UploadsTable({
               </Tooltip>
             ),
             dataIndex: "label",
+            width: 180,
             render: (label: string | null) =>
               label ?? <Typography.Text type="secondary">—</Typography.Text>,
           },
