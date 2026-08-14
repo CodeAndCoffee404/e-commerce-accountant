@@ -177,13 +177,16 @@ export function DashboardView({
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))",
           gap: 16,
-          alignItems: "start",
+          // Stretch, not start: two cards of one row are one shelf, and a
+          // ragged bottom edge reads as a layout accident.
+          alignItems: "stretch",
         }}
       >
-        <div id="dashboard-files">
+        <div id="dashboard-files" style={{ display: "flex" }}>
           <Card
             size="small"
             title="Uploads"
+            style={{ width: "100%" }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {requiredIn}/{requiredItems.length} required
@@ -208,10 +211,11 @@ export function DashboardView({
           </Card>
         </div>
 
-        <div id="dashboard-reports">
+        <div id="dashboard-reports" style={{ display: "flex" }}>
           <Card
             size="small"
             title="Reports"
+            style={{ width: "100%" }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {built}/{data.reports.length} built
@@ -606,7 +610,17 @@ function MatrixTable({
           title: (
             <Typography.Link
               onClick={() => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
-              style={{ fontSize: 12, fontWeight: month === selected ? 600 : 400 }}
+              style={{
+                fontSize: 12,
+                fontWeight: month === selected ? 600 : 400,
+                ...(month === selected
+                  ? {
+                      background: token.colorPrimaryBg,
+                      borderRadius: 999,
+                      padding: "2px 10px",
+                    }
+                  : {}),
+              }}
             >
               {month.slice(0, 7)}
             </Typography.Link>

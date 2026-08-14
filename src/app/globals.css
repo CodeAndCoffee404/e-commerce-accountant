@@ -29,3 +29,9 @@ html {
 #dashboard-reports {
   scroll-margin-top: 72px;
 }
+
+/* Money and counts line up by digit — the accounting look. */
+.ant-table,
+.ant-statistic-content {
+  font-variant-numeric: tabular-nums;
+}

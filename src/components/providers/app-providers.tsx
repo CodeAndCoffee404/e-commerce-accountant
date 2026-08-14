@@ -3,13 +3,19 @@
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { App as AntdApp, ConfigProvider, theme as antdTheme } from "antd";
 import enUS from "antd/locale/en_US";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import type { ThemeMode } from "@/lib/theme";
 import { UiStoreProvider, useUiStore } from "@/stores/ui-store-provider";
 
 function AntdTheme({ children }: { children: ReactNode }) {
   const themeMode = useUiStore((store) => store.themeMode);
+
+  // Native chrome — scrollbars, date pickers, autofill — follows the theme
+  // too; without this dark mode keeps light scrollbars on Windows.
+  useEffect(() => {
+    document.documentElement.style.colorScheme = themeMode;
+  }, [themeMode]);
 
   return (
     <ConfigProvider

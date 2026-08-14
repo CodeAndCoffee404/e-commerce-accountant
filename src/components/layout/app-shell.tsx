@@ -11,8 +11,8 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Layout, Menu, Space, theme, Tooltip, Typography } from "antd";
-import Link from "next/link";
+import { Badge, Button, Layout, Menu, Space, Spin, theme, Tooltip, Typography } from "antd";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 
@@ -23,6 +23,19 @@ import { DEFAULT_ROUTE, NAV_ITEMS, type NavItem } from "@/lib/navigation";
 import { useUiStore } from "@/stores/ui-store-provider";
 
 const { Header, Sider, Content } = Layout;
+
+/**
+ * Inline feedback on the menu item that was just clicked. Every page here is
+ * server-rendered, so without this a click on a slow network looks like
+ * nothing happened — the surest way to get clicked twice.
+ */
+function PendingHint() {
+  const { pending } = useLinkStatus();
+
+  if (!pending) return null;
+
+  return <Spin size="small" style={{ marginInlineStart: 8 }} />;
+}
 
 const ICONS: Record<NavItem["icon"], ComponentType> = {
   HomeOutlined,
@@ -84,6 +97,7 @@ export function AppShell({
         <Link href={item.href}>
           {item.label}
           {badge}
+          <PendingHint />
         </Link>
       ),
     };
@@ -110,16 +124,37 @@ export function AppShell({
             height: 56,
             display: "flex",
             alignItems: "center",
+            gap: 10,
             justifyContent: collapsed ? "center" : "flex-start",
-            padding: collapsed ? 0 : "0 20px",
+            padding: collapsed ? 0 : "0 16px",
             overflow: "hidden",
             whiteSpace: "nowrap",
             borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
-          <Typography.Text strong style={{ fontSize: 15 }}>
-            {collapsed ? "EA" : "E-commerce Accountant"}
-          </Typography.Text>
+          <span
+            aria-hidden
+            style={{
+              width: 26,
+              height: 26,
+              flex: "0 0 26px",
+              borderRadius: 8,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#fff",
+              background: `linear-gradient(135deg, ${token.colorPrimary}, ${token.colorSuccess})`,
+            }}
+          >
+            EA
+          </span>
+          {collapsed ? null : (
+            <Typography.Text strong style={{ fontSize: 15 }}>
+              E-commerce Accountant
+            </Typography.Text>
+          )}
         </Link>
 
         <Menu
