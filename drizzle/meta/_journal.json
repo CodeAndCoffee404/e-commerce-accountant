@@ -64,6 +64,13 @@
       "when": 1786736139559,
       "tag": "0008_transactions-period-index",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787162368590,
+      "tag": "0009_high_maverick",
+      "breakpoints": true
     }
   ]
 }

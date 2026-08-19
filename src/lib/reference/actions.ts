@@ -82,6 +82,70 @@ export async function deleteVatRate(id: string): Promise<ActionResult> {
   return { ok: true, message: "Rate deleted." };
 }
 
+const sellerVatSchema = z.object({
+  id: z.string().uuid().optional(),
+  country: z.string().trim().min(2).max(2).toUpperCase(),
+  vatNumber: z
+    .string()
+    .trim()
+    .min(4, "A VAT number has at least 4 characters")
+    .max(24)
+    .regex(/^[A-Za-z0-9 -]+$/, "A VAT number is letters, digits, spaces and dashes"),
+  validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  note: z.string().trim().max(300).nullable().optional(),
+});
+
+/**
+ * Registrations change when the company registers in a new country or lets one
+ * lapse — reference data like the rates, and edited the same way.
+ */
+export async function saveSellerVatNumber(input: unknown): Promise<ActionResult> {
+  const user = await requireEditor();
+  const parsed = sellerVatSchema.safeParse(input);
+
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+
+  const { id, ...values } = parsed.data;
+  const db = getDb();
+
+  if (id) {
+    await db
+      .update(schema.sellerVatNumbers)
+      .set({ ...values, validTo: values.validTo ?? null, note: values.note ?? null })
+      .where(
+        and(eq(schema.sellerVatNumbers.id, id), eq(schema.sellerVatNumbers.tenantId, user.tenantId)),
+      );
+  } else {
+    await db.insert(schema.sellerVatNumbers).values({
+      tenantId: user.tenantId,
+      ...values,
+      validTo: values.validTo ?? null,
+      note: values.note ?? null,
+    });
+  }
+
+  await audit(user, id ? "seller_vat.updated" : "seller_vat.created", "seller_vat_number", id, values);
+  revalidatePath("/settings");
+
+  return { ok: true, message: `Registration for ${values.country} saved.` };
+}
+
+export async function deleteSellerVatNumber(id: string): Promise<ActionResult> {
+  const user = await requireEditor();
+
+  await getDb()
+    .delete(schema.sellerVatNumbers)
+    .where(
+      and(eq(schema.sellerVatNumbers.id, id), eq(schema.sellerVatNumbers.tenantId, user.tenantId)),
+    );
+
+  await audit(user, "seller_vat.deleted", "seller_vat_number", id);
+  revalidatePath("/settings");
+
+  return { ok: true, message: "Registration deleted." };
+}
+
 const skuSchema = z.object({
   id: z.string().uuid().optional(),
   channel: z.string().trim().min(1),

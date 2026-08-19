@@ -100,7 +100,9 @@ export async function loadDashboard(
   for (const definition of REPORT_DEFINITIONS) {
     const configured = settings[definition.id];
 
-    if (!configured.enabled) continue;
+    // Informational reports are built on demand and file nothing, so they
+    // neither add checklist items nor hold the month open.
+    if (!configured.enabled || definition.informational) continue;
 
     if (definition.id === "amazon_zoho_invoice") {
       const required = new Set(requiredCountries(configured));
@@ -254,7 +256,7 @@ async function loadReports(
   for (const definition of REPORT_DEFINITIONS) {
     const available = availability[definition.id];
 
-    if (!available?.enabled) continue;
+    if (!available?.enabled || definition.informational) continue;
 
     const latest = latestByType.get(definition.id);
     const succeeded = latest?.status === "succeeded";

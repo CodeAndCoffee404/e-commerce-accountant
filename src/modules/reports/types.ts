@@ -43,6 +43,21 @@ export type ReportDefinition = {
    * happens quietly.
    */
   requiredRules: readonly { channel: string; key: string }[];
+  /**
+   * True for reports that never go into a filing. They are built on demand
+   * from Reports but stay out of the month-close checklist: closing the month
+   * means the official reports are built, not these.
+   */
+  informational?: boolean;
+  /**
+   * Declared when the report comes in tenant-defined variants: each variant is
+   * one channel_rules row under this channel, its value carrying at least a
+   * `name`. The core offers one card per variant, requires a run to name one,
+   * and hands the stored value to the generator via the context. `summarise`
+   * turns a stored value into the card's one-line description — the module's
+   * own knowledge of its config shape, brought with it.
+   */
+  variants?: { rulesChannel: string; summarise: (value: unknown) => string };
 };
 
 /**

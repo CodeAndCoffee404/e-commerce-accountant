@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
 import { DATASET_NAMES } from "@/modules/channels/registry";
+import { variantDisplayName } from "@/modules/reports/registry";
 
 import {
   defaultSettings,
@@ -42,6 +43,32 @@ export type ReportRunCard = {
 
 const LABELS = new Map(REPORT_DEFINITIONS.map((definition) => [definition.id, definition.label]));
 
+/** The channels whose rules rows are report variants, e.g. custom reports. */
+const VARIANT_CHANNELS = REPORT_DEFINITIONS.flatMap((definition) =>
+  definition.variants ? [definition.variants.rulesChannel] : [],
+);
+
+/**
+ * key → display name for every stored variant, so a run named by its variant
+ * key shows the definition's name. A deleted definition falls back to the key;
+ * the workbook filename still carries the name it was built under.
+ */
+async function loadVariantNames(tenantId: string): Promise<Map<string, string>> {
+  if (VARIANT_CHANNELS.length === 0) return new Map();
+
+  const rows = await getDb()
+    .select({ key: schema.channelRules.key, value: schema.channelRules.value })
+    .from(schema.channelRules)
+    .where(
+      and(
+        eq(schema.channelRules.tenantId, tenantId),
+        inArray(schema.channelRules.channel, VARIANT_CHANNELS),
+      ),
+    );
+
+  return new Map(rows.map((row) => [row.key, variantDisplayName(row.value, row.key)]));
+}
+
 export async function listReportRuns(tenantId: string, limit = 50): Promise<ReportRunCard[]> {
   const db = getDb();
 
@@ -55,6 +82,9 @@ export async function listReportRuns(tenantId: string, limit = 50): Promise<Repo
   if (runs.length === 0) return [];
 
   const ids = runs.map((run) => run.id);
+  const variantNames = runs.some((run) => run.variant !== null)
+    ? await loadVariantNames(tenantId)
+    : new Map<string, string>();
 
   const [sources, artifacts] = await Promise.all([
     db
@@ -78,7 +108,9 @@ export async function listReportRuns(tenantId: string, limit = 50): Promise<Repo
   return runs.map((run) => ({
     id: run.id,
     reportType: run.reportType,
-    label: LABELS.get(run.reportType) ?? run.reportType,
+    label: run.variant
+      ? variantNames.get(run.variant) ?? run.variant
+      : LABELS.get(run.reportType) ?? run.reportType,
     periodLabel: run.periodLabel,
     status: run.status,
     requestedAt: run.createdAt,
@@ -114,6 +146,11 @@ export type ReportAvailability = {
    * still wanted. Newest first.
    */
   blocked: { period: string; missing: string[] }[];
+  /**
+   * For reports built per tenant-defined variant: one entry per stored
+   * definition, each becoming its own card. Absent for ordinary reports.
+   */
+  variants?: { key: string; name: string; summary: string }[];
 };
 
 /**
@@ -155,7 +192,7 @@ export async function availablePeriods(
   tenantId: string,
   preloadedSettings?: AllReportSettings,
 ): Promise<Record<ReportTypeId, ReportAvailability>> {
-  const [rows, settings] = await Promise.all([
+  const [rows, settings, variantRows] = await Promise.all([
     getDb()
       .selectDistinct({
         dataset: schema.sourceFiles.dataset,
@@ -170,6 +207,21 @@ export async function availablePeriods(
     // Callers that already hold the settings pass them in; the read happens
     // once per request, not once per helper.
     preloadedSettings ?? loadReportSettings(tenantId),
+    VARIANT_CHANNELS.length === 0
+      ? Promise.resolve([])
+      : getDb()
+          .select({
+            channel: schema.channelRules.channel,
+            key: schema.channelRules.key,
+            value: schema.channelRules.value,
+          })
+          .from(schema.channelRules)
+          .where(
+            and(
+              eq(schema.channelRules.tenantId, tenantId),
+              inArray(schema.channelRules.channel, VARIANT_CHANNELS),
+            ),
+          ),
   ]);
 
   const result = {} as Record<ReportTypeId, ReportAvailability>;
@@ -235,6 +287,18 @@ export async function availablePeriods(
       needs: describeNeeds(definition, configured),
       ready: ready.sort().reverse(),
       blocked: blocked.sort((a, b) => b.period.localeCompare(a.period)),
+      ...(definition.variants
+        ? {
+            variants: variantRows
+              .filter((row) => row.channel === definition.variants!.rulesChannel)
+              .map((row) => ({
+                key: row.key,
+                name: variantDisplayName(row.value, row.key),
+                summary: definition.variants!.summarise(row.value),
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          }
+        : {}),
     };
   }
 

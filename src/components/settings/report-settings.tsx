@@ -173,6 +173,11 @@ export function ReportSettingsTab({
                   })}
                 </Space>
               </Space>
+            ) : definition.variants ? (
+              <Typography.Text type="secondary">
+                One switch for all custom reports at once. Which ones exist — and what each
+                counts — is edited on the Custom reports tab.
+              </Typography.Text>
             ) : (
               <Typography.Text type="secondary">
                 Reads the single Amazon VAT file, so there is nothing to require or relax here.

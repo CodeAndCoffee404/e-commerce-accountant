@@ -56,6 +56,8 @@ export type ReportContext = {
   period: Period;
   rules: RulesSnapshot;
   fx: FxSnapshot;
+  /** For reports built per tenant-defined variant: the stored definition. */
+  variant?: { key: string; value: unknown };
 };
 
 export type ReportSheet = {

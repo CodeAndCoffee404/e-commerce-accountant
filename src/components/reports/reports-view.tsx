@@ -38,6 +38,21 @@ const STATUS_COLOURS: Record<string, string> = {
   failed: "red",
 };
 
+/** One buildable card: a report, or one tenant-defined variant of one. */
+type BuildCard = {
+  key: string;
+  reportType: ReportTypeId;
+  /** Set on variant cards; goes with the build so the run names its definition. */
+  variant?: string;
+  title: string;
+  description: string;
+  why: string;
+  informational: boolean;
+  availability: ReportAvailability;
+  /** True for the hint card shown while a variants report has no definitions. */
+  placeholder?: boolean;
+};
+
 export function ReportsView({
   runs,
   periods,
@@ -58,22 +73,26 @@ export function ReportsView({
   const { token } = theme.useToken();
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<Record<string, string | undefined>>({});
-  // Which report is being built, so the other two cards stay still.
-  const [building, setBuilding] = useState<ReportTypeId | null>(null);
+  // Which card is being built, so the other cards stay still.
+  const [building, setBuilding] = useState<string | null>(null);
 
-  const build = (reportType: ReportTypeId) => {
-    const periodLabel = choice[reportType];
+  const build = (card: BuildCard) => {
+    const periodLabel = choice[card.key];
 
     if (!periodLabel) {
       message.warning("Choose a period.");
       return;
     }
 
-    setBuilding(reportType);
+    setBuilding(card.key);
 
     startTransition(async () => {
       try {
-        const result = await buildReport({ reportType, periodLabel });
+        const result = await buildReport({
+          reportType: card.reportType,
+          periodLabel,
+          ...(card.variant ? { variant: card.variant } : {}),
+        });
 
         // Ten seconds on a failure: it names the rule or the upload that is
         // missing, which is not readable in three.
@@ -88,6 +107,61 @@ export function ReportsView({
       }
     });
   };
+
+  // One card per report — and per stored definition where a report comes in
+  // tenant-defined variants, each building separately under its own name.
+  const cards: BuildCard[] = REPORT_DEFINITIONS.flatMap((definition): BuildCard[] => {
+    const availability: ReportAvailability = periods[definition.id] ?? {
+      enabled: true,
+      needs: definition.needs,
+      ready: [],
+      blocked: [],
+    };
+
+    if (!availability.enabled) return [];
+
+    if (availability.variants === undefined) {
+      return [
+        {
+          key: definition.id,
+          reportType: definition.id,
+          title: definition.label,
+          description: definition.description,
+          why: definition.why,
+          informational: definition.informational ?? false,
+          availability,
+        },
+      ];
+    }
+
+    // No definitions yet: one quiet card saying where they are made, because a
+    // feature nobody can find might as well not exist.
+    if (availability.variants.length === 0) {
+      return [
+        {
+          key: definition.id,
+          reportType: definition.id,
+          title: definition.label,
+          description: definition.description,
+          why: definition.why,
+          informational: definition.informational ?? false,
+          availability,
+          placeholder: true,
+        },
+      ];
+    }
+
+    return availability.variants.map((variant) => ({
+      key: `${definition.id}:${variant.key}`,
+      reportType: definition.id,
+      variant: variant.key,
+      title: variant.name,
+      description: variant.summary,
+      why: definition.why,
+      informational: definition.informational ?? false,
+      availability,
+    }));
+  });
 
   return (
     <>
@@ -152,22 +226,39 @@ export function ReportsView({
           marginBottom: 24,
         }}
       >
-        {REPORT_DEFINITIONS.filter(
-          (definition) => periods[definition.id]?.enabled ?? true,
-        ).map((definition) => {
-          const availability = periods[definition.id] ?? {
-            enabled: true,
-            needs: definition.needs,
-            ready: [],
-            blocked: [],
-          };
-          const ready = availability.ready;
-          const waiting = availability.blocked;
+        {cards.map((card) => {
+          const ready = card.availability.ready;
+          const waiting = card.availability.blocked;
+
+          if (card.placeholder) {
+            return (
+              <Card
+                key={card.key}
+                size="small"
+                title={card.title}
+                extra={<Tag>informational</Tag>}
+              >
+                <Typography.Paragraph type="secondary" style={{ minHeight: 44 }}>
+                  {card.description}
+                </Typography.Paragraph>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  No definitions yet. Make one under{" "}
+                  <Link href="/settings?tab=custom">Settings &rarr; Custom reports</Link> — it
+                  gets its own card here and builds like any other report.
+                </Typography.Text>
+              </Card>
+            );
+          }
 
           return (
-            <Card key={definition.id} size="small" title={definition.label}>
+            <Card
+              key={card.key}
+              size="small"
+              title={card.title}
+              extra={card.informational ? <Tag>informational</Tag> : undefined}
+            >
               <Typography.Paragraph type="secondary" style={{ minHeight: 44 }}>
-                {definition.description}
+                {card.description}
               </Typography.Paragraph>
 
               {/* Said before anything is uploaded, not discovered afterwards by
@@ -176,7 +267,7 @@ export function ReportsView({
                 <Typography.Text strong style={{ fontSize: 12 }}>
                   Needs:
                 </Typography.Text>{" "}
-                {availability.needs || definition.needs}
+                {card.availability.needs}
               </Typography.Paragraph>
 
               <Space.Compact style={{ width: "100%" }}>
@@ -184,18 +275,16 @@ export function ReportsView({
                   style={{ width: "100%" }}
                   placeholder={ready.length === 0 ? "Nothing ready" : "Period"}
                   disabled={ready.length === 0}
-                  value={choice[definition.id]}
-                  onChange={(value) =>
-                    setChoice((current) => ({ ...current, [definition.id]: value }))
-                  }
+                  value={choice[card.key]}
+                  onChange={(value) => setChoice((current) => ({ ...current, [card.key]: value }))}
                   options={ready.map((period) => ({ value: period, label: period }))}
                 />
                 <Tooltip title="Building again is safe — each run is recorded separately with the rules and rates it used.">
                   <Button
                     type="primary"
-                    loading={building === definition.id}
+                    loading={building === card.key}
                     disabled={building !== null || !canBuild || ready.length === 0}
-                    onClick={() => build(definition.id)}
+                    onClick={() => build(card)}
                   >
                     Build
                   </Button>
@@ -242,9 +331,9 @@ export function ReportsView({
                           {waiting.length - 3 === 1 ? "" : "s"}
                         </Typography.Text>
                       ) : null}
-                      {definition.why ? (
+                      {card.why ? (
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {definition.why}
+                          {card.why}
                         </Typography.Text>
                       ) : null}
                     </Space>

@@ -1,5 +1,6 @@
 import type { ReportDefinition, ReportModule, ReportTypeId } from "./types";
 import { amazonZohoInvoiceModule } from "./amazon-zoho-invoice";
+import { customSliceModule } from "./custom-slice";
 import { offAmazonSalesModule } from "./off-amazon-sales";
 import { salesByCurrencyModule } from "./sales-by-currency";
 
@@ -14,6 +15,7 @@ export const REPORT_MODULES: readonly ReportModule[] = [
   salesByCurrencyModule,
   offAmazonSalesModule,
   amazonZohoInvoiceModule,
+  customSliceModule,
 ];
 
 export const REPORT_DEFINITIONS: readonly ReportDefinition[] = REPORT_MODULES.map(
@@ -30,4 +32,23 @@ export function reportModule(id: ReportTypeId): ReportModule {
 
 export function reportDefinition(id: ReportTypeId): ReportDefinition {
   return reportModule(id).definition;
+}
+
+/**
+ * The display name of a stored variant. Part of the variants contract: the
+ * stored value carries a `name`; a malformed row falls back to its key so a
+ * run's label never comes out empty.
+ */
+export function variantDisplayName(value: unknown, fallback: string): string {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    "name" in value &&
+    typeof (value as { name: unknown }).name === "string" &&
+    (value as { name: string }).name.trim() !== ""
+  ) {
+    return (value as { name: string }).name.trim();
+  }
+
+  return fallback;
 }

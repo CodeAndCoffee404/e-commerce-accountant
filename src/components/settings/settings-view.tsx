@@ -20,15 +20,18 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import {
+  deleteSellerVatNumber,
   deleteSkuMapping,
   deleteVatRate,
   refreshRates,
   restoreDefaults,
   saveChannelRule,
+  saveSellerVatNumber,
   saveSkuMapping,
   saveVatRate,
   type ActionResult,
 } from "@/lib/reference/actions";
+import { CUSTOM_REPORTS_CHANNEL } from "@/modules/reports/custom-slice-config";
 import { useSearchParams } from "next/navigation";
 
 import type { AuditRow } from "@/lib/audit/record";
@@ -38,12 +41,14 @@ import type { ReferenceData } from "@/lib/reference/queries";
 import type { AllReportSettings } from "@/lib/reports/settings";
 
 import { AuditCard } from "./audit-card";
+import { CustomReportsTab } from "./custom-reports";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
 import { ReportSettingsTab } from "./report-settings";
 
 type VatRate = ReferenceData["vatRates"][number];
 type SkuMapping = ReferenceData["skuMappings"][number];
+type SellerVatNumber = ReferenceData["sellerVatNumbers"][number];
 
 export function SettingsView({
   data,
@@ -102,6 +107,18 @@ export function SettingsView({
           ),
         },
         {
+          key: "custom",
+          label: "Custom reports",
+          children: (
+            <CustomReportsTab
+              rules={data.channelRules.filter((rule) => rule.channel === CUSTOM_REPORTS_CHANNEL)}
+              canEdit={canEdit}
+              run={run}
+              pending={pending}
+            />
+          ),
+        },
+        {
           key: "vat",
           label: "VAT rates",
           children: <VatRates data={data.vatRates} canEdit={canEdit} run={run} pending={pending} />,
@@ -114,7 +131,9 @@ export function SettingsView({
         {
           key: "seller",
           label: "Seller VAT",
-          children: <SellerVat data={data.sellerVatNumbers} />,
+          children: (
+            <SellerVat data={data.sellerVatNumbers} canEdit={canEdit} run={run} pending={pending} />
+          ),
         },
         {
           key: "fx",
@@ -126,10 +145,12 @@ export function SettingsView({
           label: "Channel rules",
           children: (
             <Rules
-              // The "reports" channel is report configuration with its own tab
-              // above; offering the same rows as raw JSON here would create two
-              // editors for one thing.
-              data={data.channelRules.filter((rule) => rule.channel !== "reports")}
+              // The "reports" and custom-report channels are configuration with
+              // their own tabs above; offering the same rows as raw JSON here
+              // would create two editors for one thing.
+              data={data.channelRules.filter(
+                (rule) => rule.channel !== "reports" && rule.channel !== CUSTOM_REPORTS_CHANNEL,
+              )}
               canEdit={canEdit}
               run={run}
               pending={pending}
@@ -431,27 +452,93 @@ function Rules({
   );
 }
 
-function SellerVat({ data }: { data: ReferenceData["sellerVatNumbers"] }) {
+function SellerVat({
+  data,
+  canEdit,
+  run,
+  pending,
+}: {
+  data: SellerVatNumber[];
+  canEdit: boolean;
+  run: Runner;
+  pending: boolean;
+}) {
+  const [editing, setEditing] = useState<Partial<SellerVatNumber> | null>(null);
+
   return (
     <>
-    <Typography.Paragraph type="secondary">
-      The registrations reports quote as the seller. Which one a row gets follows from the
-      channel rule for its country and scheme.
-    </Typography.Paragraph>
+      <Space style={{ marginBottom: 16 }} wrap>
+        <Button
+          type="primary"
+          disabled={!canEdit}
+          onClick={() => setEditing({ validFrom: new Date().toISOString().slice(0, 10) })}
+        >
+          Add registration
+        </Button>
+        <Typography.Text type="secondary">
+          The registrations reports quote as the seller. Which one a row gets follows from the
+          channel rule for its country and scheme — a new registration usually means updating
+          that rule too.
+        </Typography.Text>
+      </Space>
 
-    <Table
-      dataSource={data}
-      rowKey="id"
-      size="small"
-      pagination={false}
-      scroll={{ x: 640 }}
-      columns={[
-        { title: "Country", dataIndex: "country", width: 90 },
-        { title: "VAT number", dataIndex: "vatNumber", width: 200 },
-        { title: "From", dataIndex: "validFrom", width: 120 },
-        { title: "Note", dataIndex: "note", ellipsis: true },
-      ]}
-    />
+      <Table<SellerVatNumber>
+        dataSource={data}
+        rowKey="id"
+        size="small"
+        pagination={false}
+        loading={pending}
+        scroll={{ x: 760 }}
+        columns={[
+          { title: "Country", dataIndex: "country", width: 90 },
+          { title: "VAT number", dataIndex: "vatNumber", width: 200 },
+          { title: "From", dataIndex: "validFrom", width: 120 },
+          {
+            title: "To",
+            dataIndex: "validTo",
+            width: 120,
+            render: (value: string | null) =>
+              value ?? <Typography.Text type="secondary">in force</Typography.Text>,
+          },
+          { title: "Note", dataIndex: "note", ellipsis: true },
+          {
+            title: "",
+            key: "actions",
+            width: 140,
+            render: (_, row) => (
+              <Space>
+                <Button size="small" disabled={!canEdit} onClick={() => setEditing(row)}>
+                  Edit
+                </Button>
+                <Popconfirm
+                  title="Delete this registration?"
+                  onConfirm={() => run(() => deleteSellerVatNumber(row.id))}
+                  disabled={!canEdit}
+                >
+                  <Button size="small" danger disabled={!canEdit}>
+                    Delete
+                  </Button>
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]}
+      />
+
+      <EditModal
+        title="Seller VAT registration"
+        open={editing !== null}
+        initial={editing}
+        onClose={() => setEditing(null)}
+        onSubmit={(values) => run(() => saveSellerVatNumber({ ...values, id: editing?.id }))}
+        fields={[
+          { name: "country", label: "Country code", required: true, placeholder: "PL" },
+          { name: "vatNumber", label: "VAT number", required: true, placeholder: "PL5263307678" },
+          { name: "validFrom", label: "Valid from", required: true, placeholder: "2026-01-01" },
+          { name: "validTo", label: "Valid to", placeholder: "empty while in force" },
+          { name: "note", label: "Note" },
+        ]}
+      />
     </>
   );
 }

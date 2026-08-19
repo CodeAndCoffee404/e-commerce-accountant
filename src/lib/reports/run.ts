@@ -8,7 +8,7 @@ import { publishRun } from "@/lib/google/publish";
 import type { Period } from "@/lib/ingest/period";
 import { euroRateOn } from "@/lib/reference/fx";
 
-import { reportModule } from "@/modules/reports/registry";
+import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
 import { loadReportSettings } from "./queries";
@@ -40,6 +40,8 @@ export async function runReport(input: {
   reportType: ReportTypeId;
   periodLabel: string;
   requestedBy: string | null;
+  /** For reports built per tenant-defined variant: which definition to build. */
+  variant?: string;
 }): Promise<RunOutcome> {
   const db = getDb();
   const definition = reportDefinition(input.reportType);
@@ -52,6 +54,47 @@ export async function runReport(input: {
       message: `"${definition.label}" is turned off in Settings -> Reports.`,
     };
   }
+
+  // A variant report is built from one stored definition. Resolved before the
+  // run exists: a run that never named its definition would explain nothing.
+  let variant: { key: string; value: unknown; name: string } | null = null;
+
+  if (definition.variants) {
+    if (!input.variant) {
+      return {
+        ok: false,
+        runId: null,
+        message: `"${definition.label}" is built from a saved definition, and none was named.`,
+      };
+    }
+
+    const [stored] = await db
+      .select({ value: schema.channelRules.value })
+      .from(schema.channelRules)
+      .where(
+        and(
+          eq(schema.channelRules.tenantId, input.tenantId),
+          eq(schema.channelRules.channel, definition.variants.rulesChannel),
+          eq(schema.channelRules.key, input.variant),
+        ),
+      );
+
+    if (!stored) {
+      return {
+        ok: false,
+        runId: null,
+        message:
+          `There is no definition "${input.variant}" — it may have been deleted. ` +
+          "Settings -> Custom reports lists the ones that exist.",
+      };
+    }
+
+    variant = { key: input.variant, value: stored.value, name: variantName(stored.value, input.variant) };
+  }
+
+  // The variant's own name goes into filenames and the register, so two
+  // definitions never produce workbooks that read as the same report.
+  const label = variant?.name ?? definition.label;
 
   const files = await db
     .select({
@@ -102,6 +145,7 @@ export async function runReport(input: {
     .values({
       tenantId: input.tenantId,
       reportType: input.reportType,
+      variant: variant?.key ?? null,
       periodLabel: period.label,
       periodStart: period.start,
       periodEnd: period.end,
@@ -172,9 +216,14 @@ export async function runReport(input: {
 
     const fx = await loadFx(rows, period);
 
-    const result = build(input.reportType, rows, { period, rules, fx });
+    const result = build(input.reportType, rows, {
+      period,
+      rules,
+      fx,
+      variant: variant ? { key: variant.key, value: variant.value } : undefined,
+    });
 
-    await storeArtifacts(run.id, input.tenantId, definition.label, period.label, result);
+    await storeArtifacts(run.id, input.tenantId, label, period.label, result);
 
     await db
       .update(schema.reportRuns)
@@ -288,7 +337,12 @@ async function storeArtifacts(
 function build(
   reportType: ReportTypeId,
   rows: LedgerRow[],
-  context: { period: Period; rules: RulesSnapshot; fx: FxSnapshot },
+  context: {
+    period: Period;
+    rules: RulesSnapshot;
+    fx: FxSnapshot;
+    variant?: { key: string; value: unknown };
+  },
 ): GeneratorResult {
   // The registry, not a switch: the core does not know the modules' names.
   return reportModule(reportType).generate(rows, context);

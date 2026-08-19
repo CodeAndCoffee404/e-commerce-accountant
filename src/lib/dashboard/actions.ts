@@ -79,6 +79,9 @@ export async function buildAllReady(raw: { periodLabel: string }): Promise<Build
     const available = availability[definition.id];
 
     if (!available?.enabled) return false;
+    // Closing the month means the official reports are built. Informational
+    // ones are built on demand from Reports, never swept up here.
+    if (definition.informational) return false;
     if (!available.ready.includes(input.periodLabel)) return false;
 
     const run = latest.get(definition.id);

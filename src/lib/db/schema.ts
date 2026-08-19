@@ -484,6 +484,7 @@ export const reportType = pgEnum("report_type", [
   "sales_by_currency",
   "off_amazon_sales",
   "amazon_zoho_invoice",
+  "custom_slice",
 ]);
 
 export const reportStatus = pgEnum("report_status", [
@@ -509,6 +510,12 @@ export const reportRuns = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
 
     reportType: reportType("report_type").notNull(),
+    /**
+     * For report types that come in tenant-defined variants (custom slices):
+     * the key of the definition this run was built from. The definition itself
+     * is in rules_snapshot, so the run stays explainable after an edit.
+     */
+    variant: text("variant"),
     periodLabel: text("period_label").notNull(),
     periodStart: date("period_start").notNull(),
     periodEnd: date("period_end").notNull(),
