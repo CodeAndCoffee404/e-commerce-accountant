@@ -1,7 +1,9 @@
 "use client";
 
-import { Alert, Card, Segmented, Space, Switch, Tag, Typography } from "antd";
+import { Alert, Card, Segmented, Space, Switch, Tag, Tooltip, Typography } from "antd";
 
+import type { PeriodGranularity } from "@/lib/db/schema";
+import type { PeriodSchedule } from "@/lib/periods/schedule";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { AllReportSettings, Requirement } from "@/lib/reports/settings";
 import { DATASET_NAMES } from "@/modules/channels/registry";
@@ -24,18 +26,26 @@ type Runner = (action: () => Promise<SettingsActionResult>) => void;
  */
 export function ReportSettingsTab({
   settings,
+  schedule,
   canEdit,
   run,
   pending,
 }: {
   settings: AllReportSettings;
+  /** Only to warn when a report is prepared for a period nobody opens. */
+  schedule: PeriodSchedule;
   canEdit: boolean;
   run: Runner;
   pending: boolean;
 }) {
   const save = (
     reportType: ReportTypeId,
-    next: { enabled: boolean; optionalDatasets: string[]; optionalCountries: string[] },
+    next: {
+      enabled: boolean;
+      optionalDatasets: string[];
+      optionalCountries: string[];
+      disabledGranularities: string[];
+    },
   ) => {
     run(() => saveReportSettings({ reportType, ...next }));
   };
@@ -43,6 +53,11 @@ export function ReportSettingsTab({
   const optionalOf = (record: Record<string, Requirement>) =>
     Object.entries(record)
       .filter(([, requirement]) => requirement === "optional")
+      .map(([key]) => key);
+
+  const disabledOf = (record: Record<string, boolean>) =>
+    Object.entries(record)
+      .filter(([, on]) => !on)
       .map(([key]) => key);
 
   return (
@@ -58,6 +73,13 @@ export function ReportSettingsTab({
         const current = settings[definition.id];
         const optionalDatasets = optionalOf(current.datasets);
         const optionalCountries = optionalOf(current.countries);
+        const disabledGranularities = disabledOf(current.granularities);
+        // A report prepared for a period the tenant never opens is a card that
+        // will never appear, with nothing on this page to explain why.
+        const orphaned = definition.granularity.filter(
+          (granularity) =>
+            current.granularities[granularity] !== false && !schedule[granularity],
+        );
         const everythingOptional =
           definition.id === "off_amazon_sales" &&
           optionalDatasets.length === definition.datasets.length;
@@ -77,7 +99,12 @@ export function ReportSettingsTab({
                   disabled={!canEdit || pending}
                   aria-label={`${definition.label} on or off`}
                   onChange={(enabled) =>
-                    save(definition.id, { enabled, optionalDatasets, optionalCountries })
+                    save(definition.id, {
+                      enabled,
+                      optionalDatasets,
+                      optionalCountries,
+                      disabledGranularities,
+                    })
                   }
                 />
               </Space>
@@ -92,7 +119,77 @@ export function ReportSettingsTab({
                 Hidden from Reports and refuses to build. Nothing else changes — uploads for its
                 channels are still accepted and kept.
               </Typography.Text>
-            ) : definition.id === "off_amazon_sales" ? (
+            ) : null}
+
+            {current.enabled ? (
+              <Space direction="vertical" size={4} style={{ width: "100%", marginBottom: 12 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Prepared per:
+                </Typography.Text>
+                <Space size={4} wrap>
+                  {(["month", "quarter", "year"] as PeriodGranularity[]).map((granularity) => {
+                    const supported = definition.granularity.includes(granularity);
+                    const on = supported && current.granularities[granularity] !== false;
+                    // The last one cannot be unticked: a report prepared for no
+                    // period at all is an off report said a confusing way.
+                    const last = on && definition.granularity.length - disabledGranularities.length === 1;
+
+                    return (
+                      <Tooltip
+                        key={granularity}
+                        title={
+                          supported
+                            ? last
+                              ? "The only period this report is prepared for. Turn the report off instead."
+                              : undefined
+                            : `${definition.label} is not built per ${granularity}.`
+                        }
+                      >
+                        <Tag.CheckableTag
+                          checked={on}
+                          style={{
+                            border: "1px solid var(--ant-color-border)",
+                            userSelect: "none",
+                            textTransform: "capitalize",
+                            ...(canEdit && !pending && supported && !last
+                              ? {}
+                              : { pointerEvents: "none", opacity: supported ? 0.6 : 0.35 }),
+                          }}
+                          onChange={(checked) => {
+                            const next = definition.granularity.filter((candidate) =>
+                              candidate === granularity
+                                ? !checked
+                                : current.granularities[candidate] === false,
+                            );
+
+                            save(definition.id, {
+                              enabled: true,
+                              optionalDatasets,
+                              optionalCountries,
+                              disabledGranularities: next,
+                            });
+                          }}
+                        >
+                          {granularity}
+                        </Tag.CheckableTag>
+                      </Tooltip>
+                    );
+                  })}
+                </Space>
+
+                {orphaned.length > 0 ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginTop: 4 }}
+                    message={`No ${orphaned.join(" or ")} periods are being opened`}
+                    description={`This report is prepared per ${orphaned.join(" and ")}, but the schedule under Settings → Periods does not open ${orphaned.length === 1 ? "that period" : "those periods"}, so no card will ever appear for ${orphaned.length === 1 ? "it" : "them"}.`}
+                  />
+                ) : null}
+              </Space>
+            ) : null}
+
+            {!current.enabled ? null : definition.id === "off_amazon_sales" ? (
               <Space direction="vertical" size="small" style={{ width: "100%" }}>
                 {definition.datasets.map((dataset) => (
                   <Space key={dataset} size={12} wrap>
@@ -118,6 +215,7 @@ export function ReportSettingsTab({
                           enabled: true,
                           optionalDatasets: next,
                           optionalCountries,
+                          disabledGranularities,
                         });
                       }}
                     />
@@ -164,6 +262,7 @@ export function ReportSettingsTab({
                             enabled: true,
                             optionalDatasets,
                             optionalCountries: next,
+                            disabledGranularities,
                           });
                         }}
                       >
