@@ -38,12 +38,14 @@ import type { AuditRow } from "@/lib/audit/record";
 import type { ConnectionSummary } from "@/lib/google/connection";
 import type { Member } from "@/lib/members/queries";
 import type { ReferenceData } from "@/lib/reference/queries";
+import type { PeriodSchedule } from "@/lib/periods/schedule";
 import type { AllReportSettings } from "@/lib/reports/settings";
 
 import { AuditCard } from "./audit-card";
 import { CustomReportsTab } from "./custom-reports";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
+import { PeriodSettingsTab } from "./period-settings";
 import { ReportSettingsTab } from "./report-settings";
 
 type VatRate = ReferenceData["vatRates"][number];
@@ -53,6 +55,7 @@ type SellerVatNumber = ReferenceData["sellerVatNumbers"][number];
 export function SettingsView({
   data,
   reports,
+  schedule,
   connection,
   pickerApiKey,
   members,
@@ -63,6 +66,7 @@ export function SettingsView({
 }: {
   data: ReferenceData;
   reports: AllReportSettings;
+  schedule: PeriodSchedule;
   connection: ConnectionSummary | null;
   pickerApiKey: string | null;
   members: Member[];
@@ -103,7 +107,25 @@ export function SettingsView({
           key: "reports",
           label: "Reports",
           children: (
-            <ReportSettingsTab settings={reports} canEdit={canEdit} run={run} pending={pending} />
+            <ReportSettingsTab
+              settings={reports}
+              schedule={schedule}
+              canEdit={canEdit}
+              run={run}
+              pending={pending}
+            />
+          ),
+        },
+        {
+          key: "periods",
+          label: "Periods",
+          children: (
+            <PeriodSettingsTab
+              schedule={schedule}
+              canEdit={canEdit}
+              run={run}
+              pending={pending}
+            />
           ),
         },
         {

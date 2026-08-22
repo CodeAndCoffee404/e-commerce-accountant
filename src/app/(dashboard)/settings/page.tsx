@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { googlePickerApiKey } from "@/lib/env";
 import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
+import { loadPeriodConfiguration } from "@/lib/periods/ensure";
 import { loadReferenceData } from "@/lib/reference/queries";
 import { loadReportSettings } from "@/lib/reports/queries";
 
@@ -12,9 +13,10 @@ export const metadata = { title: "Settings — E-commerce Accountant" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [data, reports, connection, members, audit] = await Promise.all([
+  const [data, reports, periods, connection, members, audit] = await Promise.all([
     loadReferenceData(user.tenantId),
     loadReportSettings(user.tenantId),
+    loadPeriodConfiguration(user.tenantId),
     loadConnection(user.tenantId),
     listMembers(user.tenantId),
     listAudit(user.tenantId),
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
       <SettingsView
         data={data}
         reports={reports}
+        schedule={periods.schedule}
         connection={connection}
         pickerApiKey={googlePickerApiKey()}
         members={members}
