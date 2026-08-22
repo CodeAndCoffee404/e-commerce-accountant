@@ -38,24 +38,41 @@ export type UploadOptions = {
   statuses: string[];
 };
 
-/** Values that actually occur, so a filter can never select nothing. */
+/**
+ * Values a filter can usefully take.
+ *
+ * Datasets and statuses come from what has been uploaded — offering a filter
+ * that selects nothing is worse than not offering it. Periods do not: a period
+ * exists before anything is uploaded into it, and being able to ask "what came
+ * in for August" and be told "nothing" is the answer someone actually wants on
+ * the second of September.
+ */
 export async function uploadFilterOptions(tenantId: string): Promise<UploadOptions> {
-  const rows = await getDb()
-    .selectDistinct({
-      dataset: schema.sourceFiles.datasetLabel,
-      period: schema.sourceFiles.periodLabel,
-      status: schema.sourceFiles.status,
-    })
-    .from(schema.sourceFiles)
-    .where(eq(schema.sourceFiles.tenantId, tenantId));
+  const [rows, periods] = await Promise.all([
+    getDb()
+      .selectDistinct({
+        dataset: schema.sourceFiles.datasetLabel,
+        status: schema.sourceFiles.status,
+      })
+      .from(schema.sourceFiles)
+      .where(eq(schema.sourceFiles.tenantId, tenantId)),
+
+    getDb()
+      .select({ label: schema.periods.label })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId))
+      // Newest first, by when they start rather than by their label: '2026.Y'
+      // and '2026.Q3' sort before '2026.07 July' as text, which would put a
+      // year in among the months inside it.
+      .orderBy(desc(schema.periods.startDate)),
+  ]);
 
   const unique = (values: (string | null)[]) =>
     [...new Set(values.filter((value): value is string => value !== null))].sort();
 
   return {
     datasets: unique(rows.map((row) => row.dataset)),
-    // Newest first: that is the period being worked on.
-    periods: unique(rows.map((row) => row.period)).reverse(),
+    periods: periods.map((period) => period.label),
     statuses: unique(rows.map((row) => row.status)),
   };
 }

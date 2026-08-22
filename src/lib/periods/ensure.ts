@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import { getDb, schema, type Database } from "@/lib/db";
+import { getDb, schema, type Executor } from "@/lib/db";
 import type { PeriodRow } from "@/lib/db/schema";
 import type { Period } from "@/lib/ingest/period";
 
@@ -27,7 +27,7 @@ export type PeriodConfiguration = { schedule: PeriodSchedule; anchors: PeriodAnc
  */
 export async function loadPeriodConfiguration(
   tenantId: string,
-  db: Database = getDb(),
+  db: Executor = getDb(),
 ): Promise<PeriodConfiguration> {
   const rows = await db
     .select({ key: schema.channelRules.key, value: schema.channelRules.value })
@@ -63,7 +63,7 @@ export async function loadPeriodConfiguration(
 export async function ensurePeriods(
   tenantId: string,
   asOf: string,
-  db: Database = getDb(),
+  db: Executor = getDb(),
 ): Promise<PeriodRow[]> {
   const { schedule, anchors } = await loadPeriodConfiguration(tenantId, db);
   const resolved: PeriodAnchors = { ...anchors };
@@ -131,7 +131,7 @@ export async function ensurePeriods(
 export async function ensurePeriodFor(
   tenantId: string,
   period: Period,
-  db: Database = getDb(),
+  db: Executor = getDb(),
 ): Promise<string> {
   const [inserted] = await db
     .insert(schema.periods)

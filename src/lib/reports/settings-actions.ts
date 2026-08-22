@@ -20,6 +20,11 @@ const inputSchema = z.object({
   optionalDatasets: z.array(z.string()).default([]),
   /** Zoho marketplaces demoted to optional. */
   optionalCountries: z.array(z.string()).default([]),
+  /**
+   * Periods this report is not prepared for. Only deviations are sent, so a
+   * report gains a new granularity switched on rather than off.
+   */
+  disabledGranularities: z.array(z.string()).default([]),
 });
 
 export type SaveReportSettingsInput = z.input<typeof inputSchema>;
@@ -66,7 +71,22 @@ export async function saveReportSettings(
 
   for (const country of input.optionalCountries) countries[country] = "optional";
 
-  const value = { enabled: input.enabled, datasets, countries };
+  const unknownGranularity = input.disabledGranularities.find(
+    (granularity) => !(definition.granularity as readonly string[]).includes(granularity),
+  );
+
+  if (unknownGranularity) {
+    return {
+      ok: false,
+      message: `"${definition.label}" is not built per ${unknownGranularity}.`,
+    };
+  }
+
+  const granularities: Record<string, boolean> = {};
+
+  for (const granularity of input.disabledGranularities) granularities[granularity] = false;
+
+  const value = { enabled: input.enabled, datasets, countries, granularities };
 
   await getDb()
     .insert(schema.channelRules)

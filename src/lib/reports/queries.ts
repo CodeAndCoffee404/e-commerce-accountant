@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
+import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
 import { DATASET_NAMES } from "@/modules/channels/registry";
 import { variantDisplayName } from "@/modules/reports/registry";
 
@@ -10,6 +11,7 @@ import {
   defaultSettings,
   describeNeeds,
   normaliseSettings,
+  preparedGranularities,
   requiredCountries,
   requiredDatasets,
   type AllReportSettings,
@@ -142,10 +144,15 @@ export type ReportAvailability = {
   /** Periods that can be built right now. */
   ready: string[];
   /**
-   * Periods where something has been uploaded but not enough, with the pieces
-   * still wanted. Newest first.
+   * Periods where something has been uploaded but the report cannot be built
+   * yet. Newest first.
+   *
+   * `missing` names the pieces still wanted. `endsOn` is set instead when
+   * nothing is missing and the period simply has not finished — a quarter
+   * two months in is not a smaller quarter, and saying "waiting for files"
+   * would send someone looking for exports that do not exist yet.
    */
-  blocked: { period: string; missing: string[] }[];
+  blocked: { period: string; missing: string[]; endsOn: string | null }[];
   /**
    * For reports built per tenant-defined variant: one entry per stored
    * definition, each becoming its own card. Absent for ordinary reports.
@@ -192,13 +199,34 @@ export async function availablePeriods(
   tenantId: string,
   preloadedSettings?: AllReportSettings,
 ): Promise<Record<ReportTypeId, ReportAvailability>> {
-  const [rows, settings, variantRows] = await Promise.all([
+  // The scheduler's day, in UTC, matching the cron. A period is offered only
+  // once it is over: a quarter built from the two months that have happened
+  // looks like a quarter and is not one.
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [periods, files, settings, variantRows] = await Promise.all([
     getDb()
-      .selectDistinct({
+      .select({
+        label: schema.periods.label,
+        granularity: schema.periods.granularity,
+        start: schema.periods.startDate,
+        end: schema.periods.endDate,
+      })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId))
+      // By when they start, never by their label: '2026.Y' and '2026.Q3' sort
+      // before '2026.07 July' as text, which would interleave a year with the
+      // months inside it.
+      .orderBy(desc(schema.periods.startDate)),
+
+    getDb()
+      .select({
+        id: schema.sourceFiles.id,
         dataset: schema.sourceFiles.dataset,
-        periodLabel: schema.sourceFiles.periodLabel,
-        granularity: schema.sourceFiles.periodGranularity,
         countryCode: schema.sourceFiles.countryCode,
+        periodStart: schema.sourceFiles.periodStart,
+        periodEnd: schema.sourceFiles.periodEnd,
+        granularity: schema.sourceFiles.periodGranularity,
       })
       .from(schema.sourceFiles)
       .where(
@@ -234,38 +262,54 @@ export async function availablePeriods(
       continue;
     }
 
-    const usable = rows.filter(
-      (row) =>
-        row.dataset !== null &&
-        definition.datasets.includes(row.dataset) &&
-        row.periodLabel !== null &&
-        definition.granularity.includes(row.granularity ?? "month"),
-    );
-
-    const byPeriod = new Map<string, { datasets: Set<string>; countries: Set<string> }>();
-
-    for (const row of usable) {
-      const period = row.periodLabel!;
-      const entry = byPeriod.get(period) ?? { datasets: new Set(), countries: new Set() };
-
-      entry.datasets.add(row.dataset!);
-      if (row.countryCode) entry.countries.add(row.countryCode);
-      byPeriod.set(period, entry);
-    }
+    // What the module can build, narrowed by what this client files.
+    const prepared = preparedGranularities(definition, configured);
+    const candidates = files
+      .filter(
+        (file) =>
+          file.dataset !== null &&
+          definition.datasets.includes(file.dataset) &&
+          file.periodStart !== null &&
+          file.periodEnd !== null,
+      )
+      .map((file) => ({
+        id: file.id,
+        dataset: file.dataset!,
+        countryCode: file.countryCode,
+        periodStart: file.periodStart!,
+        periodEnd: file.periodEnd!,
+        granularity: file.granularity ?? ("month" as const),
+      }));
 
     const ready: string[] = [];
-    const blocked: { period: string; missing: string[] }[] = [];
+    const blocked: ReportAvailability["blocked"] = [];
 
-    for (const [period, entry] of byPeriod) {
+    for (const period of periods) {
+      if (!prepared.includes(period.granularity)) continue;
+
+      // Coarser files win over the months they already contain, so a channel
+      // that ships both a quarterly export and its three monthly ones is
+      // counted once rather than twice.
+      const covered = resolveCoverage(period, candidates);
+
+      // A period nothing has been uploaded for is not "blocked" — it is empty,
+      // and listing every open month as blocked would bury the ones actually
+      // waiting on something. The dashboard is where an empty month is shown.
+      if (covered.length === 0) continue;
+
       const missing: string[] = [];
 
       // A report needing every channel is not offered until every required
-      // channel is there: building it anyway would quietly under-report by
-      // exactly the channels nobody noticed were absent. Optional channels
-      // never block — they are included whenever their data exists.
+      // channel is there for every month of the period: building it anyway
+      // would quietly under-report by exactly the channels nobody noticed were
+      // absent. For a month that is the old question asked the old way; for a
+      // quarter it is the one that matters, since two months out of three look
+      // like a whole quarter in every other respect.
       if (definition.requiresEveryDataset) {
         for (const dataset of requiredDatasets(definition, configured)) {
-          if (!entry.datasets.has(dataset)) missing.push(DATASET_NAMES[dataset]);
+          const held = covered.filter((file) => file.dataset === dataset);
+
+          if (uncoveredMonths(period, held).length > 0) missing.push(DATASET_NAMES[dataset]);
         }
       }
 
@@ -273,20 +317,25 @@ export async function availablePeriods(
       // so an incomplete month is never offered in the first place.
       if (definition.id === "amazon_zoho_invoice") {
         for (const country of requiredCountries(configured)) {
-          if (!entry.countries.has(country)) missing.push(country);
+          const held = covered.filter((file) => file.countryCode === country);
+
+          if (uncoveredMonths(period, held).length > 0) missing.push(country);
         }
       }
 
-      if (missing.length === 0) ready.push(period);
-      else blocked.push({ period, missing });
+      if (missing.length > 0) blocked.push({ period: period.label, missing, endsOn: null });
+      else if (period.end >= today) {
+        blocked.push({ period: period.label, missing: [], endsOn: period.end });
+      } else ready.push(period.label);
     }
 
-    // Newest first: that is the period being worked on.
+    // Newest first, and already in that order: the periods were read sorted by
+    // when they start.
     result[definition.id] = {
       enabled: true,
       needs: describeNeeds(definition, configured),
-      ready: ready.sort().reverse(),
-      blocked: blocked.sort((a, b) => b.period.localeCompare(a.period)),
+      ready,
+      blocked,
       ...(definition.variants
         ? {
             variants: variantRows

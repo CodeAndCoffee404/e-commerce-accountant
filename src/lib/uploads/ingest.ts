@@ -1,7 +1,8 @@
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 
-import type { Database } from "@/lib/db";
+import type { Transaction } from "@/lib/db";
 import { getDb, schema } from "@/lib/db";
+import { ensurePeriodFor } from "@/lib/periods/ensure";
 import type { Grid } from "@/lib/ingest/classify";
 import type { MappedTransaction } from "@/lib/ingest/mappers/types";
 import { channelModule } from "@/modules/channels/registry";
@@ -86,6 +87,14 @@ export async function ingestSourceFile(
   // One transaction: a half-applied replacement would leave the ledger holding
   // two versions of the same slice, which is exactly what this prevents.
   return db.transaction(async (tx) => {
+    // The period the file belongs to, opened if the calendar has not reached
+    // it. Done here rather than at the insert because this is the moment a
+    // file becomes part of the ledger: every path that produces a parsed file
+    // goes through this function, so the invariant holds without each caller
+    // having to remember it. A file for a period nobody opened is never
+    // refused — a late export is a fact of this business.
+    const periodId = await ensurePeriodFor(tenantId, period, tx);
+
     const superseded = await supersedeSlice(tx, {
       fileId,
       tenantId,
@@ -104,7 +113,7 @@ export async function ingestSourceFile(
 
     await tx
       .update(schema.sourceFiles)
-      .set({ status: "parsed" })
+      .set({ status: "parsed", periodId })
       .where(eq(schema.sourceFiles.id, fileId));
 
     return {
@@ -117,8 +126,6 @@ export async function ingestSourceFile(
     };
   });
 }
-
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 type Slice = {
   fileId: string;

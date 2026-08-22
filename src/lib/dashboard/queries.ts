@@ -86,7 +86,19 @@ export async function loadDashboard(
   }
 
   const settings = await loadReportSettings(tenantId);
-  const [files, availability] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+  const [openPeriods, files, availability] = await Promise.all([
+    db
+      .select({
+        label: schema.periods.label,
+        granularity: schema.periods.granularity,
+        endDate: schema.periods.endDate,
+      })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId))
+      // By when they start, never by their label: '2026.Y' sorts before
+      // '2026.07 July' as text.
+      .orderBy(desc(schema.periods.startDate)),
     db
       .select({
         dataset: schema.sourceFiles.dataset,
@@ -105,12 +117,17 @@ export async function loadDashboard(
   ]);
 
   const monthly = files.filter((file) => (file.granularity ?? "month") === "month");
-  const months = [...new Set(monthly.map((file) => file.period).filter(Boolean))] as string[];
 
-  months.sort().reverse();
+  // Months come from the period table now, so one nobody has uploaded for
+  // still appears — which is the point of opening periods ahead of their data.
+  const months = openPeriods
+    .filter((period) => period.granularity === "month")
+    .map((period) => period.label);
 
   const month =
-    requestedMonth && months.includes(requestedMonth) ? requestedMonth : months[0] ?? null;
+    requestedMonth && months.includes(requestedMonth)
+      ? requestedMonth
+      : defaultMonth(openPeriods, today) ?? months[0] ?? null;
 
   // What the month needs, from the enabled reports' own definitions.
   const items: ChecklistItem[] = [];
@@ -211,6 +228,25 @@ export async function loadDashboard(
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
     matrix,
   };
+}
+
+/**
+ * The month the screen opens on: the last one that has actually finished.
+ *
+ * On the first of August the August period exists, but nobody is working on
+ * August — they are closing July, and its files are only now arriving. Opening
+ * on the newest period would put an empty checklist in front of someone whose
+ * work is one row further down.
+ */
+function defaultMonth(
+  periods: { label: string; granularity: string; endDate: string }[],
+  today: string,
+): string | null {
+  const finished = periods.find(
+    (period) => period.granularity === "month" && period.endDate < today,
+  );
+
+  return finished?.label ?? null;
 }
 
 async function loadReports(
