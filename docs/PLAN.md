@@ -143,10 +143,26 @@ membership        tenant_id, user_id, role (owner|accountant|viewer)
 google_connection tenant_id, google_account_email, refresh_token(enc),
                   root_folder_id, connected_at, status
 
+── Периоды ───────────────────────────────────────────────────
+period            id, tenant_id,
+                  label ('2026.07 July' | '2026.Q3' | '2026.Y'),
+                  granularity (month|quarter|year),
+                  start_date date, end_date date,
+                  status (open|closed),
+                  origin (schedule|upload|manual),
+                  created_at, closed_at, closed_by
+                  UNIQUE (tenant_id, label)
+                  INDEX (tenant_id, start_date)   ← порядок по дате, не по метке
+
+Период существует до того, как в него что-то загрузили: первого числа
+календарь открывает месяц, и чек-лист по нему виден пустым, а не отсутствует.
+Квартал и год собираются из входящих в них месяцев — своих загрузок у них нет.
+
 ── Приём файлов ──────────────────────────────────────────────
 source_file       id, tenant_id, original_filename, mime, size_bytes,
                   sha256, blob_key, uploaded_by, uploaded_at,
                   source_type, country_code,
+                  period_id → period,
                   period_label ('2026.07 July' | '2026.Q3'),
                   period_start date, period_end date,
                   period_granularity (month|quarter),
@@ -182,7 +198,7 @@ channel_rule      tenant_id, channel, key, value jsonb, note
 fx_rate           rate_date, base, quote, rate, source   (кэш ЕЦБ)
 
 ── Отчёты ────────────────────────────────────────────────────
-report_run        id, tenant_id, report_type, period,
+report_run        id, tenant_id, report_type, period_id → period, period,
                   status (queued|running|succeeded|failed),
                   requested_by, started_at, finished_at,
                   error_message,

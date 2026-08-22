@@ -1,0 +1,1 @@
+ALTER TYPE "public"."period_granularity" ADD VALUE 'year';

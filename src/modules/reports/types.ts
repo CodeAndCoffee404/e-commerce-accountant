@@ -1,4 +1,5 @@
 import type { schema } from "@/lib/db";
+import type { PeriodGranularity } from "@/lib/db/schema";
 import type { DatasetId } from "@/lib/ingest/datasets";
 import type { ReportSettings } from "@/lib/reports/settings";
 import type { GeneratorResult, LedgerRow, ReportContext } from "@/lib/reports/types";
@@ -10,8 +11,14 @@ export type ReportDefinition = {
   /** Legacy's own name — it goes into the filename and the client knows it. */
   label: string;
   datasets: readonly DatasetId[];
-  /** Whole quarters are allowed only where legacy allowed them. */
-  granularity: readonly ("month" | "quarter")[];
+  /**
+   * The periods this report can be built for — the module's own statement
+   * about its mathematics, not a tenant preference. What a tenant actually
+   * wants prepared is chosen in report settings, within this list.
+   *
+   * Whole quarters are allowed only where legacy allowed them.
+   */
+  granularity: readonly PeriodGranularity[];
   /**
    * Refuse to build unless every listed dataset is present for the period.
    *

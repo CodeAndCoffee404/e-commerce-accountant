@@ -128,6 +128,75 @@ export const allowedEmails = pgTable(
 );
 
 /* ------------------------------------------------------------------ *
+ * Accounting periods
+ *
+ * A period exists before anything is uploaded into it. That is the whole
+ * point: on the first of the month the month opens, and the checklist for it
+ * is visible and empty rather than absent. Until this table existed a period
+ * was only ever a side effect of a file arriving, so a month nobody had sent
+ * files for simply did not appear anywhere.
+ * ------------------------------------------------------------------ */
+
+export const periodGranularity = pgEnum("period_granularity", [
+  "month",
+  "quarter",
+  "year",
+]);
+
+/**
+ * Closing is a statement, not a lock. Late files are a fact of this business —
+ * a marketplace reissues an export weeks later — and refusing them would push
+ * the correction outside the system, where nothing traces it. So a closed
+ * period still accepts uploads; what it stops doing is asking for them.
+ */
+export const periodStatus = pgEnum("period_status", ["open", "closed"]);
+
+/**
+ * Where the period came from. `schedule` is the calendar opening it on the
+ * first; `upload` is a back-dated file arriving for a period nobody opened;
+ * `manual` is someone adding one by hand. Worth keeping apart: a period with
+ * no origin but `upload` means the schedule is not running.
+ */
+export const periodOrigin = pgEnum("period_origin", ["schedule", "upload", "manual"]);
+
+export const periods = pgTable(
+  "periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    /** `2026.07 July`, `2026.Q3`, `2026.Y` — legacy's wording where it has one. */
+    label: text("label").notNull(),
+    granularity: periodGranularity("granularity").notNull(),
+    /** ISO calendar dates, inclusive, as the rest of the ledger keeps them. */
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+
+    status: periodStatus("status").notNull().default("open"),
+    origin: periodOrigin("origin").notNull().default("schedule"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: text("closed_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    // The label is the period's identity, and the schedule leans on that: it
+    // opens periods with ON CONFLICT DO NOTHING, so a missed run catching up
+    // and a run that already happened are the same operation.
+    uniqueIndex("periods_label_idx").on(table.tenantId, table.label),
+    // Periods are ordered by when they start, never by their label: '2026.Y'
+    // and '2026.Q3' sort before '2026.07 July' as text, which would interleave
+    // a year with the months inside it.
+    index("periods_start_idx").on(table.tenantId, table.startDate),
+  ],
+);
+
+export type PeriodRow = typeof periods.$inferSelect;
+export type PeriodGranularity = (typeof periodGranularity.enumValues)[number];
+
+/* ------------------------------------------------------------------ *
  * Uploaded files
  * ------------------------------------------------------------------ */
 
@@ -138,8 +207,6 @@ export const datasetId = pgEnum("dataset_id", [
   "cdiscount",
   "shopify",
 ]);
-
-export const periodGranularity = pgEnum("period_granularity", ["month", "quarter"]);
 
 export const sourceFileStatus = pgEnum("source_file_status", [
   "received",
@@ -173,6 +240,18 @@ export const sourceFiles = pgTable(
     datasetLabel: text("dataset_label"),
     countryCode: text("country_code"),
 
+    /**
+     * The period this file belongs to. The label and dates below stay as they
+     * are: they are what the classifier read out of the file itself, and the
+     * whole ledger — reports, dedup, the drill-down — matches on them. This
+     * column adds the other direction, so a period can be asked what it holds
+     * without matching text.
+     *
+     * `restrict` rather than `cascade`: a period holding files is not
+     * something to delete by accident, and the database is the right place to
+     * say so.
+     */
+    periodId: uuid("period_id").references(() => periods.id, { onDelete: "restrict" }),
     periodLabel: text("period_label"),
     periodStart: date("period_start"),
     periodEnd: date("period_end"),
@@ -516,6 +595,8 @@ export const reportRuns = pgTable(
      * is in rules_snapshot, so the run stays explainable after an edit.
      */
     variant: text("variant"),
+    /** The period built, alongside the copy of its bounds the run was made under. */
+    periodId: uuid("period_id").references(() => periods.id, { onDelete: "restrict" }),
     periodLabel: text("period_label").notNull(),
     periodStart: date("period_start").notNull(),
     periodEnd: date("period_end").notNull(),
