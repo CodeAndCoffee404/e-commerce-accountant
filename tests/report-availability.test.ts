@@ -112,7 +112,11 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
 
       if (stillWanted.length > 0) {
         expect(state.off_amazon_sales.ready).toEqual([]);
-        expect(state.off_amazon_sales.blocked).toEqual([{ period: PERIOD, missing: stillWanted }]);
+        expect(state.off_amazon_sales.blocked).toEqual([
+          // endsOn is null because July is over: what holds the report back is
+          // the missing channels, not the calendar.
+          { period: PERIOD, missing: stillWanted, endsOn: null },
+        ]);
       } else {
         expect(state.off_amazon_sales.ready).toEqual([PERIOD]);
         expect(state.off_amazon_sales.blocked).toEqual([]);
@@ -148,6 +152,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
         {
           period: PERIOD,
           missing: ["ES", "IT", "FR", "UK", "SE", "PL", "NL", "IE", "BE"],
+          endsOn: null,
         },
       ]);
     } finally {

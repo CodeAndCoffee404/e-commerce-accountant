@@ -91,7 +91,7 @@ export const salesByCurrencyModule: ReportModule = {
     id: "sales_by_currency",
     label: "Sales report by currency",
     datasets: ["amazon_vat"],
-    granularity: ["month", "quarter"],
+    granularity: ["month", "quarter", "year"],
     // One file covers every marketplace, so there is nothing to be missing.
     requiresEveryDataset: false,
     description: "Amazon VAT transaction report, split by settlement currency, with totals.",

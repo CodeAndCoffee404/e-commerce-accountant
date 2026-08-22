@@ -1,9 +1,16 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { afterAll, describe, expect, it } from "vitest";
 
 import { and, eq } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { classify } from "@/lib/ingest/classify";
+import { parseSpreadsheet } from "@/lib/ingest/parse";
 import { buildYearPeriod } from "@/lib/ingest/period";
+import { ingestSourceFile } from "@/lib/uploads/ingest";
 import { ensurePeriodFor, ensurePeriods, loadPeriodConfiguration } from "@/lib/periods/ensure";
 import { PERIODS_CHANNEL, SCHEDULE_KEY, type PeriodSchedule } from "@/lib/periods/schedule";
 
@@ -231,5 +238,70 @@ describe.skipIf(!HAS_DB)("the period a file belongs to", () => {
 
     expect(row.granularity).toBe("year");
     expect(row.origin).toBe("upload");
+  });
+});
+
+describe.skipIf(!HAS_DB)("a file joining the ledger", () => {
+  /**
+   * Every path that produces a parsed file goes through ingestSourceFile, so
+   * this is where the invariant is enforced rather than at each caller. A file
+   * in the ledger with no period would be invisible to every page that lists
+   * periods — present in the database and absent from the application.
+   */
+  it("is attached to its period, opened for it if need be", async () => {
+    const tenantId = await tenant();
+    const file = "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv";
+    const bytes = readFileSync(path.resolve(process.cwd(), file));
+    const filename = path.basename(file);
+
+    const parsed = await parseSpreadsheet(bytes, filename);
+
+    if (!parsed.ok) throw new Error(parsed.message);
+
+    const classified = classify(parsed.grid, filename);
+
+    if (!classified.ok) throw new Error(classified.message);
+
+    const db = getDb();
+    const [row] = await db
+      .insert(schema.sourceFiles)
+      .values({
+        tenantId,
+        originalFilename: filename,
+        sizeBytes: bytes.byteLength,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        blobKey: `test/${filename}`,
+        blobUrl: "https://example.invalid/test",
+        dataset: classified.dataset,
+        datasetLabel: classified.label,
+        countryCode: classified.country,
+        periodLabel: classified.period.label,
+        periodStart: classified.period.start,
+        periodEnd: classified.period.end,
+        periodGranularity: classified.period.granularity,
+        headerRowIndex: classified.headerRowIndex,
+        status: "classified",
+      })
+      .returning({ id: schema.sourceFiles.id });
+
+    // Nothing has been scheduled for this tenant, and July is behind us: the
+    // period exists only because the file arrived.
+    await ingestSourceFile(row.id, tenantId, parsed.grid);
+
+    const [stored] = await db
+      .select({ status: schema.sourceFiles.status, periodId: schema.sourceFiles.periodId })
+      .from(schema.sourceFiles)
+      .where(eq(schema.sourceFiles.id, row.id));
+
+    expect(stored.status).toBe("parsed");
+    expect(stored.periodId).not.toBeNull();
+
+    const [period] = await db
+      .select()
+      .from(schema.periods)
+      .where(eq(schema.periods.id, stored.periodId!));
+
+    expect(period.label).toBe("2026.07 July");
+    expect(period.origin).toBe("upload");
   });
 });

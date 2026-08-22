@@ -1,11 +1,12 @@
 import { put } from "@vercel/blob";
 import Decimal from "decimal.js";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 import { publishRun } from "@/lib/google/publish";
 import type { Period } from "@/lib/ingest/period";
+import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
 import { euroRateOn } from "@/lib/reference/fx";
 
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
@@ -13,7 +14,7 @@ import { reportModule, variantDisplayName as variantName } from "@/modules/repor
 import { reportDefinition, type ReportTypeId } from "./definitions";
 import { loadReportSettings } from "./queries";
 import { channelRule } from "./rules";
-import { requiredDatasets } from "./settings";
+import { preparedGranularities, requiredDatasets } from "./settings";
 import type { FxSnapshot, GeneratorResult, LedgerRow, RulesSnapshot } from "./types";
 import { summariseWarnings } from "./warnings";
 import { buildWorkbook, reportFilename } from "./workbook";
@@ -96,7 +97,70 @@ export async function runReport(input: {
   // definitions never produce workbooks that read as the same report.
   const label = variant?.name ?? definition.label;
 
-  const files = await db
+  // The period is read from its own row rather than inferred from whichever
+  // file happened to come back first. Its bounds are the report's bounds, and
+  // a quarter has no file that carries them.
+  const [periodRow] = await db
+    .select()
+    .from(schema.periods)
+    .where(
+      and(
+        eq(schema.periods.tenantId, input.tenantId),
+        eq(schema.periods.label, input.periodLabel),
+      ),
+    )
+    .limit(1);
+
+  if (!periodRow) {
+    return {
+      ok: false,
+      runId: null,
+      message: `There is no period ${input.periodLabel}.`,
+    };
+  }
+
+  if (!definition.granularity.includes(periodRow.granularity)) {
+    return {
+      ok: false,
+      runId: null,
+      message: `"${definition.label}" is built per ${definition.granularity.join(" or ")}, and ${input.periodLabel} is a ${periodRow.granularity}.`,
+    };
+  }
+
+  if (!preparedGranularities(definition, settings).includes(periodRow.granularity)) {
+    return {
+      ok: false,
+      runId: null,
+      message:
+        `"${definition.label}" is not prepared per ${periodRow.granularity} for this account. ` +
+        "Settings -> Reports decides which periods each report is built for.",
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // A period still running has months that have not happened. Built anyway it
+  // would look like a whole quarter and be a third short, and nothing on the
+  // face of the workbook would say so.
+  if (periodRow.endDate >= today) {
+    return {
+      ok: false,
+      runId: null,
+      message: `${input.periodLabel} is not over yet — it ends on ${periodRow.endDate}.`,
+    };
+  }
+
+  const period: Period = {
+    label: periodRow.label,
+    granularity: periodRow.granularity,
+    start: periodRow.startDate,
+    end: periodRow.endDate,
+  };
+
+  // Files are selected by the ground they cover, not by a matching label: a
+  // quarter holds no files of its own and is assembled from the months inside
+  // it.
+  const inRange = await db
     .select({
       id: schema.sourceFiles.id,
       dataset: schema.sourceFiles.dataset,
@@ -109,11 +173,26 @@ export async function runReport(input: {
     .where(
       and(
         eq(schema.sourceFiles.tenantId, input.tenantId),
-        eq(schema.sourceFiles.periodLabel, input.periodLabel),
         eq(schema.sourceFiles.status, "parsed"),
         inArray(schema.sourceFiles.dataset, [...definition.datasets]),
+        gte(schema.sourceFiles.periodStart, period.start),
+        lte(schema.sourceFiles.periodEnd, period.end),
       ),
     );
+
+  // Coarser files win over the months they contain, so a channel that sent
+  // both a quarterly export and its three monthly ones is counted once.
+  const files = resolveCoverage(
+    period,
+    inRange.map((file) => ({
+      id: file.id,
+      dataset: file.dataset!,
+      countryCode: file.countryCode,
+      periodStart: file.periodStart!,
+      periodEnd: file.periodEnd!,
+      granularity: file.granularity ?? "month",
+    })),
+  );
 
   if (files.length === 0) {
     return {
@@ -123,29 +202,13 @@ export async function runReport(input: {
     };
   }
 
-  const granularity = files[0].granularity ?? "month";
-
-  if (!definition.granularity.includes(granularity)) {
-    return {
-      ok: false,
-      runId: null,
-      message: `"${definition.label}" is built per ${definition.granularity.join(" or ")}, and ${input.periodLabel} is a ${granularity}.`,
-    };
-  }
-
-  const period: Period = {
-    label: input.periodLabel,
-    granularity,
-    start: files[0].periodStart!,
-    end: files[0].periodEnd!,
-  };
-
   const [run] = await db
     .insert(schema.reportRuns)
     .values({
       tenantId: input.tenantId,
       reportType: input.reportType,
       variant: variant?.key ?? null,
+      periodId: periodRow.id,
       periodLabel: period.label,
       periodStart: period.start,
       periodEnd: period.end,
@@ -163,11 +226,17 @@ export async function runReport(input: {
       .values(files.map((file) => ({ reportRunId: run.id, sourceFileId: file.id })));
 
     if (definition.requiresEveryDataset) {
-      const present = new Set(files.map((file) => file.dataset));
       // Only the channels this tenant still requires. An optional channel is
       // included whenever its data exists and never blocks the build.
+      //
+      // Asked per month rather than per period: a quarter holding two of its
+      // three months of Allegro is not a quarter with Allegro in it.
       const missing = requiredDatasets(definition, settings).filter(
-        (dataset) => !present.has(dataset),
+        (dataset) =>
+          uncoveredMonths(
+            period,
+            files.filter((file) => file.dataset === dataset),
+          ).length > 0,
       );
 
       if (missing.length > 0) {
@@ -178,7 +247,10 @@ export async function runReport(input: {
       }
     }
 
-    const rows = await loadLedger(input.tenantId, period.label, definition.datasets);
+    const rows = await loadLedger(
+      input.tenantId,
+      files.map((file) => file.id),
+    );
 
     // The module's own completeness check — its idea of "all there", brought
     // with it rather than special-cased here.
@@ -348,23 +420,25 @@ function build(
   return reportModule(reportType).generate(rows, context);
 }
 
-async function loadLedger(
-  tenantId: string,
-  periodLabel: string,
-  datasets: readonly string[],
-): Promise<LedgerRow[]> {
+/**
+ * The ledger for a run, taken from the files the run was built from.
+ *
+ * By file rather than by period label, because the two stopped being the same
+ * question the moment a quarter could be assembled from its months: the rows
+ * of a month carry that month's label, not the quarter's. Selecting by the
+ * chosen files also carries the duplication rule through to the numbers — a
+ * channel counted once in the sources is counted once here.
+ */
+async function loadLedger(tenantId: string, fileIds: string[]): Promise<LedgerRow[]> {
   const rows = await getDb()
     .select()
     .from(schema.transactions)
     .where(
       and(
         eq(schema.transactions.tenantId, tenantId),
-        eq(schema.transactions.periodLabel, periodLabel),
+        inArray(schema.transactions.sourceFileId, fileIds),
         // Superseded rows are history. A report is built from what is current.
         eq(schema.transactions.isCurrent, true),
-        inArray(schema.transactions.dataset, [
-          ...(datasets as (typeof schema.datasetId.enumValues)[number][]),
-        ]),
       ),
     )
     .orderBy(schema.transactions.sourceRowNumber);

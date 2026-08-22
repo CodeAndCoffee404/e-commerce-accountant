@@ -320,9 +320,24 @@ export function ReportsView({
                     <Space direction="vertical" size={4} style={{ width: "100%" }}>
                       {waiting.slice(0, 3).map((entry) => (
                         <Typography.Text key={entry.period} style={{ fontSize: 12 }}>
-                          <b>{entry.period}</b> — still missing:{" "}
-                          {entry.missing.slice(0, 6).join(", ")}
-                          {entry.missing.length > 6 ? ` and ${entry.missing.length - 6} more` : ""}
+                          <b>{entry.period}</b>
+                          {/*
+                            A period with nothing missing is waiting on the
+                            calendar, not on anybody. Saying "still missing"
+                            here would send someone looking for exports that
+                            cannot exist yet.
+                          */}
+                          {entry.endsOn ? (
+                            <> — everything is in; the period ends on {entry.endsOn}</>
+                          ) : (
+                            <>
+                              {" "}
+                              — still missing: {entry.missing.slice(0, 6).join(", ")}
+                              {entry.missing.length > 6
+                                ? ` and ${entry.missing.length - 6} more`
+                                : ""}
+                            </>
+                          )}
                         </Typography.Text>
                       ))}
                       {waiting.length > 3 ? (

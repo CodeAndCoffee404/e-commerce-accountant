@@ -1,3 +1,4 @@
+import type { PeriodGranularity } from "@/lib/db/schema";
 import type { DatasetId } from "@/lib/ingest/datasets";
 import { DATASET_NAMES } from "@/modules/channels/registry";
 
@@ -23,6 +24,17 @@ export type ReportSettings = {
   datasets: Record<string, Requirement>;
   /** Zoho only: requirement per marketplace. Anything unlisted is required. */
   countries: Record<string, Requirement>;
+  /**
+   * Which of the periods the module supports this tenant actually prepares.
+   *
+   * Two different questions, kept apart: the module's `granularity` says what
+   * its mathematics can do, and this says what the client files. A client who
+   * reports monthly and not quarterly should not be offered quarterly
+   * workbooks, and no code change should be needed to say so.
+   *
+   * Keyed only by what the module supports; anything unlisted is on.
+   */
+  granularities: Record<string, boolean>;
 };
 
 export type AllReportSettings = Record<ReportTypeId, ReportSettings>;
@@ -42,6 +54,7 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     enabled?: unknown;
     datasets?: Record<string, unknown>;
     countries?: Record<string, unknown>;
+    granularities?: Record<string, unknown>;
   };
 
   const datasets: Record<string, Requirement> = {};
@@ -58,7 +71,13 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     }
   }
 
-  return { enabled: value.enabled !== false, datasets, countries };
+  const granularities: Record<string, boolean> = {};
+
+  for (const granularity of definition.granularity) {
+    granularities[granularity] = value.granularities?.[granularity] !== false;
+  }
+
+  return { enabled: value.enabled !== false, datasets, countries, granularities };
 }
 
 export function defaultSettings(): AllReportSettings {
@@ -80,6 +99,19 @@ export function requiredDatasets(
 
 export function requiredCountries(settings: ReportSettings): string[] {
   return ZOHO_COUNTRIES.filter((country) => settings.countries[country] !== "optional");
+}
+
+/**
+ * The periods this report will actually be offered for: what the module can
+ * build, narrowed by what the client files.
+ */
+export function preparedGranularities(
+  definition: ReportDefinition,
+  settings: ReportSettings,
+): PeriodGranularity[] {
+  return definition.granularity.filter(
+    (granularity) => settings.granularities[granularity] !== false,
+  );
 }
 
 /**

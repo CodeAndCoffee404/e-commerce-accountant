@@ -27,6 +27,7 @@ const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
 const { buildAllReady } = await import("@/lib/dashboard/actions");
 const { loadDashboard } = await import("@/lib/dashboard/queries");
+const { periodContaining } = await import("@/lib/periods/calendar");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
@@ -134,9 +135,22 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     expect(byCurrency.state).toBe("waiting");
     expect(byCurrency.missing.join(" ")).toContain("Amazon VAT");
 
-    // The matrix carries the same facts.
-    expect(data.matrix.months).toEqual([PERIOD]);
-    expect(data.matrix.rows.find((row) => row.key === "allegro")!.cells).toEqual(["yes"]);
+    // The matrix carries the same facts, and now also the month nobody has
+    // uploaded for yet: the calendar opened it, and its column of "no" is what
+    // says the work has not started rather than the month not existing.
+    const current = periodContaining("month", new Date().toISOString().slice(0, 10), {
+      month: true,
+      quarter: true,
+      year: false,
+      fiscalYearStartMonth: 1,
+    }).label;
+
+    expect(data.matrix.months).toEqual([current, PERIOD]);
+    expect(data.matrix.rows.find((row) => row.key === "allegro")!.cells).toEqual(["no", "yes"]);
+
+    // ...and the screen still opens on the month being worked on, not on the
+    // empty one that has only just begun.
+    expect(data.month).toBe(PERIOD);
   });
 
   it("builds what is ready, once, and says so the second time", async () => {

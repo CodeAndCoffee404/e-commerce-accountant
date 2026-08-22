@@ -12,6 +12,16 @@ declare global {
 export type Database = PostgresJsDatabase<typeof schema>;
 
 /**
+ * A transaction handle, as drizzle hands it to the callback. Named here rather
+ * than re-derived in each module that takes one, so "something that can run a
+ * query" has a single spelling.
+ */
+export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Either of the two — for helpers that work inside a transaction or without. */
+export type Executor = Database | Transaction;
+
+/**
  * postgres-js over a plain TCP connection rather than the Neon HTTP driver:
  * the HTTP driver cannot do multi-statement transactions, and superseding a
  * period's transactions has to be atomic.
