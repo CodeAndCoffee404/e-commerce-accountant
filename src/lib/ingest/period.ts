@@ -1,3 +1,5 @@
+import type { PeriodGranularity } from "@/lib/db/schema";
+
 import {
   monthByAbbreviation,
   monthByLocalisedName,
@@ -9,9 +11,19 @@ import {
 export type YearMonth = { year: number; month: Month };
 
 export type Period = {
-  /** `2026.07 July` or `2026.Q3`, byte-for-byte what legacy writes. */
+  /** `2026.07 July`, `2026.Q3` or `2026.Y` — legacy's wording where it has one. */
   label: string;
-  granularity: "month" | "quarter";
+  /**
+   * Taken from the database enum rather than spelled out again. The two used
+   * to be written separately and drifted the moment one of them learned a new
+   * value; now widening the column is what widens this.
+   *
+   * A period a file can carry is still only a month or a quarter — that is
+   * what `buildPeriod` will produce, and the classifier is the only thing that
+   * builds one from a file. Longer periods are assembled from the months
+   * inside them and never arrive as an upload.
+   */
+  granularity: PeriodGranularity;
   /** ISO calendar dates, inclusive. */
   start: string;
   end: string;
