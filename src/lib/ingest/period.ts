@@ -103,6 +103,33 @@ export function buildPeriod(values: readonly YearMonth[]): PeriodResult {
   };
 }
 
+/**
+ * A whole year, which no file ever carries.
+ *
+ * Deliberately not part of `buildPeriod`: that function reads a period out of
+ * a file's contents and may see one month or three, never twelve. A year is
+ * assembled from the months inside it, so it is built from a number rather
+ * than from data.
+ *
+ * `startMonth` moves the fiscal year without moving the quarters. Quarters
+ * stay calendar quarters because `Month.quarter` and the classifier are built
+ * on that, and a file's own quarter must keep meaning what it has always
+ * meant.
+ */
+export function buildYearPeriod(year: number, startMonth = 1): Period {
+  const endYear = startMonth === 1 ? year : year + 1;
+  const endMonth = startMonth === 1 ? 12 : startMonth - 1;
+
+  return {
+    // The year it starts in, so a fiscal year running April to March is
+    // 2026.Y and not something that has to be read twice.
+    label: `${year}.Y`,
+    granularity: "year",
+    start: isoDate(year, startMonth, 1),
+    end: isoDate(endYear, endMonth, lastDayOfMonth(endYear, endMonth)),
+  };
+}
+
 /** Deduplicates while preserving nothing but year+month — the rest is noise. */
 export function collectPeriods(values: Iterable<YearMonth>): YearMonth[] {
   const unique = new Map<string, YearMonth>();
