@@ -127,7 +127,7 @@ export function DashboardView({
         intro={
           empty
             ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
-            : `${data.month} · ${requiredIn} of ${requiredItems.length} required files in · ${built} of ${data.reports.length} reports built`
+            : null
         }
         attention={attention}
         allClear={!empty && allClear}
@@ -313,7 +313,7 @@ function Hero({
   toolbar,
 }: {
   firstName: string;
-  intro: string;
+  intro: string | null;
   attention: { key: string; text: string; href: string }[];
   allClear: boolean;
   rings: {
@@ -385,9 +385,11 @@ function Hero({
             </span>{" "}
             <span aria-hidden>👋</span>
           </Title>
-          <Text type="secondary" style={{ display: "block", marginTop: 6 }}>
-            {intro}
-          </Text>
+          {intro ? (
+            <Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+              {intro}
+            </Text>
+          ) : null}
 
           {allClear ? (
             <div
