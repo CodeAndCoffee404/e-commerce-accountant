@@ -12,6 +12,7 @@ import { requireUser } from "@/lib/auth/session";
 import { log } from "@/lib/log";
 import { getDb, schema } from "@/lib/db";
 import { classify } from "@/lib/ingest/classify";
+import { ensurePeriodFor } from "@/lib/periods/ensure";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
 import { MAX_UPLOAD_BYTES } from "./constants";
@@ -129,10 +130,16 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
     return { ok: false, message: classification.message };
   }
 
+  // The period the file belongs to, opened if the calendar has not reached it.
+  // A back-dated export is never refused for arriving late: refusing it would
+  // push the correction outside the system, where nothing traces it.
+  const periodId = await ensurePeriodFor(user.tenantId, classification.period);
+
   const [row] = await db
     .insert(schema.sourceFiles)
     .values({
       tenantId: user.tenantId,
+      periodId,
       originalFilename: input.filename,
       mimeType: input.contentType ?? null,
       sizeBytes: bytes.byteLength,

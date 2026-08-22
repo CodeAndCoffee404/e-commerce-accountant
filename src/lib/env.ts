@@ -86,6 +86,19 @@ export function googlePickerApiKey(): string | null {
   return process.env.GOOGLE_PICKER_API_KEY ?? null;
 }
 
+/**
+ * Shared secret the scheduler proves itself with. Vercel sends it as
+ * `Authorization: Bearer …` on every cron invocation.
+ *
+ * Optional here, and refused at the route when absent: an endpoint that writes
+ * rows should not become open to the world because a variable was forgotten.
+ * Returning null lets the route say so plainly instead of throwing a
+ * configuration error at whoever called it.
+ */
+export function cronSecret(): string | null {
+  return process.env.CRON_SECRET ?? null;
+}
+
 export function encryptionKeyHex(): string {
   return firstDefined(["ENCRYPTION_KEY"], "ENCRYPTION_KEY");
 }

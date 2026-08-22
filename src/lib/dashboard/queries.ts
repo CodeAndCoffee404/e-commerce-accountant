@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { log } from "@/lib/log";
+import { ensurePeriods } from "@/lib/periods/ensure";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import { availablePeriods, loadReportSettings } from "@/lib/reports/queries";
@@ -66,6 +68,22 @@ export async function loadDashboard(
   requestedMonth?: string,
 ): Promise<DashboardData> {
   const db = getDb();
+
+  // The second way a period comes into being, and the one that does not
+  // depend on a scheduler. Vercel's plan allows a single cron and fires it
+  // within an hour of its slot; if that run is missed the month would
+  // otherwise stay invisible until the next one. Opening periods is
+  // idempotent, so doing it here costs a query that finds nothing on all but
+  // one day a month.
+  //
+  // Never allowed to fail the page: a checklist that will not render because
+  // a period could not be opened is a worse answer than one that renders
+  // without the newest period on it.
+  try {
+    await ensurePeriods(tenantId, new Date().toISOString().slice(0, 10));
+  } catch (error) {
+    log.error("period.ensure_failed", error, { tenantId });
+  }
 
   const settings = await loadReportSettings(tenantId);
   const [files, availability] = await Promise.all([
