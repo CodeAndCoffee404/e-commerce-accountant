@@ -13,6 +13,8 @@ import {
 } from "@/lib/reports/settings-actions";
 import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
+import { EffectiveFromControl } from "./effective-from-control";
+
 type Runner = (action: () => Promise<SettingsActionResult>) => void;
 
 /**
@@ -28,6 +30,7 @@ export function ReportSettingsTab({
   settings,
   schedule,
   canEdit,
+  canEditEffectiveFrom,
   run,
   pending,
 }: {
@@ -35,6 +38,8 @@ export function ReportSettingsTab({
   /** Only to warn when a report is prepared for a period nobody opens. */
   schedule: PeriodSchedule;
   canEdit: boolean;
+  /** Owner or accountant — wider than `canEdit`, which is owner-only. */
+  canEditEffectiveFrom: boolean;
   run: Runner;
   pending: boolean;
 }) {
@@ -186,6 +191,12 @@ export function ReportSettingsTab({
                     description={`This report is prepared per ${orphaned.join(" and ")}, but the schedule under Settings → Periods does not open ${orphaned.length === 1 ? "that period" : "those periods"}, so no card will ever appear for ${orphaned.length === 1 ? "it" : "them"}.`}
                   />
                 ) : null}
+
+                <EffectiveFromControl
+                  reportType={definition.id}
+                  current={current.effectiveFrom}
+                  canEdit={canEditEffectiveFrom}
+                />
               </Space>
             ) : null}
 

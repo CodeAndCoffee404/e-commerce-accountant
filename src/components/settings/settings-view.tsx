@@ -66,6 +66,7 @@ export function SettingsView({
   selfEmail,
   audit,
   canEdit,
+  canEditEffectiveFrom,
   canEditDeadlines,
   isOwner,
 }: {
@@ -79,6 +80,8 @@ export function SettingsView({
   selfEmail: string;
   audit: AuditRow[];
   canEdit: boolean;
+  /** Owner or accountant — reporting-start date is a filing detail, not a company setting. */
+  canEditEffectiveFrom: boolean;
   /** Owner or accountant — deadlines are a filing detail, not a company setting. */
   canEditDeadlines: boolean;
   isOwner: boolean;
@@ -119,6 +122,7 @@ export function SettingsView({
               settings={reports}
               schedule={schedule}
               canEdit={canEdit}
+              canEditEffectiveFrom={canEditEffectiveFrom}
               run={run}
               pending={pending}
             />

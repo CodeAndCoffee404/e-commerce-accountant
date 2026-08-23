@@ -44,6 +44,10 @@ export default async function SettingsPage() {
         // The client's rule: company settings are the owner's alone. An
         // accountant still sees everything — read-only.
         canEdit={user.role === "owner"}
+        // A report's reporting-start date is the one report setting an
+        // accountant can move too — they are the one who knows when a client
+        // actually started filing it.
+        canEditEffectiveFrom={user.role === "owner" || user.role === "accountant"}
         // Deadlines are a filing detail an accountant lives with day to day,
         // so both roles that can build reports may set them.
         canEditDeadlines={user.role === "owner" || user.role === "accountant"}

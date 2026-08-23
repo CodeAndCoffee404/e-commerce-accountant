@@ -287,6 +287,11 @@ export async function availablePeriods(
     for (const period of periods) {
       if (!prepared.includes(period.granularity)) continue;
 
+      // A reporting-start date narrows the checklist, not the data: the files
+      // are still there, the period still exists, this report simply does not
+      // ask for it any more.
+      if (configured.effectiveFrom && period.start < configured.effectiveFrom) continue;
+
       // Coarser files win over the months they already contain, so a channel
       // that ships both a quarterly export and its three monthly ones is
       // counted once rather than twice.

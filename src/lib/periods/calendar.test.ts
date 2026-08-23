@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildYearPeriod } from "@/lib/ingest/period";
 
-import { anchorFor, fiscalYearOf, periodContaining, periodsDue } from "./calendar";
+import { anchorFor, fiscalYearOf, periodContaining, periodsDue, periodsFrom } from "./calendar";
 import { defaultSchedule, type PeriodSchedule } from "./schedule";
 
 const all: PeriodSchedule = { month: true, quarter: true, year: true, fiscalYearStartMonth: 1 };
@@ -95,6 +95,36 @@ describe("what the calendar opens", () => {
     const due = periodsDue({ month: "1900-01-01" }, "2026-08-22", all);
 
     expect(due).toHaveLength(240);
+  });
+});
+
+describe("walking forward from a named date rather than a stored anchor", () => {
+  it("opens every month from the given date to today, ignoring the schedule's own anchor", () => {
+    const months = periodsFrom("month", "2026-01-01", "2026-05-15", all);
+
+    expect(months.map((period) => period.label)).toEqual([
+      "2026.01 January",
+      "2026.02 February",
+      "2026.03 March",
+      "2026.04 April",
+      "2026.05 May",
+    ]);
+  });
+
+  it("starts from the period containing the date, not the date itself", () => {
+    const quarters = periodsFrom("quarter", "2026-02-10", "2026-08-22", all);
+
+    expect(quarters.map((period) => period.label)).toEqual(["2026.Q1", "2026.Q2", "2026.Q3"]);
+  });
+
+  it("is a single period when the date and today land in the same one", () => {
+    expect(periodsFrom("month", "2026-08-01", "2026-08-22", all).map((p) => p.label)).toEqual([
+      "2026.08 August",
+    ]);
+  });
+
+  it("stops rather than opening two centuries of months for a date far in the past", () => {
+    expect(periodsFrom("month", "1900-01-01", "2026-08-22", all)).toHaveLength(240);
   });
 });
 
