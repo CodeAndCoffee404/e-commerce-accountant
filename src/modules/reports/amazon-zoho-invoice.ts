@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 
+import { parseDecimalValue } from "@/lib/ingest/numbers";
 import { decideSku } from "@/lib/reports/rules";
 import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
 
@@ -43,6 +44,54 @@ const CURRENCIES: Record<string, string> = { PL: "PLN", UK: "GBP", SE: "SEK" };
 
 function currencyOf(country: string): string {
   return CURRENCIES[country] ?? "EUR";
+}
+
+/** Amazon's MARKETPLACE column, as it appears in the VAT transaction report. */
+const MARKETPLACE_COUNTRIES: Record<string, string> = {
+  "amazon.de": "DE",
+  "amazon.es": "ES",
+  "amazon.fr": "FR",
+  "amazon.it": "IT",
+  "amazon.pl": "PL",
+  "amazon.se": "SE",
+  "amazon.nl": "NL",
+  "amazon.ie": "IE",
+  "amazon.com.be": "BE",
+  "amazon.co.uk": "UK",
+};
+
+/** The two VAT tax reporting schemes each invoice carries a line for. */
+const VAT_LINES = [
+  { desc: "VAT Regular", account: "Regular", scheme: "REGULAR" },
+  { desc: "VAT OSS", account: "OSS", scheme: "UNION-OSS" },
+] as const;
+
+/**
+ * Amazon VAT for one marketplace and tax scheme: the sum of
+ * `TOTAL_ACTIVITY_VALUE_VAT_AMT` across every matching row of the VAT
+ * transaction report for the same period.
+ *
+ * Read from `raw`, not from normalised ledger fields — the report's own
+ * MARKETPLACE and TAX_REPORTING_SCHEME columns are what the spec filters by,
+ * and the amount column is theirs too, so nothing here has to be re-derived.
+ */
+function vatAmount(rows: readonly LedgerRow[], marketplace: string, scheme: string): Decimal {
+  let total = new Decimal(0);
+
+  for (const row of rows) {
+    if (row.dataset !== "amazon_vat") continue;
+    if (row.raw.MARKETPLACE !== marketplace) continue;
+    if (row.raw.TAX_REPORTING_SCHEME !== scheme) continue;
+
+    const value = parseDecimalValue(row.raw.TOTAL_ACTIVITY_VALUE_VAT_AMT, {
+      decimalSeparator: ".",
+      column: "TOTAL_ACTIVITY_VALUE_VAT_AMT",
+    });
+
+    if (value) total = total.plus(value);
+  }
+
+  return total;
 }
 
 /** `INV-Amz DE-07.26` — the number the client's accounting expects. */
@@ -147,6 +196,10 @@ export function generateZohoInvoice(
     return byCountry !== 0 ? byCountry : a.sku.localeCompare(b.sku);
   });
 
+  const marketplaceOf = new Map(
+    Object.entries(MARKETPLACE_COUNTRIES).map(([marketplace, country]) => [country, marketplace]),
+  );
+
   for (const group of sorted) {
     const currency = currencyOf(group.country);
     const rate = context.fx[currency];
@@ -171,6 +224,38 @@ export function generateZohoInvoice(
       group.unitPrice.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
       `Amazon Sales ${group.country}`,
     ]);
+  }
+
+  // Every invoiced marketplace gets its two VAT lines — Regular and OSS —
+  // whether or not the VAT transaction report actually has matching rows for
+  // it. No data for a marketplace and scheme means Item Price is zero, not
+  // that the line is skipped: Zoho still needs it to reconcile the invoice.
+  const invoicedCountries = [...new Set(sorted.map((group) => group.country))].sort(
+    (a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99),
+  );
+
+  for (const country of invoicedCountries) {
+    const currency = currencyOf(country);
+    const rate = context.fx[currency];
+    const marketplace = marketplaceOf.get(country);
+
+    for (const vatLine of VAT_LINES) {
+      const amount = marketplace ? vatAmount(rows, marketplace, vatLine.scheme) : new Decimal(0);
+
+      output.push([
+        `${context.period.end} 00:00:00`,
+        invoiceNumber(country, context.period.end),
+        `Amazon ${country}`,
+        currency,
+        currency === "EUR" ? "1" : (rate?.rate ?? ""),
+        "",
+        "",
+        vatLine.desc,
+        "1",
+        amount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
+        `VAT ${country} ${vatLine.account}`,
+      ]);
+    }
   }
 
   const sheet: ReportSheet = {
@@ -210,13 +295,15 @@ export const amazonZohoInvoiceModule: ReportModule = {
   definition: {
     id: "amazon_zoho_invoice",
     label: "Amazon invoice for Zoho",
-    datasets: ["amazon_monthly"],
+    // Amazon VAT is optional: without it every invoice still gets its two VAT
+    // lines, priced at zero rather than left out. See requiresEveryDataset.
+    datasets: ["amazon_monthly", "amazon_vat"],
     // A quarter is refused: the invoice is dated the last day of the month and
     // numbered by month, so a quarter has no meaning here.
     granularity: ["month"],
     // One dataset, but ten countries — the module checks them itself below.
     requiresEveryDataset: false,
-    description: "Ten marketplaces aggregated into invoice lines for Zoho.",
+    description: "Ten marketplaces aggregated into invoice lines for Zoho, with VAT lines from Amazon VAT.",
     needs: "Amazon Monthly for all ten marketplaces: ES, IT, FR, DE, UK, SE, PL, NL, IE, BE.",
     why:
       "A missing marketplace does not make a smaller invoice. It makes one that leaves a " +
