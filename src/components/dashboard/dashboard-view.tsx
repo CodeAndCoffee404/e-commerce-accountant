@@ -26,6 +26,9 @@ import { useState, useSyncExternalStore, useTransition } from "react";
 import type { AuditRow } from "@/lib/audit/record";
 import { buildAllReady } from "@/lib/dashboard/actions";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
+import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
+
+import { ReportDeadlinesBlock } from "./report-deadlines-block";
 
 const { Text, Title } = Typography;
 
@@ -40,6 +43,7 @@ export function DashboardView({
   activity,
   firstName,
   flaggedRows,
+  deadlines,
   canBuild,
   uploadAction,
 }: {
@@ -48,6 +52,8 @@ export function DashboardView({
   firstName: string;
   /** Current ledger rows waiting for a person, tenant-wide. */
   flaggedRows: number;
+  /** Reports due for their current reporting period, already sorted. */
+  deadlines: DeadlineDashboardRow[];
   canBuild: boolean;
   /** The Upload files control, provided by the page so roles stay server-side. */
   uploadAction: React.ReactNode;
@@ -193,6 +199,8 @@ export function DashboardView({
           )
         }
       />
+
+      <ReportDeadlinesBlock rows={deadlines} />
 
       {empty ? null : (
         <>

@@ -665,6 +665,41 @@ export const reportArtifacts = pgTable(
   (table) => [index("report_artifacts_run_idx").on(table.reportRunId)],
 );
 
+/**
+ * The rule that turns a filed period into a statutory deadline, one row per
+ * (report, periodicity) a tenant actually files.
+ *
+ * A rule, not a date: the tenant sets "the 5th of the following month" once,
+ * and every period — past, present and future — is due on it. Editing a rule
+ * changes every period's deadline the moment it is read, because nothing
+ * stores the computed date; see `computeDeadline`.
+ */
+export const reportDeadlines = pgTable(
+  "report_deadlines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    reportType: reportType("report_type").notNull(),
+    granularity: periodGranularity("granularity").notNull(),
+
+    /** 1-31. Clamped to the target month's last day when it does not exist. */
+    deadlineDay: integer("deadline_day").notNull(),
+    /** 1-12. Only meaningful — and only stored — for yearly reports. */
+    deadlineMonth: integer("deadline_month"),
+
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    uniqueIndex("report_deadlines_idx").on(table.tenantId, table.reportType, table.granularity),
+  ],
+);
+
+export type ReportDeadlineRow = typeof reportDeadlines.$inferSelect;
+
 export type ReportRun = typeof reportRuns.$inferSelect;
 export type ReportArtifact = typeof reportArtifacts.$inferSelect;
 export type VatRate = typeof vatRates.$inferSelect;
