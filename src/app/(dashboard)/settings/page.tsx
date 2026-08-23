@@ -7,6 +7,7 @@ import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
 import { loadPeriodConfiguration } from "@/lib/periods/ensure";
 import { loadReferenceData } from "@/lib/reference/queries";
+import { loadDeadlineRules } from "@/lib/reports/deadlines-queries";
 import { loadReportSettings } from "@/lib/reports/queries";
 
 export const metadata = { title: "Settings — E-commerce Accountant" };
@@ -21,6 +22,7 @@ export default async function SettingsPage() {
     listMembers(user.tenantId),
     listAudit(user.tenantId),
   ]);
+  const deadlineRules = await loadDeadlineRules(user.tenantId, reports);
 
   return (
     <>
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
       <SettingsView
         data={data}
         reports={reports}
+        deadlineRules={deadlineRules}
         schedule={periods.schedule}
         connection={connection}
         pickerApiKey={googlePickerApiKey()}
@@ -41,6 +44,9 @@ export default async function SettingsPage() {
         // The client's rule: company settings are the owner's alone. An
         // accountant still sees everything — read-only.
         canEdit={user.role === "owner"}
+        // Deadlines are a filing detail an accountant lives with day to day,
+        // so both roles that can build reports may set them.
+        canEditDeadlines={user.role === "owner" || user.role === "accountant"}
         isOwner={user.role === "owner"}
       />
     </>
