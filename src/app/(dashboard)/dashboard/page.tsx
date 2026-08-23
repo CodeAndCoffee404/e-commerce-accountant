@@ -13,11 +13,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const user = await requireUser();
   const params = await searchParams;
 
-  const [data, activity, flaggedRows, deadlines] = await Promise.all([
-    loadDashboard(user.tenantId, one(params.month)),
+  // Deadlines are about the month shown on the dashboard, so they wait on it
+  // rather than joining the initial fan-out.
+  const data = await loadDashboard(user.tenantId, one(params.month));
+
+  const [activity, flaggedRows, deadlines] = await Promise.all([
     listAudit(user.tenantId, 8),
     countNeedsAttention(user.tenantId),
-    loadReportDeadlines(user.tenantId),
+    data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
   ]);
 
   // The greeting addresses a person, not an account. The email prefix is the
