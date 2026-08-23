@@ -21,7 +21,7 @@ import {
 } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSyncExternalStore, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 
 import type { AuditRow } from "@/lib/audit/record";
 import { buildAllReady } from "@/lib/dashboard/actions";
@@ -56,6 +56,21 @@ export function DashboardView({
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [building, startTransition] = useTransition();
+  // Switching months is a server round trip. Until the new page commits, the
+  // month the user asked for is the one we show as chosen, with a spinner on
+  // it — otherwise the click looks ignored and gets repeated.
+  const [switching, startSwitch] = useTransition();
+  const [requestedMonth, setRequestedMonth] = useState<string | null>(null);
+  const shownMonth = switching && requestedMonth ? requestedMonth : data.month;
+
+  const goToMonth = (month: string) => {
+    if (switching || month === data.month) return;
+
+    setRequestedMonth(month);
+    startSwitch(() => {
+      router.push(`/dashboard?month=${encodeURIComponent(month)}`);
+    });
+  };
 
   const requiredItems = data.items.filter((item) => item.requirement === "required");
   const requiredIn = requiredItems.filter((item) => item.uploaded).length;
@@ -146,10 +161,12 @@ export function DashboardView({
             <Space wrap>
               {uploadAction}
               <Select
-                value={data.month ?? undefined}
+                value={shownMonth ?? undefined}
+                loading={switching}
+                disabled={switching}
                 style={{ minWidth: 170 }}
                 options={data.months.map((month) => ({ value: month, label: month }))}
-                onChange={(month) => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
+                onChange={goToMonth}
               />
               {canBuild ? (
                 <Tooltip
@@ -242,7 +259,12 @@ export function DashboardView({
       </div>
 
       <Card size="small" title="History" className="ea-rise ea-rise-2">
-        <MatrixTable matrix={data.matrix} selected={data.month} />
+        <MatrixTable
+          matrix={data.matrix}
+          selected={shownMonth}
+          switching={switching}
+          onSelect={goToMonth}
+        />
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
           Every month on record: a dot is a file that is there, a dash is one that is not.
         </Typography.Paragraph>
@@ -648,11 +670,15 @@ function DriveBadge({ drive }: { drive: CloseReport["drive"] }) {
 function MatrixTable({
   matrix,
   selected,
+  switching,
+  onSelect,
 }: {
   matrix: DashboardData["matrix"];
   selected: string | null;
+  /** A month switch is in flight: the chosen header spins, the rest wait. */
+  switching: boolean;
+  onSelect: (month: string) => void;
 }) {
-  const router = useRouter();
   const { token } = theme.useToken();
 
   type Row = { key: string; label: string; cells: ("yes" | "no" | "optional")[] };
@@ -663,6 +689,7 @@ function MatrixTable({
       rowKey="key"
       size="small"
       pagination={false}
+      loading={switching}
       scroll={{ x: 320 + matrix.months.length * 72 }}
       columns={[
         {
@@ -684,7 +711,9 @@ function MatrixTable({
               size="small"
               shape="round"
               type={month === selected ? "primary" : "text"}
-              onClick={() => router.push(`/dashboard?month=${encodeURIComponent(month)}`)}
+              loading={switching && month === selected}
+              disabled={switching && month !== selected}
+              onClick={() => onSelect(month)}
               style={{ fontSize: 12, fontWeight: month === selected ? 600 : 400 }}
             >
               {month.slice(0, 7)}
