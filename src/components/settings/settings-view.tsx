@@ -62,6 +62,7 @@ export function SettingsView({
   selfEmail,
   audit,
   canEdit,
+  canEditEffectiveFrom,
   isOwner,
 }: {
   data: ReferenceData;
@@ -73,6 +74,7 @@ export function SettingsView({
   selfEmail: string;
   audit: AuditRow[];
   canEdit: boolean;
+  canEditEffectiveFrom: boolean;
   isOwner: boolean;
 }) {
   const router = useRouter();
@@ -111,6 +113,7 @@ export function SettingsView({
               settings={reports}
               schedule={schedule}
               canEdit={canEdit}
+              canEditEffectiveFrom={canEditEffectiveFrom}
               run={run}
               pending={pending}
             />

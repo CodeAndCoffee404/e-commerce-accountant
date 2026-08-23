@@ -35,6 +35,15 @@ export type ReportSettings = {
    * Keyed only by what the module supports; anything unlisted is on.
    */
   granularities: Record<string, boolean>;
+  /**
+   * The earliest period date this report is offered for, or null for "since
+   * whenever the report was turned on" (the original behaviour).
+   *
+   * Set by `saveEffectiveFrom`, never edited free-hand: that action is the
+   * only writer that also opens the periods this date implies and is the only
+   * one that checks who is allowed to move it.
+   */
+  effectiveFrom: string | null;
 };
 
 export type AllReportSettings = Record<ReportTypeId, ReportSettings>;
@@ -55,6 +64,7 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     datasets?: Record<string, unknown>;
     countries?: Record<string, unknown>;
     granularities?: Record<string, unknown>;
+    effectiveFrom?: unknown;
   };
 
   const datasets: Record<string, Requirement> = {};
@@ -77,7 +87,12 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     granularities[granularity] = value.granularities?.[granularity] !== false;
   }
 
-  return { enabled: value.enabled !== false, datasets, countries, granularities };
+  const effectiveFrom =
+    typeof value.effectiveFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.effectiveFrom)
+      ? value.effectiveFrom
+      : null;
+
+  return { enabled: value.enabled !== false, datasets, countries, granularities, effectiveFrom };
 }
 
 export function defaultSettings(): AllReportSettings {

@@ -104,7 +104,7 @@ export function anchorFor(
   return periodContaining(granularity, iso, schedule).start;
 }
 
-function nextPeriod(
+export function nextPeriod(
   granularity: PeriodGranularity,
   period: Period,
   schedule: PeriodSchedule,
@@ -149,15 +149,37 @@ export function periodsDue(
 
     if (!anchor) continue;
 
-    let period = periodContaining(granularity, anchor, schedule);
-    let steps = 0;
-
-    while (period.start <= asOf && steps < MAX_STEPS) {
-      due.push(period);
-      period = nextPeriod(granularity, period, schedule);
-      steps += 1;
-    }
+    due.push(...periodsFrom(granularity, anchor, asOf, schedule));
   }
 
   return due;
+}
+
+/**
+ * Every period of one granularity from `fromDate` up to (and including) the
+ * one containing `asOf`.
+ *
+ * Unlike `periodsDue`, this walks forward from a date named explicitly
+ * rather than from a stored anchor — it is what a one-off backfill uses when
+ * someone deliberately asks for a run of periods that were never on the
+ * schedule, e.g. a report's reporting-start date moving earlier than the
+ * period the report itself was first turned on in.
+ */
+export function periodsFrom(
+  granularity: PeriodGranularity,
+  fromDate: string,
+  asOf: string,
+  schedule: PeriodSchedule,
+): Period[] {
+  const result: Period[] = [];
+  let period = periodContaining(granularity, fromDate, schedule);
+  let steps = 0;
+
+  while (period.start <= asOf && steps < MAX_STEPS) {
+    result.push(period);
+    period = nextPeriod(granularity, period, schedule);
+    steps += 1;
+  }
+
+  return result;
 }
