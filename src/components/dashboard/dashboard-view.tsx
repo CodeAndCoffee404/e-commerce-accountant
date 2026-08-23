@@ -26,6 +26,9 @@ import { useState, useSyncExternalStore, useTransition } from "react";
 import type { AuditRow } from "@/lib/audit/record";
 import { buildAllReady } from "@/lib/dashboard/actions";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
+import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
+
+import { ReportDeadlinesBlock } from "./report-deadlines-block";
 
 const { Text, Title } = Typography;
 
@@ -40,6 +43,7 @@ export function DashboardView({
   activity,
   firstName,
   flaggedRows,
+  deadlines,
   canBuild,
   uploadAction,
 }: {
@@ -48,6 +52,8 @@ export function DashboardView({
   firstName: string;
   /** Current ledger rows waiting for a person, tenant-wide. */
   flaggedRows: number;
+  /** Reports due for their current reporting period, already sorted. */
+  deadlines: DeadlineDashboardRow[];
   canBuild: boolean;
   /** The Upload files control, provided by the page so roles stay server-side. */
   uploadAction: React.ReactNode;
@@ -136,63 +142,73 @@ export function DashboardView({
   const empty = data.months.length === 0;
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <Hero
-        firstName={firstName}
-        intro={
-          empty
-            ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
-            : null
-        }
-        attention={attention}
-        allClear={!empty && allClear}
-        rings={
-          empty
-            ? null
-            : {
-                files: { done: requiredIn, total: requiredItems.length },
-                reports: { done: built, total: data.reports.length },
-              }
-        }
-        toolbar={
-          empty ? (
-            uploadAction
-          ) : (
-            <Space wrap>
-              {uploadAction}
-              <Select
-                value={shownMonth ?? undefined}
-                loading={switching}
-                disabled={switching}
-                style={{ minWidth: 170 }}
-                options={data.months.map((month) => ({ value: month, label: month }))}
-                onChange={goToMonth}
-              />
-              {canBuild ? (
-                <Tooltip
-                  title={
-                    data.buildable === 0
-                      ? "Everything ready is already built. Rebuilds and quarters live on Reports."
-                      : "Builds every report this month is ready for. Each run is recorded separately."
+    <Space direction="vertical" size="small" style={{ width: "100%" }}>
+      {/* Row 1: greeting and overall progress, with what's due this month
+          alongside — the two things worth seeing before anything else. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch" }}>
+        <div style={{ flex: "3 1 480px", display: "flex", minWidth: 0 }}>
+          <Hero
+            firstName={firstName}
+            intro={
+              empty
+                ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
+                : null
+            }
+            attention={attention}
+            allClear={!empty && allClear}
+            rings={
+              empty
+                ? null
+                : {
+                    files: { done: requiredIn, total: requiredItems.length },
+                    reports: { done: built, total: data.reports.length },
                   }
-                >
-                  <Button
-                    type="primary"
-                    icon={<ThunderboltOutlined />}
-                    loading={building}
-                    disabled={data.buildable === 0}
-                    onClick={buildAll}
-                  >
-                    {data.buildable === 0
-                      ? "All built"
-                      : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
-                  </Button>
-                </Tooltip>
-              ) : null}
-            </Space>
-          )
-        }
-      />
+            }
+            toolbar={
+              empty ? (
+                uploadAction
+              ) : (
+                <Space wrap>
+                  {uploadAction}
+                  <Select
+                    value={shownMonth ?? undefined}
+                    loading={switching}
+                    disabled={switching}
+                    style={{ minWidth: 170 }}
+                    options={data.months.map((month) => ({ value: month, label: month }))}
+                    onChange={goToMonth}
+                  />
+                  {canBuild ? (
+                    <Tooltip
+                      title={
+                        data.buildable === 0
+                          ? "Everything ready is already built. Rebuilds and quarters live on Reports."
+                          : "Builds every report this month is ready for. Each run is recorded separately."
+                      }
+                    >
+                      <Button
+                        type="primary"
+                        icon={<ThunderboltOutlined />}
+                        loading={building}
+                        disabled={data.buildable === 0}
+                        onClick={buildAll}
+                      >
+                        {data.buildable === 0
+                          ? "All built"
+                          : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
+                      </Button>
+                    </Tooltip>
+                  ) : null}
+                </Space>
+              )
+            }
+          />
+        </div>
+
+        <div style={{ flex: "1 1 260px", display: "flex", minWidth: 0 }}>
+          <ReportDeadlinesBlock rows={deadlines} month={shownMonth} />
+        </div>
+      </div>
 
       {empty ? null : (
         <>
@@ -203,7 +219,7 @@ export function DashboardView({
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))",
-          gap: 16,
+          gap: 12,
           // Stretch, not start: two cards of one row are one shelf, and a
           // ragged bottom edge reads as a layout accident.
           alignItems: "stretch",
@@ -265,7 +281,7 @@ export function DashboardView({
           switching={switching}
           onSelect={goToMonth}
         />
-        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "6px 0 0" }}>
           Every month on record: a dot is a file that is there, a dash is one that is not.
         </Typography.Paragraph>
       </Card>
@@ -365,7 +381,8 @@ function Hero({
         borderRadius: 16,
         border: `1px solid ${token.colorSplit}`,
         background: token.colorBgContainer,
-        padding: "clamp(18px, 3vw, 28px)",
+        padding: "clamp(14px, 2vw, 20px)",
+        width: "100%",
       }}
     >
       {/* Colour lives in an overlay, not the surface: the tokens stay in
@@ -388,13 +405,13 @@ function Hero({
           position: "relative",
           display: "flex",
           flexWrap: "wrap",
-          gap: 24,
+          gap: 16,
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-          <Title level={2} style={{ margin: 0 }}>
+        <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          <Title level={3} style={{ margin: 0 }}>
             <span
               style={{
                 background: `linear-gradient(90deg, ${token.colorText} 30%, ${token.colorPrimary})`,
@@ -419,8 +436,8 @@ function Hero({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
-                marginTop: 16,
-                padding: "6px 14px",
+                marginTop: 10,
+                padding: "5px 12px",
                 borderRadius: 999,
                 background: token.colorSuccessBg,
                 border: `1px solid ${token.colorSuccessBorder}`,
@@ -432,7 +449,7 @@ function Hero({
               </Text>
             </div>
           ) : attention.length > 0 ? (
-            <Space size={[8, 8]} wrap style={{ marginTop: 16 }}>
+            <Space size={[8, 8]} wrap style={{ marginTop: 10 }}>
               {attention.map((item) =>
                 item.href.startsWith("#") ? (
                   <Button
@@ -459,11 +476,11 @@ function Hero({
             </Space>
           ) : null}
 
-          {toolbar ? <div style={{ marginTop: 20 }}>{toolbar}</div> : null}
+          {toolbar ? <div style={{ marginTop: 14 }}>{toolbar}</div> : null}
         </div>
 
         {rings ? (
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <Ring label="files in" done={rings.files.done} total={rings.files.total} />
             <Ring label="reports built" done={rings.reports.done} total={rings.reports.total} />
           </div>
@@ -481,7 +498,7 @@ function Ring({ label, done, total }: { label: string; done: number; total: numb
   return (
     <Progress
       type="dashboard"
-      size={118}
+      size={92}
       percent={percent}
       // The arc sweeps primary into success; a finished ring settles on
       // success alone.
@@ -492,14 +509,14 @@ function Ring({ label, done, total }: { label: string; done: number; total: numb
       }
       strokeWidth={9}
       format={() => (
-        <div style={{ lineHeight: 1.25 }}>
-          <div style={{ fontSize: 22, fontWeight: 650, color: token.colorText }}>
+        <div style={{ lineHeight: 1.2 }}>
+          <div style={{ fontSize: 18, fontWeight: 650, color: token.colorText }}>
             {done}
-            <Text type="secondary" style={{ fontSize: 15, fontWeight: 400 }}>
+            <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
               /{total}
             </Text>
           </div>
-          <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{label}</div>
+          <div style={{ fontSize: 10, color: token.colorTextSecondary }}>{label}</div>
         </div>
       )}
     />

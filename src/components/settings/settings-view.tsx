@@ -41,8 +41,11 @@ import type { ReferenceData } from "@/lib/reference/queries";
 import type { PeriodSchedule } from "@/lib/periods/schedule";
 import type { AllReportSettings } from "@/lib/reports/settings";
 
+import type { DeadlineRuleRow } from "@/lib/reports/deadlines-queries";
+
 import { AuditCard } from "./audit-card";
 import { CustomReportsTab } from "./custom-reports";
+import { DeadlineSettingsTab } from "./deadline-settings";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
 import { PeriodSettingsTab } from "./period-settings";
@@ -55,6 +58,7 @@ type SellerVatNumber = ReferenceData["sellerVatNumbers"][number];
 export function SettingsView({
   data,
   reports,
+  deadlineRules,
   schedule,
   connection,
   pickerApiKey,
@@ -63,10 +67,12 @@ export function SettingsView({
   audit,
   canEdit,
   canEditEffectiveFrom,
+  canEditDeadlines,
   isOwner,
 }: {
   data: ReferenceData;
   reports: AllReportSettings;
+  deadlineRules: DeadlineRuleRow[];
   schedule: PeriodSchedule;
   connection: ConnectionSummary | null;
   pickerApiKey: string | null;
@@ -74,7 +80,10 @@ export function SettingsView({
   selfEmail: string;
   audit: AuditRow[];
   canEdit: boolean;
+  /** Owner or accountant — reporting-start date is a filing detail, not a company setting. */
   canEditEffectiveFrom: boolean;
+  /** Owner or accountant — deadlines are a filing detail, not a company setting. */
+  canEditDeadlines: boolean;
   isOwner: boolean;
 }) {
   const router = useRouter();
@@ -114,6 +123,18 @@ export function SettingsView({
               schedule={schedule}
               canEdit={canEdit}
               canEditEffectiveFrom={canEditEffectiveFrom}
+              run={run}
+              pending={pending}
+            />
+          ),
+        },
+        {
+          key: "deadlines",
+          label: "Deadlines",
+          children: (
+            <DeadlineSettingsTab
+              rules={deadlineRules}
+              canEdit={canEditDeadlines}
               run={run}
               pending={pending}
             />

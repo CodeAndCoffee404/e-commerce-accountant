@@ -4,6 +4,7 @@ import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
+import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
 import { countNeedsAttention } from "@/lib/transactions/queries";
 
 export const metadata = { title: "Dashboard — E-commerce Accountant" };
@@ -12,10 +13,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const user = await requireUser();
   const params = await searchParams;
 
-  const [data, activity, flaggedRows] = await Promise.all([
-    loadDashboard(user.tenantId, one(params.month)),
+  // Deadlines are about the month shown on the dashboard, so they wait on it
+  // rather than joining the initial fan-out.
+  const data = await loadDashboard(user.tenantId, one(params.month));
+
+  const [activity, flaggedRows, deadlines] = await Promise.all([
     listAudit(user.tenantId, 8),
     countNeedsAttention(user.tenantId),
+    data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
   ]);
 
   // The greeting addresses a person, not an account. The email prefix is the
@@ -30,6 +35,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       activity={activity}
       firstName={firstName}
       flaggedRows={flaggedRows}
+      deadlines={deadlines}
       canBuild={user.role !== "viewer"}
       uploadAction={user.role === "viewer" ? null : <UploadDialog tenantId={user.tenantId} />}
     />
