@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import type { PeriodGranularity } from "@/lib/db/schema";
 import { getDb, schema } from "@/lib/db";
@@ -90,16 +90,19 @@ export type DeadlineDashboardRow = {
 };
 
 /**
- * The dashboard's Report deadlines block: one row per report the tenant
- * prepares, for that report's current reporting period — the last one that
- * has actually finished, see PLAN §8.
+ * The dashboard's Report deadlines block: everything due for the month
+ * selected on the dashboard, not a fixed "current period" of its own.
  *
- * A report with no completed period yet (the tenant opened the app before its
- * first month closed) is left out rather than shown with a nonsensical
- * period.
+ * A monthly report always gets a row, for that month. A quarterly or yearly
+ * report only gets one when the selected month is the last month of its
+ * quarter or year — April is not the end of anything, so a quarterly report
+ * has nothing to say about it. That is what keeps the block honest about
+ * "todo for this month" rather than mixing in periods the tenant is not
+ * currently closing.
  */
 export async function loadReportDeadlines(
   tenantId: string,
+  month: string,
   preloadedSettings?: AllReportSettings,
 ): Promise<DeadlineDashboardRow[]> {
   const settings = preloadedSettings ?? (await loadReportSettings(tenantId));
@@ -108,57 +111,64 @@ export async function loadReportDeadlines(
   if (rules.length === 0) return [];
 
   const today = new Date().toISOString().slice(0, 10);
-  const granularities = [...new Set(rules.map((rule) => rule.granularity))];
 
   const periods = await getDb()
     .select({
       label: schema.periods.label,
       granularity: schema.periods.granularity,
+      startDate: schema.periods.startDate,
       endDate: schema.periods.endDate,
     })
     .from(schema.periods)
+    .where(eq(schema.periods.tenantId, tenantId));
+
+  const monthPeriod = periods.find((p) => p.granularity === "month" && p.label === month);
+
+  if (!monthPeriod) return [];
+
+  // The quarter/year containing this month, only kept when this month is the
+  // last one in it — otherwise that report has nothing due this month.
+  const containing = (granularity: PeriodGranularity) =>
+    periods.find(
+      (p) =>
+        p.granularity === granularity &&
+        p.startDate <= monthPeriod.startDate &&
+        p.endDate === monthPeriod.endDate,
+    );
+
+  const periodByGranularity: Partial<Record<PeriodGranularity, { label: string; end: string }>> = {
+    month: { label: monthPeriod.label, end: monthPeriod.endDate },
+  };
+
+  const quarter = containing("quarter");
+  if (quarter) periodByGranularity.quarter = { label: quarter.label, end: quarter.endDate };
+
+  const year = containing("year");
+  if (year) periodByGranularity.year = { label: year.label, end: year.endDate };
+
+  const relevantLabels = [...new Set(Object.values(periodByGranularity).map((p) => p!.label))];
+
+  const runs = await getDb()
+    .select({
+      reportType: schema.reportRuns.reportType,
+      periodLabel: schema.reportRuns.periodLabel,
+      status: schema.reportRuns.status,
+    })
+    .from(schema.reportRuns)
     .where(
-      and(eq(schema.periods.tenantId, tenantId), inArray(schema.periods.granularity, granularities)),
-    )
-    .orderBy(desc(schema.periods.startDate));
-
-  // The last completed period per granularity: the most recent one whose end
-  // date has already passed.
-  const currentPeriod = new Map<PeriodGranularity, { label: string; end: string }>();
-
-  for (const period of periods) {
-    if (currentPeriod.has(period.granularity)) continue;
-    if (period.endDate >= today) continue;
-
-    currentPeriod.set(period.granularity, { label: period.label, end: period.endDate });
-  }
-
-  const periodLabels = [...new Set([...currentPeriod.values()].map((p) => p.label))];
-
-  const runs =
-    periodLabels.length === 0
-      ? []
-      : await getDb()
-          .select({
-            reportType: schema.reportRuns.reportType,
-            periodLabel: schema.reportRuns.periodLabel,
-            status: schema.reportRuns.status,
-          })
-          .from(schema.reportRuns)
-          .where(
-            and(
-              eq(schema.reportRuns.tenantId, tenantId),
-              inArray(schema.reportRuns.periodLabel, periodLabels),
-              eq(schema.reportRuns.status, "succeeded"),
-            ),
-          );
+      and(
+        eq(schema.reportRuns.tenantId, tenantId),
+        inArray(schema.reportRuns.periodLabel, relevantLabels),
+        eq(schema.reportRuns.status, "succeeded"),
+      ),
+    );
 
   const completed = new Set(runs.map((run) => `${run.reportType}:${run.periodLabel}`));
 
   const rows: DeadlineDashboardRow[] = [];
 
   for (const rule of rules) {
-    const period = currentPeriod.get(rule.granularity);
+    const period = periodByGranularity[rule.granularity];
 
     if (!period) continue;
 
