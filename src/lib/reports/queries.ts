@@ -287,6 +287,11 @@ export async function availablePeriods(
     for (const period of periods) {
       if (!prepared.includes(period.granularity)) continue;
 
+      // A period that starts before the report's configured start date does
+      // not exist for this report at all — not offered, not blocked, just
+      // absent, exactly as if the report had not been enabled yet.
+      if (configured.startsFrom && period.start < configured.startsFrom) continue;
+
       // Coarser files win over the months they already contain, so a channel
       // that ships both a quarterly export and its three monthly ones is
       // counted once rather than twice.

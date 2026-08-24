@@ -137,6 +137,14 @@ export async function runReport(input: {
     };
   }
 
+  if (settings.startsFrom && periodRow.startDate < settings.startsFrom) {
+    return {
+      ok: false,
+      runId: null,
+      message: `"${definition.label}" only starts from ${settings.startsFrom.slice(0, 7)}. ${input.periodLabel} is earlier than that.`,
+    };
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   // A period still running has months that have not happened. Built anyway it

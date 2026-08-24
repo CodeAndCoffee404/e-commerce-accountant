@@ -309,8 +309,13 @@ async function loadReports(
 
   for (const definition of REPORT_DEFINITIONS) {
     const available = availability[definition.id];
+    const configured = settings[definition.id];
 
     if (!available?.enabled || definition.informational) continue;
+
+    // Absent from this month's close the same way it is absent from Reports:
+    // a period before the report's start date is not this report's business.
+    if (configured.startsFrom && month < configured.startsFrom) continue;
 
     const latest = latestByType.get(definition.id);
     const succeeded = latest?.status === "succeeded";
@@ -325,7 +330,6 @@ async function loadReports(
 
     // With nothing uploaded at all, availability has no entry for the month —
     // but "missing: everything" is useless. Name the pieces.
-    const configured = settings[definition.id];
     const wholeList =
       definition.id === "amazon_zoho_invoice"
         ? requiredCountries(configured)

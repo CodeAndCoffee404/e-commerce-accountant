@@ -35,6 +35,17 @@ export type ReportSettings = {
    * Keyed only by what the module supports; anything unlisted is on.
    */
   granularities: Record<string, boolean>;
+  /**
+   * The first period this report exists for, as the ISO date its period
+   * starts on (always the first of a month — `YYYY-MM-01`). `null` means no
+   * floor: every period the module can build for is offered.
+   *
+   * A period that starts before this date is not offered, not built, and
+   * does not appear on the dashboard for this report — as if the report had
+   * not existed yet. Nothing about periods themselves changes; this only
+   * narrows which of them this one report is willing to see.
+   */
+  startsFrom: string | null;
 };
 
 export type AllReportSettings = Record<ReportTypeId, ReportSettings>;
@@ -55,6 +66,7 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     datasets?: Record<string, unknown>;
     countries?: Record<string, unknown>;
     granularities?: Record<string, unknown>;
+    startsFrom?: unknown;
   };
 
   const datasets: Record<string, Requirement> = {};
@@ -77,7 +89,12 @@ export function normaliseSettings(definition: ReportDefinition, raw: unknown): R
     granularities[granularity] = value.granularities?.[granularity] !== false;
   }
 
-  return { enabled: value.enabled !== false, datasets, countries, granularities };
+  const startsFrom =
+    typeof value.startsFrom === "string" && /^\d{4}-\d{2}-01$/.test(value.startsFrom)
+      ? value.startsFrom
+      : null;
+
+  return { enabled: value.enabled !== false, datasets, countries, granularities, startsFrom };
 }
 
 export function defaultSettings(): AllReportSettings {

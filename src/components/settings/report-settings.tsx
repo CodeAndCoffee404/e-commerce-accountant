@@ -1,19 +1,44 @@
 "use client";
 
-import { Alert, Card, Segmented, Space, Switch, Tag, Tooltip, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Modal,
+  Popconfirm,
+  Segmented,
+  Select,
+  Space,
+  Switch,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
+import { useState } from "react";
 
 import type { PeriodGranularity } from "@/lib/db/schema";
+import { MONTHS } from "@/lib/ingest/months";
 import type { PeriodSchedule } from "@/lib/periods/schedule";
-import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
+import { REPORT_DEFINITIONS, type ReportDefinition, type ReportTypeId } from "@/lib/reports/definitions";
 import type { AllReportSettings, Requirement } from "@/lib/reports/settings";
 import { DATASET_NAMES } from "@/modules/channels/registry";
 import {
   saveReportSettings,
+  saveReportStartDate,
   type SettingsActionResult,
 } from "@/lib/reports/settings-actions";
 import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 
 type Runner = (action: () => Promise<SettingsActionResult>) => void;
+
+const THIS_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 9 }, (_, index) => THIS_YEAR + 1 - index);
+
+function monthLabel(startsFrom: string): string {
+  const [year, month] = startsFrom.split("-");
+
+  return `${MONTHS[Number(month) - 1]?.fullName ?? month} ${year}`;
+}
 
 /**
  * The client's own description of how their reporting works: which reports
@@ -60,7 +85,29 @@ export function ReportSettingsTab({
       .filter(([, on]) => !on)
       .map(([key]) => key);
 
+  const [startDateModal, setStartDateModal] = useState<{
+    definition: ReportDefinition;
+    month: number;
+    year: number;
+  } | null>(null);
+
+  const openStartDateModal = (definition: ReportDefinition, current: string | null) => {
+    const [year, month] = current ? current.split("-").map(Number) : [THIS_YEAR, new Date().getMonth() + 1];
+
+    setStartDateModal({ definition, month, year });
+  };
+
+  const saveStartDate = (startsFrom: string | null) => {
+    if (!startDateModal) return;
+
+    const { definition } = startDateModal;
+
+    run(() => saveReportStartDate({ reportType: definition.id, startsFrom }));
+    setStartDateModal(null);
+  };
+
   return (
+    <>
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         <Typography.Text strong>Required</Typography.Text> — the report will not build for a
@@ -186,6 +233,27 @@ export function ReportSettingsTab({
                     description={`This report is prepared per ${orphaned.join(" and ")}, but the schedule under Settings → Periods does not open ${orphaned.length === 1 ? "that period" : "those periods"}, so no card will ever appear for ${orphaned.length === 1 ? "it" : "them"}.`}
                   />
                 ) : null}
+
+                <Space
+                  size={8}
+                  wrap
+                  align="center"
+                  style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--ant-color-split)" }}
+                >
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Starts from:
+                  </Typography.Text>
+                  <Typography.Text>
+                    {current.startsFrom ? monthLabel(current.startsFrom) : "The beginning"}
+                  </Typography.Text>
+                  <Button
+                    size="small"
+                    disabled={!canEdit || pending}
+                    onClick={() => openStartDateModal(definition, current.startsFrom)}
+                  >
+                    Change…
+                  </Button>
+                </Space>
               </Space>
             ) : null}
 
@@ -286,5 +354,63 @@ export function ReportSettingsTab({
         );
       })}
     </Space>
+
+    <Modal
+      title={startDateModal ? `${startDateModal.definition.label} — starts from` : ""}
+      open={startDateModal !== null}
+      onCancel={() => setStartDateModal(null)}
+      footer={null}
+      destroyOnClose
+    >
+      {startDateModal ? (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            message="This changes what is offered right now"
+            description="Periods before the chosen month disappear from Reports and from the dashboard for this report — as if it had never been enabled for them. Reports already built for those periods are not touched or deleted."
+          />
+
+          <Space size={8} wrap>
+            <Select
+              style={{ width: 150 }}
+              value={startDateModal.month}
+              options={MONTHS.map((month) => ({ value: month.number, label: month.fullName }))}
+              onChange={(month) => setStartDateModal({ ...startDateModal, month })}
+            />
+            <Select
+              style={{ width: 100 }}
+              value={startDateModal.year}
+              options={YEAR_OPTIONS.map((year) => ({ value: year, label: String(year) }))}
+              onChange={(year) => setStartDateModal({ ...startDateModal, year })}
+            />
+          </Space>
+
+          <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+            <Popconfirm
+              title="Remove the start date?"
+              description="Every period this report can build for is offered again."
+              okText="Remove"
+              cancelText="Cancel"
+              onConfirm={() => saveStartDate(null)}
+            >
+              <Button danger>No start date</Button>
+            </Popconfirm>
+            <Popconfirm
+              title="Change the start date?"
+              description={`Periods before ${monthLabel(`${startDateModal.year}-${String(startDateModal.month).padStart(2, "0")}-01`)} will no longer offer this report.`}
+              okText="Change"
+              cancelText="Cancel"
+              onConfirm={() =>
+                saveStartDate(`${startDateModal.year}-${String(startDateModal.month).padStart(2, "0")}-01`)
+              }
+            >
+              <Button type="primary">Save</Button>
+            </Popconfirm>
+          </Space>
+        </Space>
+      ) : null}
+    </Modal>
+    </>
   );
 }
