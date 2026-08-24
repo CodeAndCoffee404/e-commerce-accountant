@@ -3,6 +3,7 @@
 import {
   CheckCircleOutlined,
   CloudUploadOutlined,
+  DeleteOutlined,
   DownloadOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
@@ -467,8 +468,11 @@ export function ReportsView({
             width: 60,
             render: (_, run) => (
               <Popconfirm
-                title="Remove this report?"
+                title="Delete this report?"
                 description="Its files go too. Anything already in Google Drive stays there."
+                okText="Delete"
+                okButtonProps={{ danger: true }}
+                cancelText="Keep"
                 disabled={!canBuild}
                 onConfirm={() =>
                   startTransition(async () => {
@@ -485,9 +489,16 @@ export function ReportsView({
                   })
                 }
               >
-                <Button size="small" type="text" danger disabled={!canBuild}>
-                  ✕
-                </Button>
+                <Tooltip title="Delete this report">
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    disabled={!canBuild}
+                    icon={<DeleteOutlined />}
+                    aria-label="Delete"
+                  />
+                </Tooltip>
               </Popconfirm>
             ),
           },

@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -31,7 +32,6 @@ import {
   saveVatRate,
   type ActionResult,
 } from "@/lib/reference/actions";
-import { CUSTOM_REPORTS_CHANNEL } from "@/modules/reports/custom-slice-config";
 import { useSearchParams } from "next/navigation";
 
 import type { AuditRow } from "@/lib/audit/record";
@@ -44,7 +44,6 @@ import type { AllReportSettings } from "@/lib/reports/settings";
 import type { DeadlineRuleRow } from "@/lib/reports/deadlines-queries";
 
 import { AuditCard } from "./audit-card";
-import { CustomReportsTab } from "./custom-reports";
 import { DeadlineSettingsTab } from "./deadline-settings";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
@@ -149,18 +148,6 @@ export function SettingsView({
           ),
         },
         {
-          key: "custom",
-          label: "Custom reports",
-          children: (
-            <CustomReportsTab
-              rules={data.channelRules.filter((rule) => rule.channel === CUSTOM_REPORTS_CHANNEL)}
-              canEdit={canEdit}
-              run={run}
-              pending={pending}
-            />
-          ),
-        },
-        {
           key: "vat",
           label: "VAT rates",
           children: <VatRates data={data.vatRates} canEdit={canEdit} run={run} pending={pending} />,
@@ -187,12 +174,10 @@ export function SettingsView({
           label: "Channel rules",
           children: (
             <Rules
-              // The "reports" and custom-report channels are configuration with
-              // their own tabs above; offering the same rows as raw JSON here
-              // would create two editors for one thing.
-              data={data.channelRules.filter(
-                (rule) => rule.channel !== "reports" && rule.channel !== CUSTOM_REPORTS_CHANNEL,
-              )}
+              // The "reports" channel is configuration with its own tab above;
+              // offering the same rows as raw JSON here would create two
+              // editors for one thing.
+              data={data.channelRules.filter((rule) => rule.channel !== "reports")}
               canEdit={canEdit}
               run={run}
               pending={pending}
@@ -286,12 +271,21 @@ function VatRates({
                 </Button>
                 <Popconfirm
                   title="Delete this rate?"
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Keep"
                   onConfirm={() => run(() => deleteVatRate(row.id))}
                   disabled={!canEdit}
                 >
-                  <Button size="small" danger disabled={!canEdit}>
-                    Delete
-                  </Button>
+                  <Tooltip title="Delete this rate">
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!canEdit}
+                      icon={<DeleteOutlined />}
+                      aria-label="Delete"
+                    />
+                  </Tooltip>
                 </Popconfirm>
               </Space>
             ),
@@ -383,12 +377,21 @@ function Skus({
                 </Button>
                 <Popconfirm
                   title="Delete this mapping?"
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Keep"
                   onConfirm={() => run(() => deleteSkuMapping(row.id))}
                   disabled={!canEdit}
                 >
-                  <Button size="small" danger disabled={!canEdit}>
-                    Delete
-                  </Button>
+                  <Tooltip title="Delete this mapping">
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!canEdit}
+                      icon={<DeleteOutlined />}
+                      aria-label="Delete"
+                    />
+                  </Tooltip>
                 </Popconfirm>
               </Space>
             ),
@@ -554,12 +557,21 @@ function SellerVat({
                 </Button>
                 <Popconfirm
                   title="Delete this registration?"
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Keep"
                   onConfirm={() => run(() => deleteSellerVatNumber(row.id))}
                   disabled={!canEdit}
                 >
-                  <Button size="small" danger disabled={!canEdit}>
-                    Delete
-                  </Button>
+                  <Tooltip title="Delete this registration">
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!canEdit}
+                      icon={<DeleteOutlined />}
+                      aria-label="Delete"
+                    />
+                  </Tooltip>
                 </Popconfirm>
               </Space>
             ),

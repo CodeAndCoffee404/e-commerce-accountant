@@ -14,7 +14,7 @@ import { preparedGranularities } from "./settings";
 export type DeadlineActionResult = { ok: boolean; message: string };
 
 const inputSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice", "custom_slice"]),
+  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
   granularity: z.enum(["month", "quarter", "year"]),
   day: z.number().int().min(1).max(31),
   /** Required for yearly reports, ignored for the rest. */

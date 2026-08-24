@@ -14,7 +14,7 @@ import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 export type SettingsActionResult = { ok: boolean; message: string };
 
 const inputSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice", "custom_slice"]),
+  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
   enabled: z.boolean(),
   /** Datasets demoted to optional; everything else stays required. */
   optionalDatasets: z.array(z.string()).default([]),

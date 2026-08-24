@@ -412,17 +412,7 @@ function Hero({
       >
         <div style={{ flex: "1 1 280px", minWidth: 0 }}>
           <Title level={3} style={{ margin: 0 }}>
-            <span
-              style={{
-                background: `linear-gradient(90deg, ${token.colorText} 30%, ${token.colorPrimary})`,
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              {greeting}, {firstName}
-            </span>{" "}
-            <span aria-hidden>👋</span>
+            {greeting}, {firstName} <span aria-hidden>👋</span>
           </Title>
           {intro ? (
             <Text type="secondary" style={{ display: "block", marginTop: 6 }}>
@@ -593,6 +583,7 @@ function FileChip({ item }: { item: ChecklistItem }) {
 }
 
 function ReportLine({ report }: { report: CloseReport }) {
+  const { token } = theme.useToken();
   return (
     <div
       style={{
@@ -623,7 +614,7 @@ function ReportLine({ report }: { report: CloseReport }) {
 
         {report.warnings > 0 ? (
           <Tooltip title="Open Reports and expand the run to read them.">
-            <Text style={{ fontSize: 12, color: "var(--ant-color-warning)" }}>
+            <Text style={{ fontSize: 12, color: token.colorWarning }}>
               <WarningOutlined /> {report.warnings}
             </Text>
           </Tooltip>
