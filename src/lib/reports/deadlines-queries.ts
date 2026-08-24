@@ -17,8 +17,8 @@ import { preparedGranularities, type AllReportSettings } from "./settings";
 
 /**
  * Reports a statutory deadline can be set for: the ones that go into a
- * filing. `custom_slice` is informational — built on demand, filed nowhere —
- * so it never gets a deadline row, on Settings or the dashboard alike.
+ * filing. An informational report never gets a deadline row, on Settings or
+ * the dashboard alike.
  */
 const DEADLINE_DEFINITIONS = REPORT_DEFINITIONS.filter((definition) => !definition.informational);
 

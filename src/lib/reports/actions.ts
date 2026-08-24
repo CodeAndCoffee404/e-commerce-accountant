@@ -18,7 +18,7 @@ import { runReport } from "./run";
 export type BuildResult = { ok: true; runId: string; message: string } | { ok: false; message: string };
 
 const buildSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice", "custom_slice"]),
+  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
   periodLabel: z.string().trim().min(1),
   /** For reports built per tenant-defined variant: which definition. */
   variant: z.string().trim().min(1).max(100).optional(),
