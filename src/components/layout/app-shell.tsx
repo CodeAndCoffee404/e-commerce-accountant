@@ -12,6 +12,7 @@ import {
   SwapOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Layout, Menu, Space, Spin, theme, Tooltip, Typography } from "antd";
+import Image from "next/image";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
@@ -132,29 +133,19 @@ export function AppShell({
             borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
-          <span
-            aria-hidden
+          <Image
+            src="/logo-mark.png"
+            alt="Halum"
+            width={26}
+            height={26}
             style={{
-              width: 26,
-              height: 26,
               flex: "0 0 26px",
-              borderRadius: 8,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              background: `linear-gradient(135deg, ${token.colorPrimary}, ${token.colorSuccess})`,
+              objectFit: "contain",
+              // The mark is drawn black-on-transparent; inverted to white on
+              // the dark sidebar rather than shipping a second file.
+              filter: themeMode === "dark" ? "invert(1)" : undefined,
             }}
-          >
-            EA
-          </span>
-          {collapsed ? null : (
-            <Typography.Text strong style={{ fontSize: 14, letterSpacing: -0.1 }}>
-              E-commerce Accountant
-            </Typography.Text>
-          )}
+          />
         </Link>
 
         <Menu
