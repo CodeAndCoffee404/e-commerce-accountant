@@ -92,6 +92,7 @@ export async function loadDashboard(
       .select({
         label: schema.periods.label,
         granularity: schema.periods.granularity,
+        startDate: schema.periods.startDate,
         endDate: schema.periods.endDate,
       })
       .from(schema.periods)
@@ -129,6 +130,11 @@ export async function loadDashboard(
       ? requestedMonth
       : defaultMonth(openPeriods, today) ?? months[0] ?? null;
 
+  // The chosen month's own start date, compared against a report's
+  // `startsFrom` — never the label, which sorts and compares nothing like a
+  // date ('2026.05 May' vs '2026-06-01').
+  const monthStart = month ? openPeriods.find((period) => period.label === month)?.startDate ?? null : null;
+
   // What the month needs, from the enabled reports' own definitions.
   const items: ChecklistItem[] = [];
 
@@ -138,6 +144,10 @@ export async function loadDashboard(
     // Informational reports are built on demand and file nothing, so they
     // neither add checklist items nor hold the month open.
     if (!configured.enabled || definition.informational) continue;
+
+    // A report that does not exist yet for this month asks nothing of it —
+    // its datasets are not "required" here until its start date arrives.
+    if (configured.startsFrom && monthStart && monthStart < configured.startsFrom) continue;
 
     if (definition.id === "amazon_zoho_invoice") {
       const required = new Set(requiredCountries(configured));
@@ -192,7 +202,9 @@ export async function loadDashboard(
     }
   }
 
-  const reports = month ? await loadReports(tenantId, month, availability, settings) : [];
+  const reports = month
+    ? await loadReports(tenantId, month, monthStart, availability, settings)
+    : [];
 
   // History: the same checklist across every month on record.
   const matrixMonths = months.slice(0, 13);
@@ -252,6 +264,8 @@ function defaultMonth(
 async function loadReports(
   tenantId: string,
   month: string,
+  /** The month's own start date (ISO), for comparing against `startsFrom`. */
+  monthStart: string | null,
   availability: Awaited<ReturnType<typeof availablePeriods>>,
   settings: Awaited<ReturnType<typeof loadReportSettings>>,
 ): Promise<CloseReport[]> {
@@ -315,7 +329,7 @@ async function loadReports(
 
     // Absent from this month's close the same way it is absent from Reports:
     // a period before the report's start date is not this report's business.
-    if (configured.startsFrom && month < configured.startsFrom) continue;
+    if (configured.startsFrom && monthStart && monthStart < configured.startsFrom) continue;
 
     const latest = latestByType.get(definition.id);
     const succeeded = latest?.status === "succeeded";
