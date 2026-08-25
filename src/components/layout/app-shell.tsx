@@ -133,19 +133,32 @@ export function AppShell({
             borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
-          <Image
-            src="/logo-mark.png"
-            alt="Halum"
-            width={26}
-            height={26}
-            style={{
-              flex: "0 0 26px",
-              objectFit: "contain",
-              // The mark is drawn black-on-transparent; inverted to white on
-              // the dark sidebar rather than shipping a second file.
-              filter: themeMode === "dark" ? "invert(1)" : undefined,
-            }}
-          />
+          {collapsed ? (
+            <Image
+              src="/logo-mark.png"
+              alt="Halum"
+              width={26}
+              height={26}
+              style={{
+                flex: "0 0 26px",
+                objectFit: "contain",
+                // The mark is drawn black-on-transparent; inverted to white
+                // on the dark sidebar rather than shipping a second file.
+                filter: themeMode === "dark" ? "invert(1)" : undefined,
+              }}
+            />
+          ) : (
+            <Image
+              src="/logo-wordmark.png"
+              alt="Halum"
+              width={72}
+              height={24}
+              style={{
+                objectFit: "contain",
+                filter: themeMode === "dark" ? "invert(1)" : undefined,
+              }}
+            />
+          )}
         </Link>
 
         <Menu
