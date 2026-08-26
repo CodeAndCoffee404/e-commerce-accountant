@@ -53,6 +53,21 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
+/**
+ * Which channel's SKU mapping a report's unmapped-SKU gate saves into — the
+ * gate itself is generic (`ReportModule.unmappedSkus`), but a saved mapping
+ * still has to land under the right channel.
+ */
+const SKU_MAPPING_CHANNEL: Partial<Record<ReportTypeId, string>> = {
+  amazon_zoho_invoice: "amazon",
+  allegro_zoho_invoice: "allegro",
+};
+
+const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = {
+  amazon_zoho_invoice: "Amazon",
+  allegro_zoho_invoice: "Allegro",
+};
+
 /** One buildable card: a report, or one tenant-defined variant of one. */
 type BuildCard = {
   key: string;
@@ -247,6 +262,7 @@ export function ReportsView({
     if (!skuGate) return;
 
     setSavingSkus(true);
+    const channel = SKU_MAPPING_CHANNEL[skuGate.card.reportType] ?? "amazon";
 
     startTransition(async () => {
       try {
@@ -255,7 +271,7 @@ export function ReportsView({
           const ignored = draft?.ignored ?? false;
 
           const result = await saveSkuMapping({
-            channel: "amazon",
+            channel,
             sourceSku: sku,
             targetSku: ignored ? null : (draft?.targetSku.trim() ?? null),
             itemName: ignored ? null : (draft?.itemName.trim() ?? null),
@@ -860,7 +876,7 @@ function SkuGateModal({
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Typography.Text type="secondary">
             {skus.length === 1 ? "This SKU appears" : "These SKUs appear"} in {gate.periodLabel}
-            &rsquo;s Amazon rows and{" "}
+            &rsquo;s {SKU_MAPPING_CHANNEL_LABEL[gate.card.reportType] ?? "Amazon"} rows and{" "}
             {skus.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in SKU mapping yet. Give{" "}
             {skus.length === 1 ? "it" : "each one"} an invoice code and item name, or mark it
             ignored — an ignored SKU is dropped from the invoice entirely.

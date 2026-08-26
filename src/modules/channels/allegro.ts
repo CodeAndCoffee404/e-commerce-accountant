@@ -128,15 +128,24 @@ function trailingIdentifier(raw: string): string | null {
  * perfectly good amount as unreadable. The identifier is cut off first, here,
  * so the currency written next to the amount can never make the amount
  * itself unreadable.
+ *
+ * Exported: `kwota` is not the only column with a currency stuck to the
+ * amount — `dostawa` (delivery) does too, and the Allegro invoice report
+ * reads that one straight out of the raw row rather than through the ledger.
+ * One parser, so both read the identifier the same way.
  */
-function parseAllegroAmount(raw: string | null): { value: Decimal | null } | { error: string } {
-  if (raw === null) return { value: null };
+export function parseAllegroMoney(raw: string | null, column = "kwota"): Decimal | null {
+  if (raw === null) return null;
 
   const token = trailingIdentifier(raw);
   const numeric = token ? raw.slice(0, raw.length - token.length) : raw;
 
+  return parseDecimalValue(numeric, { decimalSeparator: ".", column });
+}
+
+function parseAllegroAmount(raw: string | null): { value: Decimal | null } | { error: string } {
   try {
-    return { value: parseDecimalValue(numeric, { decimalSeparator: ".", column: "kwota" }) };
+    return { value: parseAllegroMoney(raw) };
   } catch (error) {
     if (error instanceof NumberFormatError) return { error: error.message };
 

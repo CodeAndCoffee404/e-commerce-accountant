@@ -27,7 +27,12 @@ export type BuildResult =
     };
 
 const buildSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
+  reportType: z.enum([
+    "sales_by_currency",
+    "off_amazon_sales",
+    "amazon_zoho_invoice",
+    "allegro_zoho_invoice",
+  ]),
   periodLabel: z.string().trim().min(1),
   /** For reports built per tenant-defined variant: which definition. */
   variant: z.string().trim().min(1).max(100).optional(),

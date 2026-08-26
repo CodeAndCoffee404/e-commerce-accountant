@@ -162,8 +162,9 @@ export function HelpModal() {
                     <Text strong>Off-Amazon Sales</Text> needs Allegro, Cdiscount and Shopify
                     together — a sheet missing one would look complete and understate the rest.{" "}
                     <Text strong>Amazon invoice for Zoho</Text> needs all ten marketplaces, for the
-                    same reason. <Text strong>Sales report by currency</Text> needs only the Amazon
-                    VAT file.
+                    same reason. <Text strong>Allegro invoice for Zoho</Text> reads the same Allegro
+                    upload, converted to euros. <Text strong>Sales report by currency</Text> needs
+                    only the Amazon VAT file.
                   </Paragraph>
                   <Paragraph type="secondary">
                     What each report insists on is configurable on{" "}

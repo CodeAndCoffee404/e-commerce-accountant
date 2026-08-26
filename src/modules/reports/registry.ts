@@ -1,4 +1,5 @@
 import type { ReportDefinition, ReportModule, ReportTypeId } from "./types";
+import { allegroZohoInvoiceModule } from "./allegro-zoho-invoice";
 import { amazonZohoInvoiceModule } from "./amazon-zoho-invoice";
 import { offAmazonSalesModule } from "./off-amazon-sales";
 import { salesByCurrencyModule } from "./sales-by-currency";
@@ -14,6 +15,7 @@ export const REPORT_MODULES: readonly ReportModule[] = [
   salesByCurrencyModule,
   offAmazonSalesModule,
   amazonZohoInvoiceModule,
+  allegroZohoInvoiceModule,
 ];
 
 export const REPORT_DEFINITIONS: readonly ReportDefinition[] = REPORT_MODULES.map(

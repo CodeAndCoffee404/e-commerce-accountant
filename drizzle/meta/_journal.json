@@ -99,6 +99,13 @@
       "when": 1787592111788,
       "tag": "0013_drop_custom_slice_report",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787773205571,
+      "tag": "0014_allegro_zoho_invoice_report_type",
+      "breakpoints": true
     }
   ]
 }

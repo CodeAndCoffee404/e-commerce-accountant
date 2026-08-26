@@ -1,0 +1,1 @@
+ALTER TYPE "public"."report_type" ADD VALUE 'allegro_zoho_invoice';
