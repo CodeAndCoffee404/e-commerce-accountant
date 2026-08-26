@@ -28,7 +28,15 @@ export function ReportDeadlinesBlock({
       size="small"
       title="Report deadlines"
       className="ea-rise"
-      style={{ width: "100%" }}
+      // Matches the Hero's own height rather than growing past it: the row
+      // already stretches both cards to the taller one's height (see
+      // DashboardView's alignItems: "stretch"), so without this a long list
+      // of deadlines used to drag the Hero down into empty space beneath its
+      // own content just to stay level with it. Flex column here, with the
+      // body below made scrollable, lets this card conform to the Hero
+      // instead of the other way around.
+      style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+      styles={{ body: { flex: "1 1 auto", minHeight: 0, overflowY: "auto" } }}
       extra={
         month ? (
           <Text type="secondary" style={{ fontSize: 12 }}>
