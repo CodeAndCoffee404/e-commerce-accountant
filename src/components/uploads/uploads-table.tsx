@@ -34,6 +34,18 @@ const STATUS_COLOURS: Record<string, string> = {
   rejected: "red",
 };
 
+/**
+ * Display labels only — the stored status (`received`, `classified`, …)
+ * never changes, so filtering and the database stay exactly as they were.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  received: "Processing",
+  classified: "Classified",
+  parsed: "Processed",
+  superseded: "Replaced",
+  rejected: "Rejected",
+};
+
 export function UploadsTable({
   rows,
   options,
@@ -60,7 +72,12 @@ export function UploadsTable({
     startTransition(() => router.push(`/uploads?${next.toString()}`));
   };
 
-  const selector = (key: string, placeholder: string, values: string[]) => (
+  const selector = (
+    key: string,
+    placeholder: string,
+    values: string[],
+    labelFor: (value: string) => string = (value) => value,
+  ) => (
     <Select
       allowClear
       showSearch
@@ -68,7 +85,7 @@ export function UploadsTable({
       placeholder={placeholder}
       value={params.get(key) ?? undefined}
       onChange={(value) => update(key, value ?? null)}
-      options={values.map((value) => ({ value, label: value }))}
+      options={values.map((value) => ({ value, label: labelFor(value) }))}
     />
   );
 
@@ -84,7 +101,7 @@ export function UploadsTable({
         />
         {selector("dataset", "Type", options.datasets)}
         {selector("period", "Period", options.periods)}
-        {selector("status", "Status", options.statuses)}
+        {selector("status", "Status", options.statuses, (value) => STATUS_LABELS[value] ?? value)}
       </Space>
 
       <PreviewDrawer
@@ -196,7 +213,9 @@ export function UploadsTable({
 
               return (
                 <Space direction="vertical" size={4}>
-                  <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
+                  <Tag color={STATUS_COLOURS[status] ?? "default"}>
+                    {STATUS_LABELS[status] ?? status}
+                  </Tag>
                   {flagged > 0 ? (
                     <Tooltip title="Rows whose number or date could not be read. Expand this row for the detail.">
                       <Tag color="orange">{flagged} to review</Tag>
@@ -218,11 +237,9 @@ export function UploadsTable({
             width: 150,
             render: (_, row) => (
               <Space size={4}>
-                <Tooltip title="Show the first rows of the stored file, read on demand.">
-                  <Button size="small" onClick={() => setPreviewing(row)}>
-                    Preview
-                  </Button>
-                </Tooltip>
+                <Button size="small" onClick={() => setPreviewing(row)}>
+                  Preview
+                </Button>
 
                 {canDelete ? (
                   <Popconfirm
@@ -254,9 +271,7 @@ export function UploadsTable({
                       })
                     }
                   >
-                    <Tooltip title="Remove this upload">
-                      <Button size="small" danger icon={<DeleteOutlined />} aria-label="Delete" />
-                    </Tooltip>
+                    <Button size="small" danger icon={<DeleteOutlined />} aria-label="Delete" />
                   </Popconfirm>
                 ) : null}
               </Space>

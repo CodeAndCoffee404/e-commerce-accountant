@@ -13,6 +13,7 @@ import {
   Button,
   Card,
   Empty,
+  Input,
   Popconfirm,
   Select,
   Space,
@@ -24,7 +25,7 @@ import {
 } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { restoreDefaults } from "@/lib/reference/actions";
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
@@ -37,6 +38,17 @@ const STATUS_COLOURS: Record<string, string> = {
   running: "blue",
   succeeded: "green",
   failed: "red",
+};
+
+/**
+ * Display labels only — the stored status (`queued`, `running`, …) never
+ * changes, so nothing about the build pipeline or the database moves.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  queued: "Pending",
+  running: "Building",
+  succeeded: "Ready",
+  failed: "Failed",
 };
 
 /** One buildable card: a report, or one tenant-defined variant of one. */
@@ -76,6 +88,43 @@ export function ReportsView({
   const [choice, setChoice] = useState<Record<string, string | undefined>>({});
   // Which card is being built, so the other cards stay still.
   const [building, setBuilding] = useState<string | null>(null);
+
+  // The run history's own search and filters — client-side, since every run
+  // shown here is already in `runs` (the query caps at 50, the same page a
+  // filter would otherwise have to re-fetch).
+  const [runQuery, setRunQuery] = useState("");
+  const [runType, setRunType] = useState<string | undefined>(undefined);
+  const [runPeriod, setRunPeriod] = useState<string | undefined>(undefined);
+  const [runStatus, setRunStatus] = useState<string | undefined>(undefined);
+
+  const runTypeOptions = useMemo(
+    () =>
+      [...new Set(runs.map((run) => run.reportType))]
+        .map((id) => ({ value: id, label: REPORT_DEFINITIONS.find((d) => d.id === id)?.label ?? id }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [runs],
+  );
+  const runPeriodOptions = useMemo(
+    () => [...new Set(runs.map((run) => run.periodLabel))].sort().reverse(),
+    [runs],
+  );
+  const runStatusOptions = useMemo(
+    () => [...new Set(runs.map((run) => run.status))],
+    [runs],
+  );
+
+  const filteredRuns = useMemo(() => {
+    const q = runQuery.trim().toLowerCase();
+
+    return runs.filter((run) => {
+      if (q && !run.label.toLowerCase().includes(q)) return false;
+      if (runType && run.reportType !== runType) return false;
+      if (runPeriod && run.periodLabel !== runPeriod) return false;
+      if (runStatus && run.status !== runStatus) return false;
+
+      return true;
+    });
+  }, [runs, runQuery, runType, runPeriod, runStatus]);
 
   const build = (card: BuildCard) => {
     const periodLabel = choice[card.key];
@@ -367,22 +416,67 @@ export function ReportsView({
         })}
       </div>
 
+      {runs.length > 0 ? (
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Input.Search
+            allowClear
+            placeholder="Report"
+            style={{ width: 220 }}
+            value={runQuery}
+            onChange={(event) => setRunQuery(event.target.value)}
+          />
+          <Select
+            allowClear
+            showSearch
+            style={{ minWidth: 180 }}
+            placeholder="Type"
+            value={runType}
+            onChange={(value) => setRunType(value ?? undefined)}
+            options={runTypeOptions}
+          />
+          <Select
+            allowClear
+            showSearch
+            style={{ minWidth: 160 }}
+            placeholder="Period"
+            value={runPeriod}
+            onChange={(value) => setRunPeriod(value ?? undefined)}
+            options={runPeriodOptions.map((value) => ({ value, label: value }))}
+          />
+          <Select
+            allowClear
+            style={{ minWidth: 140 }}
+            placeholder="Status"
+            value={runStatus}
+            onChange={(value) => setRunStatus(value ?? undefined)}
+            options={runStatusOptions.map((value) => ({
+              value,
+              label: STATUS_LABELS[value] ?? value,
+            }))}
+          />
+        </Space>
+      ) : null}
+
       <Table<ReportRunCard>
-        dataSource={runs}
+        dataSource={filteredRuns}
         rowKey="id"
         size="small"
         loading={pending}
         scroll={{ x: 1100 }}
-        pagination={runs.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
+        pagination={filteredRuns.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
         locale={{
           emptyText: (
             <Empty
               description={
-                <span>
-                  No reports yet.
-                  <br />
-                  Pick a period above and build one.
-                </span>
+                runs.length === 0 ? (
+                  <span>
+                    No reports yet.
+                    <br />
+                    Pick a period above and build one.
+                  </span>
+                ) : (
+                  "No reports match these filters."
+                )
               }
             />
           ),
@@ -400,7 +494,9 @@ export function ReportsView({
             width: 110,
             render: (status: string, run) => (
               <Space size={4}>
-                <Tag color={STATUS_COLOURS[status] ?? "default"}>{status}</Tag>
+                <Tag color={STATUS_COLOURS[status] ?? "default"}>
+                  {STATUS_LABELS[status] ?? status}
+                </Tag>
                 {(run.stats?.warnings?.length ?? 0) > 0 ? (
                   <WarningOutlined
                     style={{ color: token.colorWarning }}
@@ -489,16 +585,13 @@ export function ReportsView({
                   })
                 }
               >
-                <Tooltip title="Delete this report">
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    disabled={!canBuild}
-                    icon={<DeleteOutlined />}
-                    aria-label="Delete"
-                  />
-                </Tooltip>
+                <Button
+                  size="small"
+                  danger
+                  disabled={!canBuild}
+                  icon={<DeleteOutlined />}
+                  aria-label="Delete"
+                />
               </Popconfirm>
             ),
           },
