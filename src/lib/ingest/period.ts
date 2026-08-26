@@ -130,6 +130,43 @@ export function buildYearPeriod(year: number, startMonth = 1): Period {
   };
 }
 
+/**
+ * A period label, read back into words instead of decoded from its format —
+ * "July 2026", "Q3 2026", "2026" — with the granularity named alongside it
+ * so a month and a quarter never look alike at a glance next to each other,
+ * the way `2026.07 July` and `2026.Q3` can when skimmed quickly.
+ */
+export function describePeriodLabel(label: string, granularity: PeriodGranularity): string {
+  if (granularity === "month") {
+    const words = monthLabelWords(label);
+
+    if (words !== label) return `${words} (month)`;
+  }
+
+  if (granularity === "quarter") {
+    const match = /^(\d{4})\.Q(\d)$/.exec(label);
+
+    if (match) return `Q${match[2]} ${match[1]} (quarter)`;
+  }
+
+  if (granularity === "year") {
+    const match = /^(\d{4})\.Y$/.exec(label);
+
+    if (match) return `${match[1]} (year)`;
+  }
+
+  // A label that doesn't match its own granularity's shape is unexpected
+  // rather than impossible — shown as-is rather than hidden behind a guess.
+  return label;
+}
+
+/** `2026.07 July` -> `July 2026`, matching how the dashboard's month picker itself reads a period. */
+export function monthLabelWords(label: string): string {
+  const match = /^\d{4}\.\d{2} (.+)$/.exec(label);
+
+  return match ? `${match[1]} ${label.slice(0, 4)}` : label;
+}
+
 /** Deduplicates while preserving nothing but year+month — the rest is noise. */
 export function collectPeriods(values: Iterable<YearMonth>): YearMonth[] {
   const unique = new Map<string, YearMonth>();
