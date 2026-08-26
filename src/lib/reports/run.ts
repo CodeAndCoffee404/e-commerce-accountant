@@ -26,7 +26,13 @@ export type RunOutcome =
       result: GeneratorResult;
       published: { uploaded: number; failed: number; message: string };
     }
-  | { ok: false; runId: string | null; message: string; needsSkuMapping?: string[] };
+  | {
+      ok: false;
+      runId: string | null;
+      message: string;
+      needsSkuMapping?: string[];
+      needsCurrencyMapping?: string[];
+    };
 
 /**
  * Thrown when a module's `unmappedSkus` finds SKUs the period would invoice
@@ -41,6 +47,17 @@ class NeedsSkuMappingError extends Error {
       skus.length === 1
         ? `1 SKU used this period isn't in SKU mapping yet: ${skus[0]}.`
         : `${skus.length} SKUs used this period aren't in SKU mapping yet.`,
+    );
+  }
+}
+
+/** Same idea as `NeedsSkuMappingError`, for a module's `unmappedCurrencies`. */
+class NeedsCurrencyMappingError extends Error {
+  constructor(public readonly currencies: string[]) {
+    super(
+      currencies.length === 1
+        ? `1 currency used this period isn't in Allegro currency mapping yet: ${currencies[0]}.`
+        : `${currencies.length} currencies used this period aren't in Allegro currency mapping yet.`,
     );
   }
 }
@@ -318,6 +335,14 @@ export async function runReport(input: {
 
     if (missingSkus.length > 0) throw new NeedsSkuMappingError(missingSkus);
 
+    // Same idea, for Allegro's currency_map: a currency this file has never
+    // carried before still parses cleanly (see `mapAllegro`), so nothing
+    // here would notice unless it is checked explicitly — otherwise every
+    // row in it is silently skipped as unrecognised.
+    const missingCurrencies = reportModule(input.reportType).unmappedCurrencies?.(rows, rules) ?? [];
+
+    if (missingCurrencies.length > 0) throw new NeedsCurrencyMappingError(missingCurrencies);
+
     const fx = await loadFx(rows, period);
 
     const result = build(input.reportType, rows, {
@@ -396,6 +421,9 @@ export async function runReport(input: {
       runId: run.id,
       message,
       ...(error instanceof NeedsSkuMappingError ? { needsSkuMapping: error.skus } : {}),
+      ...(error instanceof NeedsCurrencyMappingError
+        ? { needsCurrencyMapping: error.currencies }
+        : {}),
     };
   }
 }

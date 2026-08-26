@@ -9,6 +9,7 @@ import {
   Input,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Table,
@@ -21,11 +22,13 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import {
+  deleteAllegroCurrency,
   deleteSellerVatNumber,
   deleteSkuMapping,
   deleteVatRate,
   refreshRates,
   restoreDefaults,
+  saveAllegroCurrency,
   saveChannelRule,
   saveSellerVatNumber,
   saveSkuMapping,
@@ -165,10 +168,18 @@ export function SettingsView({
           label: "Channel rules",
           children: (
             <Rules
-              // The "reports" channel is configuration with its own tab above;
-              // offering the same rows as raw JSON here would create two
-              // editors for one thing.
-              data={data.channelRules.filter((rule) => rule.channel !== "reports")}
+              // The "reports" channel is configuration with its own tab above,
+              // and allegro/currency_map gets its own table below — offering
+              // either as raw JSON here would create two editors for one
+              // thing.
+              data={data.channelRules.filter(
+                (rule) =>
+                  rule.channel !== "reports" &&
+                  !(rule.channel === "allegro" && rule.key === "currency_map"),
+              )}
+              allegroCurrencyRule={data.channelRules.find(
+                (rule) => rule.channel === "allegro" && rule.key === "currency_map",
+              )}
               canEdit={canEdit}
               run={run}
               pending={pending}
@@ -416,13 +427,139 @@ function Skus({
   );
 }
 
+type AllegroCurrencyRule = { country: string; scheme: string; sellerVat: string };
+
+const SCHEME_OPTIONS = [
+  { value: "REGULAR", label: "REGULAR" },
+  { value: "UNION-OSS", label: "UNION-OSS" },
+];
+
+function AllegroCurrencies({
+  rule,
+  canEdit,
+  run,
+  pending,
+}: {
+  rule: ReferenceData["channelRules"][number] | undefined;
+  canEdit: boolean;
+  run: Runner;
+  pending: boolean;
+}) {
+  const [editing, setEditing] = useState<Partial<
+    { currency: string } & AllegroCurrencyRule
+  > | null>(null);
+
+  const entries = Object.entries((rule?.value as Record<string, AllegroCurrencyRule>) ?? {})
+    .map(([currency, value]) => ({ currency, ...value }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
+
+  return (
+    <Card size="small" title="allegro · currency_map">
+      <Typography.Paragraph type="secondary">
+        Allegro writes the settlement currency next to the amount rather than in its own column.
+        Each one here decides the arrival country, the VAT scheme and the seller VAT number a row
+        gets. A currency the reports have never seen before is caught before a build and offered
+        for mapping the same way an unmapped SKU is — nothing needs editing here in advance.
+      </Typography.Paragraph>
+
+      <Space style={{ marginBottom: 16 }}>
+        <Button
+          type="primary"
+          disabled={!canEdit}
+          onClick={() => setEditing({ scheme: "UNION-OSS" })}
+        >
+          Add currency
+        </Button>
+      </Space>
+
+      <Table
+        dataSource={entries}
+        rowKey="currency"
+        size="small"
+        pagination={false}
+        loading={pending}
+        scroll={{ x: 640 }}
+        columns={[
+          { title: "Currency", dataIndex: "currency", width: 100 },
+          { title: "Arrival country", dataIndex: "country", width: 130 },
+          {
+            title: "Scheme",
+            dataIndex: "scheme",
+            width: 140,
+            render: (value: string) => <Tag>{value}</Tag>,
+          },
+          { title: "Seller VAT", dataIndex: "sellerVat" },
+          {
+            title: "",
+            key: "actions",
+            width: 140,
+            render: (_, row) => (
+              <Space>
+                <Button size="small" disabled={!canEdit} onClick={() => setEditing(row)}>
+                  Edit
+                </Button>
+                <Popconfirm
+                  title="Delete this currency?"
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Keep"
+                  onConfirm={() => run(() => deleteAllegroCurrency(row.currency))}
+                  disabled={!canEdit}
+                >
+                  <Tooltip title="Delete this currency">
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!canEdit}
+                      icon={<DeleteOutlined />}
+                      aria-label="Delete"
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]}
+      />
+
+      <EditModal
+        title="Allegro currency"
+        open={editing !== null}
+        initial={editing}
+        onClose={() => setEditing(null)}
+        onSubmit={(values) => run(() => saveAllegroCurrency(values))}
+        fields={[
+          {
+            name: "currency",
+            label: "Currency",
+            required: true,
+            placeholder: "PLN",
+            disabled: Boolean(editing?.currency),
+          },
+          { name: "country", label: "Arrival country", required: true, placeholder: "PL" },
+          {
+            name: "scheme",
+            label: "Scheme",
+            required: true,
+            type: "select",
+            options: SCHEME_OPTIONS,
+          },
+          { name: "sellerVat", label: "Seller VAT number", required: true, placeholder: "PL5263307678" },
+        ]}
+      />
+    </Card>
+  );
+}
+
 function Rules({
   data,
+  allegroCurrencyRule,
   canEdit,
   run,
   pending,
 }: {
   data: ReferenceData["channelRules"];
+  allegroCurrencyRule: ReferenceData["channelRules"][number] | undefined;
   canEdit: boolean;
   run: Runner;
   pending: boolean;
@@ -431,10 +568,12 @@ function Rules({
 
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="middle">
+      <AllegroCurrencies rule={allegroCurrencyRule} canEdit={canEdit} run={run} pending={pending} />
+
       <Typography.Paragraph type="secondary">
-        How each channel is read: which country a currency implies, which arrival countries are
-        skipped, what counts as a sale. These are assumptions as much as facts, which is why they
-        are here rather than buried in the code. Edit as JSON — a malformed value is refused.
+        How each channel is read: which arrival countries are skipped, what counts as a sale. These
+        are assumptions as much as facts, which is why they are here rather than buried in the
+        code. Edit as JSON — a malformed value is refused.
       </Typography.Paragraph>
 
       {data.map((rule) => {
@@ -639,7 +778,9 @@ type Field = {
   label: string;
   required?: boolean;
   placeholder?: string;
-  type?: "switch";
+  disabled?: boolean;
+  type?: "switch" | "select";
+  options?: { value: string; label: string }[];
 };
 
 function EditModal({
@@ -681,7 +822,13 @@ function EditModal({
             rules={field.required ? [{ required: true, message: `${field.label} is required` }] : []}
             valuePropName={field.type === "switch" ? "checked" : "value"}
           >
-            {field.type === "switch" ? <Switch /> : <Input placeholder={field.placeholder} />}
+            {field.type === "switch" ? (
+              <Switch disabled={field.disabled} />
+            ) : field.type === "select" ? (
+              <Select options={field.options} disabled={field.disabled} />
+            ) : (
+              <Input placeholder={field.placeholder} disabled={field.disabled} />
+            )}
           </Form.Item>
         ))}
       </Form>

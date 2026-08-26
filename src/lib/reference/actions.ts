@@ -204,6 +204,112 @@ export async function deleteSkuMapping(id: string): Promise<ActionResult> {
   return { ok: true, message: "Entry deleted." };
 }
 
+const allegroCurrencySchema = z.object({
+  currency: z
+    .string()
+    .trim()
+    .min(1, "A currency is required")
+    .max(10)
+    .toUpperCase(),
+  country: z.string().trim().length(2, "A country is a 2-letter code").toUpperCase(),
+  scheme: z.enum(["REGULAR", "UNION-OSS"]),
+  sellerVat: z
+    .string()
+    .trim()
+    .min(4, "A VAT number has at least 4 characters")
+    .max(24)
+    .regex(/^[A-Za-z0-9 -]+$/, "A VAT number is letters, digits, spaces and dashes"),
+});
+
+/**
+ * Adds or edits one entry of `allegro / currency_map` — the currency decides
+ * the arrival country, the VAT scheme and the seller VAT number, so the three
+ * are kept together instead of asking someone to hand-edit the JSON.
+ *
+ * The row is one JSON blob shared by every currency (see `channelRules` on
+ * the schema), so this reads it, merges the one key that changed, and writes
+ * the whole thing back — the same shape `saveChannelRule` writes, just typed
+ * instead of pasted.
+ */
+export async function saveAllegroCurrency(input: unknown): Promise<ActionResult> {
+  const user = await requireEditor();
+  const parsed = allegroCurrencySchema.safeParse(input);
+
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+
+  const { currency, ...rule } = parsed.data;
+  const db = getDb();
+
+  const [existing] = await db
+    .select({ id: schema.channelRules.id, value: schema.channelRules.value })
+    .from(schema.channelRules)
+    .where(
+      and(
+        eq(schema.channelRules.tenantId, user.tenantId),
+        eq(schema.channelRules.channel, "allegro"),
+        eq(schema.channelRules.key, "currency_map"),
+      ),
+    );
+
+  const map = { ...((existing?.value as Record<string, unknown>) ?? {}), [currency]: rule };
+
+  if (existing) {
+    await db
+      .update(schema.channelRules)
+      .set({ value: map })
+      .where(eq(schema.channelRules.id, existing.id));
+  } else {
+    await db.insert(schema.channelRules).values({
+      tenantId: user.tenantId,
+      channel: "allegro",
+      key: "currency_map",
+      value: map,
+      note: "The currency decides the arrival country, the rate and the seller VAT number.",
+    });
+  }
+
+  await audit(user, "allegro_currency.saved", "channel_rule", existing?.id, { currency, ...rule });
+  revalidatePath("/settings");
+  // The gate that sends someone here lives on Reports, and what it is
+  // willing to build changes the moment the currency is mapped.
+  revalidatePath("/reports");
+
+  return { ok: true, message: `Currency ${currency} saved.` };
+}
+
+export async function deleteAllegroCurrency(currency: string): Promise<ActionResult> {
+  const user = await requireEditor();
+  const db = getDb();
+
+  const [existing] = await db
+    .select({ id: schema.channelRules.id, value: schema.channelRules.value })
+    .from(schema.channelRules)
+    .where(
+      and(
+        eq(schema.channelRules.tenantId, user.tenantId),
+        eq(schema.channelRules.channel, "allegro"),
+        eq(schema.channelRules.key, "currency_map"),
+      ),
+    );
+
+  if (!existing) return { ok: false, message: "There is no currency map to remove from." };
+
+  const map = { ...(existing.value as Record<string, unknown>) };
+
+  delete map[currency];
+
+  await db
+    .update(schema.channelRules)
+    .set({ value: map })
+    .where(eq(schema.channelRules.id, existing.id));
+
+  await audit(user, "allegro_currency.deleted", "channel_rule", existing.id, { currency });
+  revalidatePath("/settings");
+  revalidatePath("/reports");
+
+  return { ok: true, message: `Currency ${currency} removed.` };
+}
+
 export async function saveChannelRule(id: string, rawValue: string): Promise<ActionResult> {
   const user = await requireEditor();
 
