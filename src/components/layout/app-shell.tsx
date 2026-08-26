@@ -151,13 +151,17 @@ export function AppShell({
             <Image
               src="/logo-wordmark.png"
               alt="Halum"
-              width={78}
-              height={26}
+              width={99}
+              height={33}
               style={{
-                // Same 26px the mark renders at collapsed — the icon inside
-                // this image is exactly as tall as the image itself, so
-                // matching the height here keeps the icon the same size in
-                // both states instead of shrinking it to fit the wordmark.
+                // Not just "same height as the mark": the icon glyph inside
+                // logo-wordmark.png sits on a taller canvas than the icon in
+                // logo-mark.png, with more padding above and below it — at
+                // equal image height the wordmark's icon renders visibly
+                // smaller. Measured both PNGs' actual pixel content (icon
+                // fills 76/128 of the mark's canvas height, but only 45/96 of
+                // the wordmark's) and sized this one so the icon glyph comes
+                // out the same rendered height in both states.
                 objectFit: "contain",
                 filter: themeMode === "dark" ? "invert(1)" : undefined,
               }}
