@@ -2,6 +2,7 @@
 
 import { Card, Space, Tag, Typography } from "antd";
 
+import { describePeriodLabel, monthLabelWords } from "@/lib/ingest/period";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
 const { Text } = Typography;
@@ -31,14 +32,14 @@ export function ReportDeadlinesBlock({
       extra={
         month ? (
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {month}
+            {monthLabelWords(month)}
           </Text>
         ) : null
       }
     >
       {rows.length === 0 ? (
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {month ? `Nothing due for ${month}.` : "No month selected yet."}
+          {month ? `Nothing due for ${monthLabelWords(month)}.` : "No month selected yet."}
         </Text>
       ) : (
         <Space direction="vertical" size={10} style={{ width: "100%" }}>
@@ -51,7 +52,11 @@ export function ReportDeadlinesBlock({
                 <StatusTag state={row.state} />
               </div>
               <Text type="secondary" style={{ fontSize: 11.5 }}>
-                {row.periodLabel} · due {formatDeadline(row.deadline)}
+                {/* Named plainly — "(month)" / "(quarter)" / "(year)" — so a
+                    monthly and a quarterly deadline never look alike at a
+                    glance, the way `2026.07 July` and `2026.Q3` can. */}
+                {describePeriodLabel(row.periodLabel, row.granularity)} · due{" "}
+                {formatDeadline(row.deadline)}
               </Text>
             </div>
           ))}

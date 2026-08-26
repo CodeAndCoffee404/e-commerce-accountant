@@ -4,6 +4,8 @@ import { monthByNumber } from "./months";
 import {
   buildPeriod,
   collectPeriods,
+  describePeriodLabel,
+  monthLabelWords,
   parseAllegroDate,
   parseAmazonActivityPeriod,
   parseAmazonMonthlyDate,
@@ -161,5 +163,36 @@ describe("parseAmazonMonthlyDate", () => {
 
   it("rejects an unknown month name", () => {
     expect(parseAmazonMonthlyDate("1 foo 2026 13:33:54 UTC")).toBeNull();
+  });
+});
+
+describe("monthLabelWords", () => {
+  it("reads a month label into words", () => {
+    expect(monthLabelWords("2026.07 July")).toBe("July 2026");
+  });
+
+  it("leaves a label it doesn't recognise as-is", () => {
+    expect(monthLabelWords("2026.Q3")).toBe("2026.Q3");
+    expect(monthLabelWords("2026.Y")).toBe("2026.Y");
+  });
+});
+
+describe("describePeriodLabel", () => {
+  it("names a month plainly, so it never reads like a quarter", () => {
+    expect(describePeriodLabel("2026.07 July", "month")).toBe("July 2026 (month)");
+  });
+
+  it("names a quarter plainly, so it never reads like a month", () => {
+    expect(describePeriodLabel("2026.Q3", "quarter")).toBe("Q3 2026 (quarter)");
+  });
+
+  it("names a year plainly", () => {
+    expect(describePeriodLabel("2026.Y", "year")).toBe("2026 (year)");
+  });
+
+  it("falls back to the raw label if it doesn't match its own granularity's shape", () => {
+    expect(describePeriodLabel("garbled", "month")).toBe("garbled");
+    expect(describePeriodLabel("garbled", "quarter")).toBe("garbled");
+    expect(describePeriodLabel("garbled", "year")).toBe("garbled");
   });
 });
