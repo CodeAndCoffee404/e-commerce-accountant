@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoCircleOutlined } from "@ant-design/icons";
+import { CheckOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -88,6 +88,61 @@ function dueLabel(granularity: PeriodGranularity, rule: DeadlineRuleRow["rule"] 
 }
 
 /**
+ * The due-day input, typed at without saving on every keystroke: a two-digit
+ * day used to save after its first digit, which both fired premature writes
+ * and — since the value shown afterward is always whatever last actually
+ * reached the server — made an unrelated save elsewhere (e.g. toggling a
+ * channel optional, which reloads this whole tab) look like it had reset the
+ * day back to the default. Typing now only stages a local draft; a save
+ * fires on blur, Enter, or the confirm button that appears while the draft
+ * differs from what is saved.
+ */
+function DeadlineDayField({
+  day,
+  disabled,
+  onCommit,
+}: {
+  day: number | undefined;
+  disabled: boolean;
+  onCommit: (day: number) => void;
+}) {
+  // Reset when `day` itself changes — a successful save or a fresh load —
+  // by remounting on a key that includes it, rather than syncing via effect.
+  const [draft, setDraft] = useState<number | null>(day ?? null);
+
+  const dirty = draft !== null && draft !== day;
+
+  const commit = () => {
+    if (draft !== null && draft !== day) onCommit(draft);
+  };
+
+  return (
+    <Space.Compact>
+      <InputNumber
+        size="small"
+        min={1}
+        max={31}
+        style={{ width: 64 }}
+        disabled={disabled}
+        value={draft ?? undefined}
+        onChange={(value) => setDraft(typeof value === "number" ? value : null)}
+        onPressEnter={commit}
+        onBlur={commit}
+      />
+      {dirty ? (
+        <Button
+          size="small"
+          type="primary"
+          icon={<CheckOutlined />}
+          onClick={commit}
+          aria-label="Confirm due day"
+        />
+      ) : null}
+    </Space.Compact>
+  );
+}
+
+/**
  * The client's own description of how their reporting works: which reports
  * exist, what each one insists on before it will build, and when it falls
  * due. Long explanations live behind the (i) icons rather than as standing
@@ -172,27 +227,6 @@ export function ReportSettingsTab({
   return (
     <>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        <Space size={6} align="center">
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Required / optional, and when each report is due
-          </Typography.Text>
-          <Tooltip
-            title={
-              <>
-                Required — the report will not build for a period until this piece is uploaded.
-                Optional — included whenever its file is there, but never blocks the build. A
-                monthly or quarterly report is due the given day of the month right after the
-                period ends; a yearly report is due the given month and day, the year after.
-                Editing a due date recalculates every period&apos;s deadline immediately — nothing
-                is stored per period. Every change here is recorded under Activity, and each
-                report run keeps the configuration it was built with.
-              </>
-            }
-          >
-            <InfoCircleOutlined style={{ color: "var(--ant-color-text-tertiary)", cursor: "help" }} />
-          </Tooltip>
-        </Space>
-
         {REPORT_DEFINITIONS.map((definition) => {
           const current = settings[definition.id];
           const optionalDatasets = optionalOf(current.datasets);
@@ -303,9 +337,14 @@ export function ReportSettingsTab({
                         children: (
                           <Space direction="vertical" size={16} style={{ width: "100%" }}>
                             <div>
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                Prepared per — and, for each, the day it falls due
-                              </Typography.Text>
+                              <Space size={6}>
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  Prepared per — and, for each, the day it falls due
+                                </Typography.Text>
+                                <Tooltip title="A monthly or quarterly report is due the given day of the month right after the period ends; a yearly report is due the given month and day, the year after. Editing a due date recalculates every period's deadline immediately — nothing is stored per period.">
+                                  <InfoCircleOutlined style={{ color: "var(--ant-color-text-tertiary)", cursor: "help" }} />
+                                </Tooltip>
+                              </Space>
                               <Space direction="vertical" size={8} style={{ width: "100%", marginTop: 8 }}>
                                 <Space size={4} wrap>
                                   {GRANULARITIES.map((granularity) => {
@@ -379,17 +418,13 @@ export function ReportSettingsTab({
                                           }
                                         />
                                       ) : null}
-                                      <InputNumber
-                                        size="small"
-                                        min={1}
-                                        max={31}
+                                      <DeadlineDayField
+                                        key={rule?.rule.day ?? "unset"}
+                                        day={rule?.rule.day}
                                         disabled={!canEditDeadlines || pending || !rule}
-                                        value={rule?.rule.day}
-                                        onChange={(day) => {
-                                          if (rule && typeof day === "number") {
-                                            saveDeadline(definition.id, granularity, day, rule.rule.month);
-                                          }
-                                        }}
+                                        onCommit={(day) =>
+                                          rule && saveDeadline(definition.id, granularity, day, rule.rule.month)
+                                        }
                                       />
                                       <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                                         {granularity === "year" ? "day of that month, the year after" : "day of the month after"}
@@ -422,9 +457,14 @@ export function ReportSettingsTab({
 
                             {definition.id === "off_amazon_sales" ? (
                               <div>
-                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                  Required / optional per channel
-                                </Typography.Text>
+                                <Space size={6}>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    Required / optional per channel
+                                  </Typography.Text>
+                                  <Tooltip title="Required — the report will not build for a period until this channel's file is uploaded. Optional — included whenever its file is there, but never blocks the build.">
+                                    <InfoCircleOutlined style={{ color: "var(--ant-color-text-tertiary)", cursor: "help" }} />
+                                  </Tooltip>
+                                </Space>
                                 <Space direction="vertical" size="small" style={{ width: "100%", marginTop: 6 }}>
                                   {definition.datasets.map((dataset) => (
                                     <Space key={dataset} size={12} wrap>

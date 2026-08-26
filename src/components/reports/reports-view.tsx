@@ -559,43 +559,6 @@ export function ReportsView({
             ),
           },
           {
-            title: "",
-            key: "remove",
-            width: 60,
-            render: (_, run) => (
-              <Popconfirm
-                title="Delete this report?"
-                description="Its files go too. Anything already in Google Drive stays there."
-                okText="Delete"
-                okButtonProps={{ danger: true }}
-                cancelText="Keep"
-                disabled={!canBuild}
-                onConfirm={() =>
-                  startTransition(async () => {
-                    try {
-                      const result = await deleteRun(run.id);
-
-                      if (result.ok) message.success(result.message);
-                      else message.error(result.message, 6);
-                    } catch {
-                      message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
-                    }
-
-                    router.refresh();
-                  })
-                }
-              >
-                <Button
-                  size="small"
-                  danger
-                  disabled={!canBuild}
-                  icon={<DeleteOutlined />}
-                  aria-label="Delete"
-                />
-              </Popconfirm>
-            ),
-          },
-          {
             title: (
               <Tooltip title="Whether the files reached the client's Google Drive. A failed upload does not affect the report — the files are here and can be sent again.">
                 Drive
@@ -638,6 +601,43 @@ export function ReportsView({
                 </Button>
               );
             },
+          },
+          {
+            title: "",
+            key: "remove",
+            width: 60,
+            render: (_, run) => (
+              <Popconfirm
+                title="Delete this report?"
+                description="Its files go too. Anything already in Google Drive stays there."
+                okText="Delete"
+                okButtonProps={{ danger: true }}
+                cancelText="Keep"
+                disabled={!canBuild}
+                onConfirm={() =>
+                  startTransition(async () => {
+                    try {
+                      const result = await deleteRun(run.id);
+
+                      if (result.ok) message.success(result.message);
+                      else message.error(result.message, 6);
+                    } catch {
+                      message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+                    }
+
+                    router.refresh();
+                  })
+                }
+              >
+                <Button
+                  size="small"
+                  danger
+                  disabled={!canBuild}
+                  icon={<DeleteOutlined />}
+                  aria-label="Delete"
+                />
+              </Popconfirm>
+            ),
           },
         ]}
       />

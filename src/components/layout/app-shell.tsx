@@ -151,9 +151,13 @@ export function AppShell({
             <Image
               src="/logo-wordmark.png"
               alt="Halum"
-              width={72}
-              height={24}
+              width={78}
+              height={26}
               style={{
+                // Same 26px the mark renders at collapsed — the icon inside
+                // this image is exactly as tall as the image itself, so
+                // matching the height here keeps the icon the same size in
+                // both states instead of shrinking it to fit the wordmark.
                 objectFit: "contain",
                 filter: themeMode === "dark" ? "invert(1)" : undefined,
               }}
