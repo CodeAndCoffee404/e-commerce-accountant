@@ -563,6 +563,7 @@ export const reportType = pgEnum("report_type", [
   "sales_by_currency",
   "off_amazon_sales",
   "amazon_zoho_invoice",
+  "allegro_zoho_invoice",
 ]);
 
 export const reportStatus = pgEnum("report_status", [

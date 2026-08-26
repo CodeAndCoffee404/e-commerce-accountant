@@ -29,7 +29,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { restoreDefaults, saveSkuMapping } from "@/lib/reference/actions";
+import { restoreDefaults, saveAllegroCurrency, saveSkuMapping } from "@/lib/reference/actions";
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportRunCard } from "@/lib/reports/queries";
@@ -51,6 +51,21 @@ const STATUS_LABELS: Record<string, string> = {
   running: "Building",
   succeeded: "Ready",
   failed: "Failed",
+};
+
+/**
+ * Which channel's SKU mapping a report's unmapped-SKU gate saves into — the
+ * gate itself is generic (`ReportModule.unmappedSkus`), but a saved mapping
+ * still has to land under the right channel.
+ */
+const SKU_MAPPING_CHANNEL: Partial<Record<ReportTypeId, string>> = {
+  amazon_zoho_invoice: "amazon",
+  allegro_zoho_invoice: "allegro",
+};
+
+const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = {
+  amazon_zoho_invoice: "Amazon",
+  allegro_zoho_invoice: "Allegro",
 };
 
 /** One buildable card: a report, or one tenant-defined variant of one. */
@@ -75,6 +90,7 @@ export function ReportsView({
   canBuild,
   canRestore,
   canEditSkuMappings,
+  canEditCurrencyMappings,
 }: {
   runs: ReportRunCard[];
   periods: Record<ReportTypeId, ReportAvailability>;
@@ -85,6 +101,8 @@ export function ReportsView({
   canRestore: boolean;
   /** SKU mapping is company settings too — same rule, same reason. */
   canEditSkuMappings: boolean;
+  /** Allegro's currency_map is company settings too — same rule again. */
+  canEditCurrencyMappings: boolean;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
@@ -103,6 +121,18 @@ export function ReportsView({
     Record<string, { targetSku: string; itemName: string; ignored: boolean }>
   >({});
   const [savingSkus, setSavingSkus] = useState(false);
+
+  // Same idea as skuGate, for a build refused on an Allegro currency that
+  // isn't in currency_map yet.
+  const [currencyGate, setCurrencyGate] = useState<{
+    card: BuildCard;
+    periodLabel: string;
+    currencies: string[];
+  } | null>(null);
+  const [currencyDrafts, setCurrencyDrafts] = useState<
+    Record<string, { country: string; scheme: string; sellerVat: string }>
+  >({});
+  const [savingCurrencies, setSavingCurrencies] = useState(false);
 
   // The run history's own search and filters — client-side, since every run
   // shown here is already in `runs` (the query caps at 50, the same page a
@@ -166,6 +196,9 @@ export function ReportsView({
           // repeat what the modal is about to say in more detail.
           setSkuGate({ card, periodLabel, skus: result.needsSkuMapping });
           setSkuDrafts({});
+        } else if (result.needsCurrencyMapping && result.needsCurrencyMapping.length > 0) {
+          setCurrencyGate({ card, periodLabel, currencies: result.needsCurrencyMapping });
+          setCurrencyDrafts({});
         } else {
           // Ten seconds: it names the rule or the upload that is missing,
           // which is not readable in three.
@@ -181,10 +214,55 @@ export function ReportsView({
     });
   };
 
+  const saveCurrenciesAndBuild = () => {
+    if (!currencyGate) return;
+
+    setSavingCurrencies(true);
+
+    startTransition(async () => {
+      try {
+        for (const currency of currencyGate.currencies) {
+          const draft = currencyDrafts[currency];
+
+          const result = await saveAllegroCurrency({
+            currency,
+            country: draft?.country.trim() ?? "",
+            scheme: draft?.scheme ?? "UNION-OSS",
+            sellerVat: draft?.sellerVat.trim() ?? "",
+          });
+
+          if (!result.ok) {
+            message.error(result.message, 8);
+            setSavingCurrencies(false);
+            return;
+          }
+        }
+
+        const gate = currencyGate;
+        const result = await buildReport({
+          reportType: gate.card.reportType,
+          periodLabel: gate.periodLabel,
+          ...(gate.card.variant ? { variant: gate.card.variant } : {}),
+        });
+
+        if (result.ok) message.success(result.message, 6);
+        else message.error(result.message, 10);
+
+        setCurrencyGate(null);
+        router.refresh();
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+      } finally {
+        setSavingCurrencies(false);
+      }
+    });
+  };
+
   const saveSkusAndBuild = () => {
     if (!skuGate) return;
 
     setSavingSkus(true);
+    const channel = SKU_MAPPING_CHANNEL[skuGate.card.reportType] ?? "amazon";
 
     startTransition(async () => {
       try {
@@ -193,7 +271,7 @@ export function ReportsView({
           const ignored = draft?.ignored ?? false;
 
           const result = await saveSkuMapping({
-            channel: "amazon",
+            channel,
             sourceSku: sku,
             targetSku: ignored ? null : (draft?.targetSku.trim() ?? null),
             itemName: ignored ? null : (draft?.itemName.trim() ?? null),
@@ -723,6 +801,16 @@ export function ReportsView({
         onCancel={() => setSkuGate(null)}
         onSave={saveSkusAndBuild}
       />
+
+      <CurrencyGateModal
+        gate={currencyGate}
+        drafts={currencyDrafts}
+        setDrafts={setCurrencyDrafts}
+        canEdit={canEditCurrencyMappings}
+        saving={savingCurrencies}
+        onCancel={() => setCurrencyGate(null)}
+        onSave={saveCurrenciesAndBuild}
+      />
     </>
   );
 }
@@ -788,7 +876,7 @@ function SkuGateModal({
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Typography.Text type="secondary">
             {skus.length === 1 ? "This SKU appears" : "These SKUs appear"} in {gate.periodLabel}
-            &rsquo;s Amazon rows and{" "}
+            &rsquo;s {SKU_MAPPING_CHANNEL_LABEL[gate.card.reportType] ?? "Amazon"} rows and{" "}
             {skus.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in SKU mapping yet. Give{" "}
             {skus.length === 1 ? "it" : "each one"} an invoice code and item name, or mark it
             ignored — an ignored SKU is dropped from the invoice entirely.
@@ -892,6 +980,186 @@ function SkuGateModal({
               <Typography.Text type="secondary">
                 Only the owner can add a SKU mapping.{" "}
                 <Link href="/settings?tab=sku">Settings &rarr; SKU mapping</Link> lists what is
+                there today.
+              </Typography.Text>
+              <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                <Button onClick={onCancel}>Close</Button>
+              </Space>
+            </>
+          )}
+        </Space>
+      ) : null}
+    </Modal>
+  );
+}
+
+const SCHEME_OPTIONS = [
+  { value: "REGULAR", label: "REGULAR" },
+  { value: "UNION-OSS", label: "UNION-OSS" },
+];
+
+/**
+ * Stops a build that found an Allegro settlement currency with no rule in
+ * currency_map yet — Allegro writes the currency next to the amount rather
+ * than in its own column, so a currency the reports have never seen before
+ * still parses cleanly and would otherwise just be skipped, silently. Mirrors
+ * `SkuGateModal` exactly: same shape, same "only the owner can save" split,
+ * saved through the same form Settings → Channel rules uses.
+ */
+function CurrencyGateModal({
+  gate,
+  drafts,
+  setDrafts,
+  canEdit,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  gate: { card: BuildCard; periodLabel: string; currencies: string[] } | null;
+  drafts: Record<string, { country: string; scheme: string; sellerVat: string }>;
+  setDrafts: (
+    updater: (
+      drafts: Record<string, { country: string; scheme: string; sellerVat: string }>,
+    ) => Record<string, { country: string; scheme: string; sellerVat: string }>,
+  ) => void;
+  canEdit: boolean;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const currencies = gate?.currencies ?? [];
+
+  const draftOf = (currency: string) =>
+    drafts[currency] ?? { country: "", scheme: "UNION-OSS", sellerVat: "" };
+
+  const decided = currencies.filter((currency) => {
+    const draft = draftOf(currency);
+
+    return draft.country.trim() !== "" && draft.sellerVat.trim() !== "";
+  }).length;
+
+  const setField = (
+    currency: string,
+    field: "country" | "scheme" | "sellerVat",
+    value: string,
+  ) => setDrafts((current) => ({ ...current, [currency]: { ...draftOf(currency), [field]: value } }));
+
+  return (
+    <Modal
+      title={
+        currencies.length === 1
+          ? "Map this currency before the report builds"
+          : `Map ${currencies.length} currencies before the report builds`
+      }
+      open={gate !== null}
+      onCancel={onCancel}
+      footer={null}
+      destroyOnHidden
+      width={640}
+    >
+      {gate ? (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            {currencies.length === 1 ? "This currency appears" : "These currencies appear"} in{" "}
+            {gate.periodLabel}&rsquo;s Allegro rows and{" "}
+            {currencies.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in currency_map yet. Give{" "}
+            {currencies.length === 1 ? "it" : "each one"} an arrival country, a VAT scheme and the
+            seller VAT number it settles under.
+          </Typography.Text>
+
+          {canEdit ? (
+            <>
+              <Table
+                dataSource={currencies.map((currency) => ({ currency }))}
+                rowKey="currency"
+                size="small"
+                pagination={false}
+                columns={[
+                  {
+                    title: "Currency",
+                    dataIndex: "currency",
+                    width: 100,
+                    render: (currency: string) => <Typography.Text code>{currency}</Typography.Text>,
+                  },
+                  {
+                    title: "Arrival country",
+                    key: "country",
+                    render: (_, { currency }: { currency: string }) => (
+                      <Input
+                        size="small"
+                        placeholder="e.g. PL"
+                        value={draftOf(currency).country}
+                        onChange={(event) => setField(currency, "country", event.target.value)}
+                      />
+                    ),
+                  },
+                  {
+                    title: "Scheme",
+                    key: "scheme",
+                    width: 150,
+                    render: (_, { currency }: { currency: string }) => (
+                      <Select
+                        size="small"
+                        style={{ width: "100%" }}
+                        value={draftOf(currency).scheme}
+                        options={SCHEME_OPTIONS}
+                        onChange={(value) => setField(currency, "scheme", value)}
+                      />
+                    ),
+                  },
+                  {
+                    title: "Seller VAT",
+                    key: "sellerVat",
+                    render: (_, { currency }: { currency: string }) => (
+                      <Input
+                        size="small"
+                        placeholder="e.g. EE102013089"
+                        value={draftOf(currency).sellerVat}
+                        onChange={(event) => setField(currency, "sellerVat", event.target.value)}
+                      />
+                    ),
+                  },
+                ]}
+              />
+
+              <Alert
+                type="info"
+                showIcon
+                message="Saved the same way as Settings → Channel rules"
+                description="A currency mapped once covers every future period, so this list gets shorter as the map fills in."
+              />
+
+              <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+                  {decided} of {currencies.length} decided
+                </Typography.Text>
+                <Space>
+                  <Button onClick={onCancel} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="primary"
+                    loading={saving}
+                    disabled={decided < currencies.length}
+                    onClick={onSave}
+                  >
+                    Save &amp; build
+                  </Button>
+                </Space>
+              </Space>
+            </>
+          ) : (
+            <>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {currencies.map((currency) => (
+                  <li key={currency}>
+                    <Typography.Text code>{currency}</Typography.Text>
+                  </li>
+                ))}
+              </ul>
+              <Typography.Text type="secondary">
+                Only the owner can add a currency mapping.{" "}
+                <Link href="/settings?tab=rules">Settings &rarr; Channel rules</Link> lists what is
                 there today.
               </Typography.Text>
               <Space style={{ width: "100%", justifyContent: "flex-end" }}>

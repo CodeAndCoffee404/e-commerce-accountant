@@ -94,5 +94,14 @@ export type ReportModule = {
    * workbook, silently carrying its raw code.
    */
   unmappedSkus?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => string[];
+  /**
+   * Distinct currencies this period's rows would carry into the report that
+   * have no rule to say what they mean — same idea as `unmappedSkus`, for
+   * Allegro's currency_map. Allegro writes the currency next to the amount
+   * rather than in its own column, so a currency the file has never used
+   * before still parses cleanly; this is what stops it from being silently
+   * skipped instead.
+   */
+  unmappedCurrencies?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => string[];
   generate: (rows: LedgerRow[], context: ReportContext) => GeneratorResult;
 };

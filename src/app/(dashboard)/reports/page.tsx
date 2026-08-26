@@ -29,6 +29,7 @@ export default async function ReportsPage() {
         canBuild={user.role !== "viewer"}
         canRestore={user.role === "owner"}
         canEditSkuMappings={user.role === "owner"}
+        canEditCurrencyMappings={user.role === "owner"}
       />
     </>
   );

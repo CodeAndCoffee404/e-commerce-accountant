@@ -5,7 +5,13 @@ import { parseDecimalValue } from "@/lib/ingest/numbers";
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
 
 import type { ReportModule } from "./types";
-import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
+import type {
+  GeneratorResult,
+  LedgerRow,
+  ReportContext,
+  ReportSheet,
+  RulesSnapshot,
+} from "@/lib/reports/types";
 
 /**
  * Off-Amazon Sales: Allegro, Cdiscount and Shopify normalised into one shape.
@@ -155,6 +161,29 @@ function allegroRow(
     "",
     rule.scheme,
   ];
+}
+
+/**
+ * Currencies this period's Allegro rows actually settle in that currency_map
+ * has no rule for — checked the same way as an unmapped SKU, before anything
+ * builds, since `allegroRow` above would otherwise just skip the row with a
+ * warning and understate the period.
+ */
+function unmappedCurrencies(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
+  const found = new Set<string>();
+
+  for (const row of rows) {
+    if (row.dataset !== "allegro") continue;
+    // Same filter as allegroRow: a line with no buyer is a fee, not a sale,
+    // and never reaches the currency lookup.
+    if (!row.raw["kupujący"]) continue;
+    if (!row.currency) continue;
+    if (allegroCurrencyRule(rules, row.currency)) continue;
+
+    found.add(row.currency);
+  }
+
+  return [...found].sort();
 }
 
 /* ------------------------------------------------------------------ *
@@ -381,5 +410,6 @@ export const offAmazonSalesModule: ReportModule = {
       { channel: "shopify", key: "defaults" },
     ],
   },
+  unmappedCurrencies,
   generate: generateOffAmazonSales,
 };

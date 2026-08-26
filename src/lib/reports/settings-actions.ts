@@ -15,7 +15,12 @@ import { ZOHO_COUNTRIES } from "@/modules/reports/amazon-zoho-invoice";
 export type SettingsActionResult = { ok: boolean; message: string };
 
 const inputSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
+  reportType: z.enum([
+    "sales_by_currency",
+    "off_amazon_sales",
+    "amazon_zoho_invoice",
+    "allegro_zoho_invoice",
+  ]),
   enabled: z.boolean(),
   /** Datasets demoted to optional; everything else stays required. */
   optionalDatasets: z.array(z.string()).default([]),
@@ -125,7 +130,12 @@ export async function saveReportSettings(
 }
 
 const startDateSchema = z.object({
-  reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
+  reportType: z.enum([
+    "sales_by_currency",
+    "off_amazon_sales",
+    "amazon_zoho_invoice",
+    "allegro_zoho_invoice",
+  ]),
   /** The first of a month, or null to lift the floor entirely. */
   startsFrom: z
     .string()
