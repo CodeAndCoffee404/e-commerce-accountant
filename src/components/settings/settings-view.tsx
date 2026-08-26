@@ -44,7 +44,6 @@ import type { AllReportSettings } from "@/lib/reports/settings";
 import type { DeadlineRuleRow } from "@/lib/reports/deadlines-queries";
 
 import { AuditCard } from "./audit-card";
-import { DeadlineSettingsTab } from "./deadline-settings";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
 import { PeriodSettingsTab } from "./period-settings";
@@ -103,8 +102,10 @@ export function SettingsView({
   };
 
   // Deep-linkable, and the OAuth callback's ?drive= outcome must land on the
-  // tab that can show it.
-  const requestedTab = params.get("tab") ?? (params.get("drive") ? "drive" : "reports");
+  // tab that can show it. "deadlines" is a stale bookmark from before that
+  // tab merged into "reports" — sent to the same place its rules live now.
+  const requested = params.get("tab") ?? (params.get("drive") ? "drive" : "reports");
+  const requestedTab = requested === "deadlines" ? "reports" : requested;
 
   return (
     <Tabs
@@ -117,19 +118,9 @@ export function SettingsView({
             <ReportSettingsTab
               settings={reports}
               schedule={schedule}
+              deadlineRules={deadlineRules}
               canEdit={canEdit}
-              run={run}
-              pending={pending}
-            />
-          ),
-        },
-        {
-          key: "deadlines",
-          label: "Deadlines",
-          children: (
-            <DeadlineSettingsTab
-              rules={deadlineRules}
-              canEdit={canEditDeadlines}
+              canEditDeadlines={canEditDeadlines}
               run={run}
               pending={pending}
             />
