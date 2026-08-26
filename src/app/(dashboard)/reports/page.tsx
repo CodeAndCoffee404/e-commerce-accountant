@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/layout/page-header";
 import { ReportsView } from "@/components/reports/reports-view";
 import { requireUser } from "@/lib/auth/session";
 import {
@@ -19,12 +18,10 @@ export default async function ReportsPage() {
     missingChannelRules(user.tenantId, settings),
   ]);
 
+  // No PageHeader here on purpose: the app bar already says Reports, and a
+  // page that opens with a greeting does not introduce itself twice.
   return (
     <>
-      <PageHeader
-        title="Reports"
-        description="Each report records the uploads, the rules and the exchange rates it used, so rebuilding a period gives the same numbers."
-      />
       <ReportsView
         runs={runs}
         periods={periods}
