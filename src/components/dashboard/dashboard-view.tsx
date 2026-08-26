@@ -12,7 +12,6 @@ import {
   Button,
   Card,
   Progress,
-  Select,
   Space,
   Table,
   theme,
@@ -28,6 +27,7 @@ import { buildAllReady } from "@/lib/dashboard/actions";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
+import { MonthPicker } from "./month-picker";
 import { ReportDeadlinesBlock } from "./report-deadlines-block";
 
 const { Text, Title } = Typography;
@@ -170,12 +170,11 @@ export function DashboardView({
               ) : (
                 <Space wrap>
                   {uploadAction}
-                  <Select
-                    value={shownMonth ?? undefined}
+                  <MonthPicker
+                    months={data.months}
+                    value={shownMonth}
                     loading={switching}
                     disabled={switching}
-                    style={{ minWidth: 170 }}
-                    options={data.months.map((month) => ({ value: month, label: month }))}
                     onChange={goToMonth}
                   />
                   {canBuild ? (

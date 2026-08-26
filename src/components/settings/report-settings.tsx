@@ -779,7 +779,13 @@ function EditForm({
 
 function FieldLabel({ tip, children }: { tip: string; children: ReactNode }) {
   return (
-    <Space size={5}>
+    // display: flex, not Space's own default of inline-flex: an inline-flex
+    // box is inline-level, so with nothing forcing a break the row right
+    // after it (its sibling control) could sit beside it instead of below —
+    // invisible when that sibling is wide enough to wrap on its own, but not
+    // when it's narrow, which is exactly what made Availability's toggle
+    // tuck in next to this label instead of dropping under it.
+    <Space size={5} style={{ display: "flex" }}>
       <Typography.Text
         type="secondary"
         style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}

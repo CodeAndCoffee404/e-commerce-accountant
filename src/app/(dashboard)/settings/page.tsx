@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/layout/page-header";
 import { SettingsView } from "@/components/settings/settings-view";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
@@ -24,13 +23,10 @@ export default async function SettingsPage() {
   ]);
   const deadlineRules = await loadDeadlineRules(user.tenantId, reports);
 
+  // No PageHeader here on purpose: the app bar already says Settings, and a
+  // page that opens with a greeting does not introduce itself twice.
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Reports, rates, integrations and access. Nothing here needs a developer."
-      />
-
       <SettingsView
         data={data}
         reports={reports}

@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/layout/page-header";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
 import { one } from "@/lib/params";
@@ -31,13 +30,16 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
     ),
   );
 
+  // No PageHeader here on purpose: the app bar already says Uploads, and a
+  // page that opens with a greeting does not introduce itself twice. The
+  // Upload files button still needs somewhere to be, so it gets its own row.
   return (
     <>
-      <PageHeader
-        title="Uploads"
-        description="Upload raw marketplace exports. Each file is recognised, assigned a period and parsed into transactions."
-        extra={user.role === "viewer" ? undefined : <UploadDialog tenantId={user.tenantId} />}
-      />
+      {user.role !== "viewer" ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+          <UploadDialog tenantId={user.tenantId} />
+        </div>
+      ) : null}
       <UploadsTable
         rows={rows}
         options={options}
