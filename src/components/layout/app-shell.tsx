@@ -121,44 +121,72 @@ export function AppShell({
       >
         <Link
           href={DEFAULT_ROUTE}
+          aria-label="Halum — go to the dashboard"
           style={{
             height: 56,
             display: "flex",
             alignItems: "center",
-            // Fixed, not collapsed ? center : flex-start: that snapped the
-            // instant the button was clicked, while the Sider's own width
-            // takes ~200ms to animate — the wordmark would jump to its final
-            // spot well before the sidebar had finished resizing around it.
-            // A constant left inset plus the overflow hidden below turns the
-            // reveal into a clip driven by that same width transition, so it
-            // reads as one continuous motion instead of two mistimed ones.
-            paddingInlineStart: 15,
+            // Clips the wordmark's own width down to whatever the Sider
+            // currently is (64 or 220 — this element sets none of its own,
+            // so it just inherits the block width, which is already what
+            // animates) rather than swapping which logo renders. Collapsed
+            // only ever shows the mark, not a clipped fragment of the
+            // wordmark's text — see the opacity crossfade below.
             overflow: "hidden",
             whiteSpace: "nowrap",
             borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
-          <Image
-            // Always the wordmark, never swapped for the standalone mark:
-            // swapping <Image> elements on collapse was the other half of
-            // the jump — a full unmount/remount with no transition of its
-            // own. One image, clipped by the Link's fixed-width overflow
-            // instead, animates for free alongside the Sider.
-            src="/logo-wordmark.png"
-            alt="Halum"
-            width={99}
-            height={33}
-            style={{
-              flex: "0 0 auto",
-              objectFit: "contain",
-              // The icon glyph inside logo-wordmark.png sits on a taller
-              // canvas than the standalone mark, with more padding around
-              // it — measured both PNGs' pixel content (icon fills 76/128 of
-              // the mark's canvas height, 45/96 of the wordmark's) and sized
-              // this so the glyph itself renders the same height either way.
-              filter: themeMode === "dark" ? "invert(1)" : undefined,
-            }}
-          />
+          {/* Both logos stay mounted the whole time and cross-fade via
+              opacity; the collapsed/expanded case used to swap which
+              <Image> was rendered, which is an instant unmount/remount with
+              no transition of its own — one more thing popping independently
+              of the ~200ms the Sider itself takes to resize. */}
+          <span style={{ position: "relative", width: 99, height: 33, flex: "0 0 auto" }}>
+            <Image
+              src="/logo-mark.png"
+              alt=""
+              width={26}
+              height={26}
+              style={{
+                position: "absolute",
+                // Left insets differ (15 vs 11) because the icon glyph sits
+                // at a different offset inside each source image — measured
+                // from both PNGs' pixel content so the glyph itself lands on
+                // the same screen position in both, and the cross-fade reads
+                // as one icon, not two swapping in and out of alignment.
+                left: 15,
+                top: "50%",
+                transform: "translateY(-50%)",
+                objectFit: "contain",
+                opacity: collapsed ? 1 : 0,
+                transition: "opacity 0.2s ease-in-out",
+                filter: themeMode === "dark" ? "invert(1)" : undefined,
+              }}
+            />
+            <Image
+              src="/logo-wordmark.png"
+              alt=""
+              width={99}
+              height={33}
+              style={{
+                position: "absolute",
+                left: 11,
+                top: "50%",
+                transform: "translateY(-50%)",
+                objectFit: "contain",
+                opacity: collapsed ? 0 : 1,
+                transition: "opacity 0.2s ease-in-out",
+                // The icon glyph inside logo-wordmark.png sits on a taller
+                // canvas than the standalone mark, with more padding around
+                // it — measured both PNGs' pixel content (icon fills 76/128
+                // of the mark's canvas height, 45/96 of the wordmark's) and
+                // sized this so the glyph itself renders the same height
+                // either way.
+                filter: themeMode === "dark" ? "invert(1)" : undefined,
+              }}
+            />
+          </span>
         </Link>
 
         <Menu
