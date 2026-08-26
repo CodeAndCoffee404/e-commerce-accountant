@@ -8,6 +8,7 @@ import {
   Card,
   InputNumber,
   Popconfirm,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -638,27 +639,31 @@ function EditForm({
         <FieldLabel tip="The first period this report is offered for. Periods before it never appear, on Reports or the dashboard.">
           Availability
         </FieldLabel>
-        <Space direction="vertical" size={6} style={{ marginTop: 6 }}>
-          <Space size={8} align="center">
-            <Switch
-              size="small"
-              checked={restrictAvailability}
-              disabled={!canEdit || pending}
-              onChange={(checked) =>
-                setDraft((d) => ({
-                  ...d,
-                  startsFrom: checked ? `${THIS_YEAR}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01` : null,
-                }))
-              }
-            />
-            <Typography.Text style={{ fontSize: 13 }}>Restrict start date</Typography.Text>
-          </Space>
+        <Space size={10} wrap align="center" style={{ marginTop: 6 }}>
+          <Segmented
+            size="small"
+            disabled={!canEdit || pending}
+            value={restrictAvailability ? "from" : "no-limit"}
+            options={[
+              { label: "No limit", value: "no-limit" },
+              { label: "From a date", value: "from" },
+            ]}
+            onChange={(value) =>
+              setDraft((d) => ({
+                ...d,
+                startsFrom:
+                  value === "from"
+                    ? `${THIS_YEAR}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`
+                    : null,
+              }))
+            }
+          />
 
           {restrictAvailability ? (
-            <Space size={8} wrap>
+            <Space size={8}>
               <Select
                 size="small"
-                style={{ width: 150 }}
+                style={{ width: 130 }}
                 disabled={!canEdit || pending}
                 value={month}
                 options={MONTHS.map((m) => ({ value: m.number, label: m.fullName }))}
@@ -668,7 +673,7 @@ function EditForm({
               />
               <Select
                 size="small"
-                style={{ width: 100 }}
+                style={{ width: 90 }}
                 disabled={!canEdit || pending}
                 value={year}
                 options={YEAR_OPTIONS.map((y) => ({ value: y, label: String(y) }))}
@@ -677,11 +682,7 @@ function EditForm({
                 }
               />
             </Space>
-          ) : (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Every period this report can build for is offered.
-            </Typography.Text>
-          )}
+          ) : null}
         </Space>
       </div>
 
