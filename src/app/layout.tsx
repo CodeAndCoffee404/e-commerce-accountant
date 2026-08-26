@@ -20,6 +20,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "E-commerce Accountant",
   description: "VAT and invoicing reports for multi-channel e-commerce sellers",
+  icons: {
+    // Two flattened PNGs rather than the file-convention icon.png: a
+    // favicon can't pick up a CSS filter the way the sidebar mark does, so
+    // the contrast has to be baked into the pixels themselves. `media`
+    // maps straight to a <link media="..."> the browser evaluates against
+    // the OS scheme, same as it would a stylesheet. The unconditional
+    // entry is the fallback for a browser that ignores `media` on icons.
+    icon: [
+      { url: "/icon-light.png", type: "image/png", media: "(prefers-color-scheme: light)" },
+      { url: "/icon-dark.png", type: "image/png", media: "(prefers-color-scheme: dark)" },
+      { url: "/icon-light.png", type: "image/png" },
+    ],
+  },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
