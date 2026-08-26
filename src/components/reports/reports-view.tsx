@@ -14,9 +14,11 @@ import {
   Card,
   Empty,
   Input,
+  Modal,
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   theme,
@@ -27,7 +29,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { restoreDefaults } from "@/lib/reference/actions";
+import { restoreDefaults, saveSkuMapping } from "@/lib/reference/actions";
 import { buildReport, deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportRunCard } from "@/lib/reports/queries";
@@ -72,6 +74,7 @@ export function ReportsView({
   missingRules,
   canBuild,
   canRestore,
+  canEditSkuMappings,
 }: {
   runs: ReportRunCard[];
   periods: Record<ReportTypeId, ReportAvailability>;
@@ -80,6 +83,8 @@ export function ReportsView({
   canBuild: boolean;
   /** Restoring defaults changes company settings, so it is the owner's. */
   canRestore: boolean;
+  /** SKU mapping is company settings too — same rule, same reason. */
+  canEditSkuMappings: boolean;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
@@ -88,6 +93,16 @@ export function ReportsView({
   const [choice, setChoice] = useState<Record<string, string | undefined>>({});
   // Which card is being built, so the other cards stay still.
   const [building, setBuilding] = useState<string | null>(null);
+  // Set when a build refuses on unmapped SKUs — carries what's needed to
+  // save the mapping and retry the same build, without asking the card for
+  // its period again.
+  const [skuGate, setSkuGate] = useState<{ card: BuildCard; periodLabel: string; skus: string[] } | null>(
+    null,
+  );
+  const [skuDrafts, setSkuDrafts] = useState<
+    Record<string, { targetSku: string; itemName: string; ignored: boolean }>
+  >({});
+  const [savingSkus, setSavingSkus] = useState(false);
 
   // The run history's own search and filters — client-side, since every run
   // shown here is already in `runs` (the query caps at 50, the same page a
@@ -144,16 +159,73 @@ export function ReportsView({
           ...(card.variant ? { variant: card.variant } : {}),
         });
 
-        // Ten seconds on a failure: it names the rule or the upload that is
-        // missing, which is not readable in three.
-        if (result.ok) message.success(result.message, 6);
-        else message.error(result.message, 10);
+        if (result.ok) {
+          message.success(result.message, 6);
+        } else if (result.needsSkuMapping && result.needsSkuMapping.length > 0) {
+          // A form to fill in, not an error to read — the toast would just
+          // repeat what the modal is about to say in more detail.
+          setSkuGate({ card, periodLabel, skus: result.needsSkuMapping });
+          setSkuDrafts({});
+        } else {
+          // Ten seconds: it names the rule or the upload that is missing,
+          // which is not readable in three.
+          message.error(result.message, 10);
+        }
 
         router.refresh();
       } catch {
         message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
       } finally {
         setBuilding(null);
+      }
+    });
+  };
+
+  const saveSkusAndBuild = () => {
+    if (!skuGate) return;
+
+    setSavingSkus(true);
+
+    startTransition(async () => {
+      try {
+        for (const sku of skuGate.skus) {
+          const draft = skuDrafts[sku];
+          const ignored = draft?.ignored ?? false;
+
+          const result = await saveSkuMapping({
+            channel: "amazon",
+            sourceSku: sku,
+            targetSku: ignored ? null : (draft?.targetSku.trim() ?? null),
+            itemName: ignored ? null : (draft?.itemName.trim() ?? null),
+            isIgnored: ignored,
+          });
+
+          if (!result.ok) {
+            message.error(result.message, 8);
+            setSavingSkus(false);
+            return;
+          }
+        }
+
+        const gate = skuGate;
+        const result = await buildReport({
+          reportType: gate.card.reportType,
+          periodLabel: gate.periodLabel,
+          ...(gate.card.variant ? { variant: gate.card.variant } : {}),
+        });
+
+        if (result.ok) message.success(result.message, 6);
+        // Every SKU above just got a decision, so this would only fire if
+        // the period's rows changed underneath the save — worth surfacing
+        // rather than assuming it can't happen.
+        else message.error(result.message, 10);
+
+        setSkuGate(null);
+        router.refresh();
+      } catch {
+        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
+      } finally {
+        setSavingSkus(false);
       }
     });
   };
@@ -641,7 +713,195 @@ export function ReportsView({
           },
         ]}
       />
+
+      <SkuGateModal
+        gate={skuGate}
+        drafts={skuDrafts}
+        setDrafts={setSkuDrafts}
+        canEdit={canEditSkuMappings}
+        saving={savingSkus}
+        onCancel={() => setSkuGate(null)}
+        onSave={saveSkusAndBuild}
+      />
     </>
+  );
+}
+
+/**
+ * Stops a build that found SKUs with no row in SKU mapping yet, and asks for
+ * each one before trying again — an unmapped SKU otherwise still reaches the
+ * invoice under its own raw code, silently. Only the owner can save a
+ * mapping (SKU mapping is company settings, same rule as everywhere else in
+ * Settings), so an accountant sees the list without the form.
+ */
+function SkuGateModal({
+  gate,
+  drafts,
+  setDrafts,
+  canEdit,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  gate: { card: BuildCard; periodLabel: string; skus: string[] } | null;
+  drafts: Record<string, { targetSku: string; itemName: string; ignored: boolean }>;
+  setDrafts: (
+    updater: (
+      drafts: Record<string, { targetSku: string; itemName: string; ignored: boolean }>,
+    ) => Record<string, { targetSku: string; itemName: string; ignored: boolean }>,
+  ) => void;
+  canEdit: boolean;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const skus = gate?.skus ?? [];
+
+  const draftOf = (sku: string) => drafts[sku] ?? { targetSku: "", itemName: "", ignored: false };
+
+  const decided = skus.filter((sku) => {
+    const draft = draftOf(sku);
+
+    return draft.ignored || (draft.targetSku.trim() !== "" && draft.itemName.trim() !== "");
+  }).length;
+
+  const setField = (sku: string, field: "targetSku" | "itemName", value: string) =>
+    setDrafts((current) => ({ ...current, [sku]: { ...draftOf(sku), [field]: value } }));
+
+  const setIgnored = (sku: string, ignored: boolean) =>
+    setDrafts((current) => ({ ...current, [sku]: { ...draftOf(sku), ignored } }));
+
+  return (
+    <Modal
+      title={
+        skus.length === 1
+          ? "Map this SKU before the invoice builds"
+          : `Map ${skus.length} SKUs before the invoice builds`
+      }
+      open={gate !== null}
+      onCancel={onCancel}
+      footer={null}
+      destroyOnHidden
+      width={640}
+    >
+      {gate ? (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Text type="secondary">
+            {skus.length === 1 ? "This SKU appears" : "These SKUs appear"} in {gate.periodLabel}
+            &rsquo;s Amazon rows and{" "}
+            {skus.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in SKU mapping yet. Give{" "}
+            {skus.length === 1 ? "it" : "each one"} an invoice code and item name, or mark it
+            ignored — an ignored SKU is dropped from the invoice entirely.
+          </Typography.Text>
+
+          {canEdit ? (
+            <>
+              <Table
+                dataSource={skus.map((sku) => ({ sku }))}
+                rowKey="sku"
+                size="small"
+                pagination={false}
+                columns={[
+                  {
+                    title: "Source SKU",
+                    dataIndex: "sku",
+                    width: 160,
+                    render: (sku: string) => (
+                      <Typography.Text code style={{ opacity: draftOf(sku).ignored ? 0.5 : 1 }}>
+                        {sku}
+                      </Typography.Text>
+                    ),
+                  },
+                  {
+                    title: "Invoice SKU",
+                    key: "targetSku",
+                    render: (_, { sku }: { sku: string }) => (
+                      <Input
+                        size="small"
+                        placeholder="e.g. TS-001"
+                        disabled={draftOf(sku).ignored}
+                        value={draftOf(sku).targetSku}
+                        onChange={(event) => setField(sku, "targetSku", event.target.value)}
+                      />
+                    ),
+                  },
+                  {
+                    title: "Item name",
+                    key: "itemName",
+                    render: (_, { sku }: { sku: string }) => (
+                      <Input
+                        size="small"
+                        placeholder="e.g. T-Shirt, Black, M"
+                        disabled={draftOf(sku).ignored}
+                        value={draftOf(sku).itemName}
+                        onChange={(event) => setField(sku, "itemName", event.target.value)}
+                      />
+                    ),
+                  },
+                  {
+                    title: "Ignore",
+                    key: "ignored",
+                    width: 64,
+                    align: "center",
+                    render: (_, { sku }: { sku: string }) => (
+                      <Switch
+                        size="small"
+                        checked={draftOf(sku).ignored}
+                        onChange={(checked) => setIgnored(sku, checked)}
+                      />
+                    ),
+                  },
+                ]}
+              />
+
+              <Alert
+                type="info"
+                showIcon
+                message="Saved the same way as Settings → SKU mapping"
+                description="Nothing about this report is special-cased — a SKU mapped once covers every future period, so this list gets shorter as the catalogue fills in."
+              />
+
+              <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+                  {decided} of {skus.length} decided
+                </Typography.Text>
+                <Space>
+                  <Button onClick={onCancel} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="primary"
+                    loading={saving}
+                    disabled={decided < skus.length}
+                    onClick={onSave}
+                  >
+                    Save &amp; build
+                  </Button>
+                </Space>
+              </Space>
+            </>
+          ) : (
+            <>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {skus.map((sku) => (
+                  <li key={sku}>
+                    <Typography.Text code>{sku}</Typography.Text>
+                  </li>
+                ))}
+              </ul>
+              <Typography.Text type="secondary">
+                Only the owner can add a SKU mapping.{" "}
+                <Link href="/settings?tab=sku">Settings &rarr; SKU mapping</Link> lists what is
+                there today.
+              </Typography.Text>
+              <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                <Button onClick={onCancel}>Close</Button>
+              </Space>
+            </>
+          )}
+        </Space>
+      ) : null}
+    </Modal>
   );
 }
 

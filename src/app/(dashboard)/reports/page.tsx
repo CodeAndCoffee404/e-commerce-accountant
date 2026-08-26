@@ -31,6 +31,7 @@ export default async function ReportsPage() {
         missingRules={missingRules}
         canBuild={user.role !== "viewer"}
         canRestore={user.role === "owner"}
+        canEditSkuMappings={user.role === "owner"}
       />
     </>
   );

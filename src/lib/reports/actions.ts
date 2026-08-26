@@ -15,7 +15,10 @@ import { publishRun } from "@/lib/google/publish";
 
 import { runReport } from "./run";
 
-export type BuildResult = { ok: true; runId: string; message: string } | { ok: false; message: string };
+export type BuildResult =
+  | { ok: true; runId: string; message: string }
+  /** Set when the refusal is specifically unmapped SKUs — the interface opens the mapping form instead of just a toast. */
+  | { ok: false; message: string; needsSkuMapping?: string[] };
 
 const buildSchema = z.object({
   reportType: z.enum(["sales_by_currency", "off_amazon_sales", "amazon_zoho_invoice"]),
@@ -58,7 +61,13 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
 
   revalidatePath("/reports");
 
-  if (!outcome.ok) return { ok: false, message: outcome.message };
+  if (!outcome.ok) {
+    return {
+      ok: false,
+      message: outcome.message,
+      ...(outcome.needsSkuMapping ? { needsSkuMapping: outcome.needsSkuMapping } : {}),
+    };
+  }
 
   const rows = outcome.result.sheets.reduce((total, sheet) => total + sheet.rows.length, 0);
   const warnings = outcome.result.warnings.length;

@@ -2,7 +2,7 @@ import type { schema } from "@/lib/db";
 import type { PeriodGranularity } from "@/lib/db/schema";
 import type { DatasetId } from "@/lib/ingest/datasets";
 import type { ReportSettings } from "@/lib/reports/settings";
-import type { GeneratorResult, LedgerRow, ReportContext } from "@/lib/reports/types";
+import type { GeneratorResult, LedgerRow, ReportContext, RulesSnapshot } from "@/lib/reports/types";
 
 export type ReportTypeId = (typeof schema.reportType.enumValues)[number];
 
@@ -85,5 +85,14 @@ export type ReportModule = {
    * know it.
    */
   validate?: (rows: readonly LedgerRow[], settings: ReportSettings) => string | null;
+  /**
+   * Distinct SKUs this period's rows would carry into the report that have no
+   * row in SKU mapping yet — the module's own idea of which of its SKUs
+   * matter, since only some modules invoice by SKU at all. Checked after the
+   * ledger loads and before anything builds, same as `validate`, so an
+   * unmapped SKU is caught once rather than discovered afterwards in the
+   * workbook, silently carrying its raw code.
+   */
+  unmappedSkus?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => string[];
   generate: (rows: LedgerRow[], context: ReportContext) => GeneratorResult;
 };

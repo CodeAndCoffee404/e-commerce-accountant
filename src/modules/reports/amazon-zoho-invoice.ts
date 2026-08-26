@@ -1,7 +1,13 @@
 import Decimal from "decimal.js";
 
 import { decideSku } from "@/lib/reports/rules";
-import type { GeneratorResult, LedgerRow, ReportContext, ReportSheet } from "@/lib/reports/types";
+import type {
+  GeneratorResult,
+  LedgerRow,
+  ReportContext,
+  ReportSheet,
+  RulesSnapshot,
+} from "@/lib/reports/types";
 
 import type { ReportModule } from "./types";
 
@@ -206,6 +212,44 @@ export function missingCountries(
   return required.filter((country) => !present.has(country));
 }
 
+/**
+ * Distinct SKUs this period's Amazon order rows would invoice under that
+ * have no row in SKU mapping — an unmapped SKU still reaches the invoice
+ * today, under its own raw code, which is exactly what this catches before
+ * the fact instead of after.
+ *
+ * Mirrors `generateZohoInvoice`'s own row filter rather than sharing it: a
+ * stricter or looser check here would otherwise risk silently changing what
+ * actually gets invoiced.
+ */
+function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
+  const found = new Set<string>();
+
+  for (const row of rows) {
+    if (row.dataset !== "amazon_monthly") continue;
+
+    const country = row.countryCode;
+
+    if (!country || row.transactionType !== ORDER_TYPES[country]) continue;
+
+    const sales = row.netAmount;
+
+    if (sales === null || sales.toDecimalPlaces(2).isZero()) continue;
+
+    const quantity = row.quantity;
+
+    if (quantity === null || quantity.isZero()) continue;
+
+    const sku = row.sku?.trim();
+
+    if (!sku) continue;
+
+    if (decideSku(rules, "amazon", sku).kind === "passthrough") found.add(sku);
+  }
+
+  return [...found].sort();
+}
+
 export const amazonZohoInvoiceModule: ReportModule = {
   definition: {
     id: "amazon_zoho_invoice",
@@ -236,5 +280,6 @@ export const amazonZohoInvoiceModule: ReportModule = {
 
     return missing.length > 0 ? `Missing Amazon Monthly uploads: ${missing.join(", ")}.` : null;
   },
+  unmappedSkus,
   generate: generateZohoInvoice,
 };

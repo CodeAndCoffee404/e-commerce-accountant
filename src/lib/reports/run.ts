@@ -26,7 +26,24 @@ export type RunOutcome =
       result: GeneratorResult;
       published: { uploaded: number; failed: number; message: string };
     }
-  | { ok: false; runId: string | null; message: string };
+  | { ok: false; runId: string | null; message: string; needsSkuMapping?: string[] };
+
+/**
+ * Thrown when a module's `unmappedSkus` finds SKUs the period would invoice
+ * under that aren't in SKU mapping yet. Its own class, not a plain `Error`,
+ * so the catch block below can carry the SKU list itself out to the caller
+ * instead of just the message — the interface opens a form from it, not a
+ * toast.
+ */
+class NeedsSkuMappingError extends Error {
+  constructor(public readonly skus: string[]) {
+    super(
+      skus.length === 1
+        ? `1 SKU used this period isn't in SKU mapping yet: ${skus[0]}.`
+        : `${skus.length} SKUs used this period aren't in SKU mapping yet.`,
+    );
+  }
+}
 
 /**
  * Builds one report and records what it was built from.
@@ -294,6 +311,13 @@ export async function runReport(input: {
       );
     }
 
+    // Same idea as the channel-rules check above, one step further in: an
+    // unmapped SKU does not make a smaller invoice, it makes one with the
+    // channel's raw code sitting where the client's own code should be.
+    const missingSkus = reportModule(input.reportType).unmappedSkus?.(rows, rules) ?? [];
+
+    if (missingSkus.length > 0) throw new NeedsSkuMappingError(missingSkus);
+
     const fx = await loadFx(rows, period);
 
     const result = build(input.reportType, rows, {
@@ -367,7 +391,12 @@ export async function runReport(input: {
       .set({ status: "failed", finishedAt: new Date(), errorMessage: message })
       .where(eq(schema.reportRuns.id, run.id));
 
-    return { ok: false, runId: run.id, message };
+    return {
+      ok: false,
+      runId: run.id,
+      message,
+      ...(error instanceof NeedsSkuMappingError ? { needsSkuMapping: error.skus } : {}),
+    };
   }
 }
 
