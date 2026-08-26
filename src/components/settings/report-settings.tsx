@@ -639,7 +639,7 @@ function EditForm({
         <FieldLabel tip="The first period this report is offered for. Periods before it never appear, on Reports or the dashboard.">
           Availability
         </FieldLabel>
-        <Space size={10} wrap align="center" style={{ marginTop: 6 }}>
+        <Space direction="vertical" size={8} style={{ marginTop: 6 }}>
           <Segmented
             size="small"
             disabled={!canEdit || pending}
