@@ -39,6 +39,7 @@ describe("the anonymised fixtures", () => {
     const expected = [
       "Allegro sales report",
       "Amazon VAT transaction report",
+      "Cdiscount orders report",
       "Cdiscount sales report",
       "Geyser shopify sales report",
       ...["BE", "DE", "ES", "FR", "IE", "IT", "NL", "PL", "SE", "UK"].map(

@@ -3,12 +3,14 @@ export type DatasetId =
   | "amazon_monthly"
   | "allegro"
   | "cdiscount"
+  | "cdiscount_orders"
   | "shopify";
 
 export type PeriodResolver =
   | "amazon_vat"
   | "allegro"
   | "cdiscount"
+  | "cdiscount_orders"
   | "shopify";
 
 /**

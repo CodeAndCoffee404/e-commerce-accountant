@@ -250,6 +250,21 @@ export function parseCdiscountDate(value: string): YearMonth | null {
   return toYearMonth(year, month, day);
 }
 
+/**
+ * Cdiscount orders report `Order date (UTC)`: `2026-08-25 15:50:30` in the
+ * XLSX (a real date cell, per parse.ts's `cellToString`), `2026-08-25` alone
+ * in a CSV export of the same report. Unlike the invoice report's `Accounting
+ * date`, this column carries a real time of day, not always midnight.
+ */
+export function parseCdiscountOrdersDate(value: string): YearMonth | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}:\d{2})?$/);
+  if (!match) return null;
+
+  const [, year, month, day] = match.map(Number);
+
+  return toYearMonth(year, month, day);
+}
+
 /** Shopify `Created at`: `2026-07-31 22:34:13 +0300`. */
 export function parseShopifyDate(value: string): YearMonth | null {
   const match = value

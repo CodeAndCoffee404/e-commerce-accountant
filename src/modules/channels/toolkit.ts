@@ -6,6 +6,7 @@ import {
   parseAllegroDate,
   parseAmazonActivityPeriod,
   parseCdiscountDate,
+  parseCdiscountOrdersDate,
   parseShopifyDate,
   type Period,
   type YearMonth,
@@ -93,6 +94,7 @@ const DATE_PARSERS: Record<SimpleDataset["periodResolver"], DateParser> = {
   amazon_vat: parseAmazonActivityPeriod,
   allegro: parseAllegroDate,
   cdiscount: parseCdiscountDate,
+  cdiscount_orders: parseCdiscountOrdersDate,
   shopify: parseShopifyDate,
 };
 
