@@ -52,9 +52,11 @@ const rules: RulesSnapshot = {
   channelRules: [{ channel: "allegro", key: "currency_map", value: ALLEGRO_CURRENCY_MAP }],
 };
 
+// Euros per unit of the currency — the same (already-inverted) convention
+// `euroRateOn` returns, so a euro amount is native × rate, not native ÷ rate.
 const fx: FxSnapshot = {
-  PLN: { rate: "4", rateDate: "2026-01-31", source: "ecb" },
-  CZK: { rate: "25", rateDate: "2026-01-31", source: "ecb" },
+  PLN: { rate: "0.25", rateDate: "2026-01-31", source: "ecb" },
+  CZK: { rate: "0.04", rateDate: "2026-01-31", source: "ecb" },
 };
 
 const context: ReportContext = {

@@ -319,9 +319,12 @@ export function generateAllegroZohoInvoice(
       );
     }
 
+    // `fx.rate` (from `euroRateOn`) is already inverted to euros per unit of
+    // the currency, so converting into euro multiplies — dividing here would
+    // apply the ECB rate backwards.
     const fxRate = new Decimal(fx.rate);
-    const netEur = net.dividedBy(fxRate);
-    const vatEur = vat.dividedBy(fxRate);
+    const netEur = net.times(fxRate);
+    const vatEur = vat.times(fxRate);
 
     // VAT is owed on every sale regardless of whether its SKU is one the
     // invoice itself lists — an ignored SKU is a bookkeeping choice, not a
