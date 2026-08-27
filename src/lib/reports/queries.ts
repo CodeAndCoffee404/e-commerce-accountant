@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import type { PeriodGranularity } from "@/lib/db/schema";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
 import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
@@ -17,124 +18,10 @@ import {
   type AllReportSettings,
 } from "./settings";
 
-export type ReportRunCard = {
-  id: string;
-  reportType: ReportTypeId;
-  label: string;
-  periodLabel: string;
-  status: string;
-  requestedAt: Date;
-  finishedAt: Date | null;
-  errorMessage: string | null;
-  stats: {
-    ledgerRows?: number;
-    outputRows?: number;
-    sourceFiles?: number;
-    warnings?: string[];
-    skipped?: { reason: string; count: number }[];
-  } | null;
-  sources: string[];
-  artifacts: {
-    id: string;
-    filename: string;
-    sizeBytes: number | null;
-    driveUrl: string | null;
-    driveStatus: string | null;
-  }[];
-};
-
-const LABELS = new Map(REPORT_DEFINITIONS.map((definition) => [definition.id, definition.label]));
-
 /** The channels whose rules rows are report variants, e.g. custom reports. */
 const VARIANT_CHANNELS = REPORT_DEFINITIONS.flatMap((definition) =>
   definition.variants ? [definition.variants.rulesChannel] : [],
 );
-
-/**
- * key → display name for every stored variant, so a run named by its variant
- * key shows the definition's name. A deleted definition falls back to the key;
- * the workbook filename still carries the name it was built under.
- */
-async function loadVariantNames(tenantId: string): Promise<Map<string, string>> {
-  if (VARIANT_CHANNELS.length === 0) return new Map();
-
-  const rows = await getDb()
-    .select({ key: schema.channelRules.key, value: schema.channelRules.value })
-    .from(schema.channelRules)
-    .where(
-      and(
-        eq(schema.channelRules.tenantId, tenantId),
-        inArray(schema.channelRules.channel, VARIANT_CHANNELS),
-      ),
-    );
-
-  return new Map(rows.map((row) => [row.key, variantDisplayName(row.value, row.key)]));
-}
-
-export async function listReportRuns(tenantId: string, limit = 50): Promise<ReportRunCard[]> {
-  const db = getDb();
-
-  const runs = await db
-    .select()
-    .from(schema.reportRuns)
-    .where(eq(schema.reportRuns.tenantId, tenantId))
-    .orderBy(desc(schema.reportRuns.createdAt))
-    .limit(limit);
-
-  if (runs.length === 0) return [];
-
-  const ids = runs.map((run) => run.id);
-  const variantNames = runs.some((run) => run.variant !== null)
-    ? await loadVariantNames(tenantId)
-    : new Map<string, string>();
-
-  const [sources, artifacts] = await Promise.all([
-    db
-      .select({
-        runId: schema.reportRunSources.reportRunId,
-        filename: schema.sourceFiles.originalFilename,
-      })
-      .from(schema.reportRunSources)
-      .innerJoin(
-        schema.sourceFiles,
-        eq(schema.sourceFiles.id, schema.reportRunSources.sourceFileId),
-      )
-      .where(inArray(schema.reportRunSources.reportRunId, ids)),
-
-    db
-      .select()
-      .from(schema.reportArtifacts)
-      .where(inArray(schema.reportArtifacts.reportRunId, ids)),
-  ]);
-
-  return runs.map((run) => ({
-    id: run.id,
-    reportType: run.reportType,
-    label: run.variant
-      ? variantNames.get(run.variant) ?? run.variant
-      : LABELS.get(run.reportType) ?? run.reportType,
-    periodLabel: run.periodLabel,
-    status: run.status,
-    requestedAt: run.createdAt,
-    finishedAt: run.finishedAt,
-    errorMessage: run.errorMessage,
-    stats: run.stats as ReportRunCard["stats"],
-    sources: sources
-      .filter((source) => source.runId === run.id)
-      .map((source) => source.filename)
-      .sort(),
-    artifacts: artifacts
-      .filter((artifact) => artifact.reportRunId === run.id)
-      .map((artifact) => ({
-        id: artifact.id,
-        filename: artifact.filename,
-        sizeBytes: artifact.sizeBytes,
-        driveUrl: artifact.driveUrl,
-        driveStatus: artifact.driveStatus,
-      }))
-      .sort((a, b) => a.filename.localeCompare(b.filename)),
-  }));
-}
 
 export type ReportAvailability = {
   /** False hides the card entirely; the report also refuses to build. */
@@ -400,4 +287,166 @@ export async function missingChannelRules(
   }
 
   return [...absent].sort();
+}
+
+export type ReportPeriodRow = {
+  period: string;
+  granularity: PeriodGranularity;
+  state: "built" | "stale" | "ready" | "waiting" | "failed" | "running" | "queued";
+  /** Set only in the "waiting" state: what is still missing for this period. */
+  missing: string[];
+  /** Set instead of `missing` when nothing is missing — the period just hasn't ended yet. */
+  endsOn: string | null;
+  builtAt: Date | null;
+  outputRows: number | null;
+  errorMessage: string | null;
+  artifact: { id: string; filename: string } | null;
+};
+
+/**
+ * Every period a report has ever touched, one row each: built, stale, ready
+ * to build, waiting on a file, failed, or mid-run — computed for every
+ * enabled report at once, since the Reports screen shows one report at a
+ * time but a person switches between them without a round trip.
+ *
+ * `ready`/`blocked` from `availablePeriods` say what *can* build; this adds
+ * what already *has* — the latest run per (report, period), its artifact,
+ * and whether a source file was replaced since it succeeded.
+ */
+export async function allReportPeriodRows(
+  tenantId: string,
+  availability: Record<ReportTypeId, ReportAvailability>,
+): Promise<Record<ReportTypeId, ReportPeriodRow[]>> {
+  const db = getDb();
+
+  const [allPeriods, runs] = await Promise.all([
+    db
+      .select({
+        label: schema.periods.label,
+        granularity: schema.periods.granularity,
+        start: schema.periods.startDate,
+      })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId))
+      .orderBy(desc(schema.periods.startDate)),
+
+    db
+      .select({
+        id: schema.reportRuns.id,
+        reportType: schema.reportRuns.reportType,
+        periodLabel: schema.reportRuns.periodLabel,
+        status: schema.reportRuns.status,
+        createdAt: schema.reportRuns.createdAt,
+        finishedAt: schema.reportRuns.finishedAt,
+        errorMessage: schema.reportRuns.errorMessage,
+        stats: schema.reportRuns.stats,
+      })
+      .from(schema.reportRuns)
+      .where(eq(schema.reportRuns.tenantId, tenantId))
+      .orderBy(desc(schema.reportRuns.createdAt)),
+  ]);
+
+  // Latest run per (report type, period) — runs arrive newest first, so the
+  // first one seen for a key is the one that matters.
+  const latestByKey = new Map<string, (typeof runs)[number]>();
+
+  for (const run of runs) {
+    const key = `${run.reportType}|${run.periodLabel}`;
+
+    if (!latestByKey.has(key)) latestByKey.set(key, run);
+  }
+
+  const latestIds = [...latestByKey.values()].map((run) => run.id);
+
+  const [artifacts, sources] = await Promise.all([
+    latestIds.length
+      ? db
+          .select({
+            runId: schema.reportArtifacts.reportRunId,
+            id: schema.reportArtifacts.id,
+            filename: schema.reportArtifacts.filename,
+          })
+          .from(schema.reportArtifacts)
+          .where(inArray(schema.reportArtifacts.reportRunId, latestIds))
+      : Promise.resolve([]),
+    latestIds.length
+      ? db
+          .select({
+            runId: schema.reportRunSources.reportRunId,
+            status: schema.sourceFiles.status,
+          })
+          .from(schema.reportRunSources)
+          .innerJoin(
+            schema.sourceFiles,
+            eq(schema.sourceFiles.id, schema.reportRunSources.sourceFileId),
+          )
+          .where(inArray(schema.reportRunSources.reportRunId, latestIds))
+      : Promise.resolve([]),
+  ]);
+
+  const periodStart = new Map(allPeriods.map((period) => [period.label, period.start]));
+  const periodGranularity = new Map(allPeriods.map((period) => [period.label, period.granularity]));
+
+  const result = {} as Record<ReportTypeId, ReportPeriodRow[]>;
+
+  for (const definition of REPORT_DEFINITIONS) {
+    const avail = availability[definition.id];
+
+    if (!avail?.enabled) {
+      result[definition.id] = [];
+      continue;
+    }
+
+    const readySet = new Set(avail.ready);
+    const blockedMap = new Map(avail.blocked.map((entry) => [entry.period, entry]));
+
+    const labels = new Set<string>([...avail.ready, ...blockedMap.keys()]);
+
+    for (const run of runs) {
+      if (run.reportType === definition.id) labels.add(run.periodLabel);
+    }
+
+    const rows: ReportPeriodRow[] = [...labels].map((label) => {
+      const latest = latestByKey.get(`${definition.id}|${label}`);
+      const runArtifact = latest ? (artifacts.find((a) => a.runId === latest.id) ?? null) : null;
+      const stale =
+        !!latest &&
+        latest.status === "succeeded" &&
+        sources.some((s) => s.runId === latest.id && s.status === "superseded");
+
+      const state: ReportPeriodRow["state"] =
+        latest?.status === "succeeded"
+          ? stale
+            ? "stale"
+            : "built"
+          : latest?.status === "failed"
+            ? "failed"
+            : latest?.status === "running" || latest?.status === "queued"
+              ? latest.status
+              : readySet.has(label)
+                ? "ready"
+                : "waiting";
+
+      const blocked = blockedMap.get(label);
+      const stats = (latest?.stats ?? {}) as { outputRows?: number };
+
+      return {
+        period: label,
+        granularity: periodGranularity.get(label) ?? "month",
+        state,
+        missing: state === "waiting" ? (blocked?.missing ?? []) : [],
+        endsOn: state === "waiting" ? (blocked?.endsOn ?? null) : null,
+        builtAt: latest?.status === "succeeded" ? latest.finishedAt : null,
+        outputRows: stats.outputRows ?? null,
+        errorMessage: latest?.status === "failed" ? latest.errorMessage : null,
+        artifact: runArtifact ? { id: runArtifact.id, filename: runArtifact.filename } : null,
+      };
+    });
+
+    rows.sort((a, b) => (periodStart.get(b.period) ?? "").localeCompare(periodStart.get(a.period) ?? ""));
+
+    result[definition.id] = rows;
+  }
+
+  return result;
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Drawer, Skeleton, Table, Typography } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Drawer, Skeleton, Table, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { previewUpload, type Preview } from "@/lib/uploads/preview";
@@ -21,6 +22,18 @@ export function PreviewDrawer({
       title={filename ?? "Preview"}
       width="min(900px, 100%)"
       destroyOnHidden
+      extra={
+        fileId ? (
+          <Button
+            size="small"
+            icon={<DownloadOutlined />}
+            href={`/api/uploads/${fileId}`}
+            download={filename ?? undefined}
+          >
+            Download
+          </Button>
+        ) : null
+      }
     >
       {/* Keyed by file so opening another row remounts and refetches, which
           keeps the loading state out of an effect that would have to clear it. */}

@@ -31,21 +31,14 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
   );
 
   // No PageHeader here on purpose: the app bar already says Uploads, and a
-  // page that opens with a greeting does not introduce itself twice. The
-  // Upload files button still needs somewhere to be, so it gets its own row.
+  // page that opens with a greeting does not introduce itself twice.
   return (
-    <>
-      {user.role !== "viewer" ? (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-          <UploadDialog tenantId={user.tenantId} />
-        </div>
-      ) : null}
-      <UploadsTable
-        rows={rows}
-        options={options}
-        reconciliation={reconciliation}
-        canDelete={user.role !== "viewer"}
-      />
-    </>
+    <UploadsTable
+      rows={rows}
+      options={options}
+      reconciliation={reconciliation}
+      canDelete={user.role !== "viewer"}
+      uploadAction={user.role !== "viewer" ? <UploadDialog tenantId={user.tenantId} /> : null}
+    />
   );
 }

@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import type { PeriodGranularity } from "@/lib/db/schema";
 
 export type UploadRow = {
   id: string;
@@ -10,6 +11,8 @@ export type UploadRow = {
   dataset: string | null;
   country: string | null;
   period: string | null;
+  /** The period's own start date (ISO), for sorting by real chronology rather than the label text. */
+  periodStart: string | null;
   status: string;
   sizeBytes: number;
   uploadedAt: Date;
@@ -32,9 +35,12 @@ export type UploadFilters = {
   search?: string;
 };
 
+/** One period the picker can offer — its label, when it starts, and its shape. */
+export type PeriodOption = { label: string; start: string; granularity: PeriodGranularity };
+
 export type UploadOptions = {
   datasets: string[];
-  periods: string[];
+  periods: PeriodOption[];
   statuses: string[];
 };
 
@@ -58,7 +64,11 @@ export async function uploadFilterOptions(tenantId: string): Promise<UploadOptio
       .where(eq(schema.sourceFiles.tenantId, tenantId)),
 
     getDb()
-      .select({ label: schema.periods.label })
+      .select({
+        label: schema.periods.label,
+        start: schema.periods.startDate,
+        granularity: schema.periods.granularity,
+      })
       .from(schema.periods)
       .where(eq(schema.periods.tenantId, tenantId))
       // Newest first, by when they start rather than by their label: '2026.Y'
@@ -72,7 +82,12 @@ export async function uploadFilterOptions(tenantId: string): Promise<UploadOptio
 
   return {
     datasets: unique(rows.map((row) => row.dataset)),
-    periods: periods.map((period) => period.label),
+    // A file only ever carries a month or a quarter (PLAN §2.1) — the year
+    // periods the report screens assemble on their own have no place in a
+    // filter over uploads.
+    periods: periods
+      .filter((period) => period.granularity === "month" || period.granularity === "quarter")
+      .map((period) => ({ label: period.label, start: period.start, granularity: period.granularity })),
     statuses: unique(rows.map((row) => row.status)),
   };
 }
@@ -106,6 +121,7 @@ export async function listUploads(
       dataset: schema.sourceFiles.dataset,
       country: schema.sourceFiles.countryCode,
       period: schema.sourceFiles.periodLabel,
+      periodStart: schema.sourceFiles.periodStart,
       status: schema.sourceFiles.status,
       sizeBytes: schema.sourceFiles.sizeBytes,
       uploadedAt: schema.sourceFiles.uploadedAt,
@@ -126,6 +142,7 @@ export async function listUploads(
       dataset: row.dataset,
       country: row.country,
       period: row.period,
+      periodStart: row.periodStart,
       status: row.status,
       sizeBytes: row.sizeBytes,
       uploadedAt: row.uploadedAt,
