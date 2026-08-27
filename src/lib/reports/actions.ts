@@ -32,6 +32,7 @@ const buildSchema = z.object({
     "off_amazon_sales",
     "amazon_zoho_invoice",
     "allegro_zoho_invoice",
+    "shopify_zoho_invoice",
   ]),
   periodLabel: z.string().trim().min(1),
   /** For reports built per tenant-defined variant: which definition. */

@@ -20,6 +20,7 @@ const inputSchema = z.object({
     "off_amazon_sales",
     "amazon_zoho_invoice",
     "allegro_zoho_invoice",
+    "shopify_zoho_invoice",
   ]),
   enabled: z.boolean(),
   /** Datasets demoted to optional; everything else stays required. */
@@ -135,6 +136,7 @@ const startDateSchema = z.object({
     "off_amazon_sales",
     "amazon_zoho_invoice",
     "allegro_zoho_invoice",
+    "shopify_zoho_invoice",
   ]),
   /** The first of a month, or null to lift the floor entirely. */
   startsFrom: z

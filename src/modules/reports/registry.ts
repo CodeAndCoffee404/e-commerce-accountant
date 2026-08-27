@@ -3,6 +3,7 @@ import { allegroZohoInvoiceModule } from "./allegro-zoho-invoice";
 import { amazonZohoInvoiceModule } from "./amazon-zoho-invoice";
 import { offAmazonSalesModule } from "./off-amazon-sales";
 import { salesByCurrencyModule } from "./sales-by-currency";
+import { shopifyZohoInvoiceModule } from "./shopify-zoho-invoice";
 
 /**
  * Every report the system can build. The core iterates this list and never
@@ -16,6 +17,7 @@ export const REPORT_MODULES: readonly ReportModule[] = [
   offAmazonSalesModule,
   amazonZohoInvoiceModule,
   allegroZohoInvoiceModule,
+  shopifyZohoInvoiceModule,
 ];
 
 export const REPORT_DEFINITIONS: readonly ReportDefinition[] = REPORT_MODULES.map(
