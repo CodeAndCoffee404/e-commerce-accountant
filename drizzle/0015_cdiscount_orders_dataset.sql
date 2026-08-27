@@ -1,0 +1,1 @@
+ALTER TYPE "public"."dataset_id" ADD VALUE 'cdiscount_orders' BEFORE 'shopify';

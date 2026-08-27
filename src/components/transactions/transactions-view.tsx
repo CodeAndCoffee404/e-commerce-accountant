@@ -14,6 +14,7 @@ const DATASET_LABELS: Record<string, string> = {
   amazon_monthly: "Amazon Monthly",
   allegro: "Allegro",
   cdiscount: "Cdiscount",
+  cdiscount_orders: "Cdiscount Orders",
   shopify: "Shopify",
 };
 

@@ -4,6 +4,7 @@ import { allegroModule } from "./allegro";
 import { amazonMonthlyModule } from "./amazon-monthly/module";
 import { amazonVatModule } from "./amazon-vat";
 import { cdiscountModule } from "./cdiscount";
+import { cdiscountOrdersModule } from "./cdiscount-orders";
 import { shopifyModule } from "./shopify";
 import type { ChannelModule, ChannelRuleSeed } from "./types";
 
@@ -21,6 +22,7 @@ export const CHANNEL_MODULES: readonly ChannelModule[] = [
   amazonVatModule,
   allegroModule,
   cdiscountModule,
+  cdiscountOrdersModule,
   shopifyModule,
 ];
 

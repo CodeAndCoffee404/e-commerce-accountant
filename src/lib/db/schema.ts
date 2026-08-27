@@ -205,6 +205,7 @@ export const datasetId = pgEnum("dataset_id", [
   "amazon_monthly",
   "allegro",
   "cdiscount",
+  "cdiscount_orders",
   "shopify",
 ]);
 
