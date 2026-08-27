@@ -37,6 +37,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       flaggedRows={flaggedRows}
       deadlines={deadlines}
       canBuild={user.role !== "viewer"}
+      canEditSkuMappings={user.role === "owner"}
+      canEditCurrencyMappings={user.role === "owner"}
       uploadAction={user.role === "viewer" ? null : <UploadDialog tenantId={user.tenantId} />}
     />
   );

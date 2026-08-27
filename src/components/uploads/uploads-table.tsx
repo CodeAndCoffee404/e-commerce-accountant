@@ -1,6 +1,6 @@
 "use client";
 
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownloadOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -15,6 +15,7 @@ import {
   Typography,
 } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
 import { formatSize } from "@/lib/format";
@@ -23,6 +24,7 @@ import type { FileReconciliation } from "@/lib/uploads/reconciliation";
 
 import { deleteUpload } from "@/lib/uploads/delete";
 
+import { PeriodFilterPicker } from "./period-filter-picker";
 import { PreviewDrawer } from "./preview-drawer";
 import { ReconciliationPanel } from "./reconciliation-panel";
 
@@ -51,11 +53,14 @@ export function UploadsTable({
   options,
   reconciliation,
   canDelete,
+  uploadAction,
 }: {
   rows: UploadRow[];
   options: UploadOptions;
   reconciliation: Record<string, FileReconciliation>;
   canDelete: boolean;
+  /** The Upload files control, provided by the page so roles stay server-side. */
+  uploadAction?: ReactNode;
 }) {
   const router = useRouter();
   const { message } = App.useApp();
@@ -77,11 +82,12 @@ export function UploadsTable({
     placeholder: string,
     values: string[],
     labelFor: (value: string) => string = (value) => value,
+    width = 180,
   ) => (
     <Select
       allowClear
       showSearch
-      style={{ minWidth: 180 }}
+      style={{ minWidth: width, flex: "none" }}
       placeholder={placeholder}
       value={params.get(key) ?? undefined}
       onChange={(value) => update(key, value ?? null)}
@@ -91,18 +97,28 @@ export function UploadsTable({
 
   return (
     <>
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Input.Search
-          allowClear
-          placeholder="Filename"
-          defaultValue={params.get("q") ?? ""}
-          style={{ width: 220 }}
-          onSearch={(value) => update("q", value || null)}
-        />
-        {selector("dataset", "Type", options.datasets)}
-        {selector("period", "Period", options.periods)}
-        {selector("status", "Status", options.statuses, (value) => STATUS_LABELS[value] ?? value)}
-      </Space>
+      {/* One row: filters scroll horizontally in their own lane when they
+          don't fit, but Upload files is the thing you came to press and
+          never scrolls out of view with them. */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", overflowX: "auto", flex: 1, minWidth: 0, padding: "2px 2px" }}>
+          <Input.Search
+            allowClear
+            placeholder="Filename"
+            defaultValue={params.get("q") ?? ""}
+            style={{ width: 220, flex: "none" }}
+            onSearch={(value) => update("q", value || null)}
+          />
+          {selector("dataset", "Type", options.datasets, undefined, 260)}
+          <PeriodFilterPicker
+            value={params.get("period")}
+            options={options.periods}
+            onChange={(value) => update("period", value)}
+          />
+          {selector("status", "Status", options.statuses, (value) => STATUS_LABELS[value] ?? value)}
+        </div>
+        {uploadAction ? <div style={{ flex: "none" }}>{uploadAction}</div> : null}
+      </div>
 
       <PreviewDrawer
         fileId={previewing?.id ?? null}
@@ -139,7 +155,7 @@ export function UploadsTable({
           />
         ),
       }}
-        scroll={{ x: 1180 }}
+        scroll={{ x: 1220 }}
         columns={[
           {
             title: "File",
@@ -188,6 +204,10 @@ export function UploadsTable({
             ),
             dataIndex: "period",
             width: 170,
+            // By the period's own start date, not the label text — '2026.Q3'
+            // and '2026.10 October' would otherwise interleave by alphabet
+            // instead of by when they actually fall.
+            sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
             render: (period: string | null, row) => (
               <div>
                 <Typography.Text>{period ?? "—"}</Typography.Text>
@@ -234,12 +254,21 @@ export function UploadsTable({
           {
             title: "",
             key: "actions",
-            width: 150,
+            width: 190,
             render: (_, row) => (
               <Space size={4}>
                 <Button size="small" onClick={() => setPreviewing(row)}>
                   Preview
                 </Button>
+                <Tooltip title="Download the original file, exactly as uploaded.">
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    href={`/api/uploads/${row.id}`}
+                    download={row.filename}
+                    aria-label="Download"
+                  />
+                </Tooltip>
 
                 {canDelete ? (
                   <Popconfirm

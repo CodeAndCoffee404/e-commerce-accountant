@@ -25,7 +25,7 @@ const { getDb, schema } = await import("@/lib/db");
 const { classify } = await import("@/lib/ingest/classify");
 const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
-const { buildAllReady } = await import("@/lib/dashboard/actions");
+const { buildReport } = await import("@/lib/reports/actions");
 const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { periodContaining } = await import("@/lib/periods/calendar");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
@@ -153,14 +153,24 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     expect(data.month).toBe(PERIOD);
   });
 
-  it("builds what is ready, once, and says so the second time", async () => {
-    const first = await buildAllReady({ periodLabel: PERIOD });
+  it("builds what is ready, and the dashboard's own build-all shortlist empties out afterwards", async () => {
+    // The dashboard's Build button computes its own target list from
+    // `data.reports` (state "ready" or stale) and calls this same action
+    // once per target, in the browser — there is no server-side "build
+    // everything" action anymore. This reproduces exactly that shortlist.
+    const before = await loadDashboard(session.tenantId);
+    const targets = before.reports.filter((report) => report.state === "ready" || report.stale);
 
-    expect(first.ok).toBe(true);
-    expect(first.message).toContain("Off-Amazon Sales");
-    // Not ready, so not attempted — a build-all that tried anyway would fail
-    // its way through every missing report.
-    expect(first.message).not.toContain("Sales report by currency");
+    expect(targets.map((t) => t.id)).toEqual(["off_amazon_sales"]);
+    // Not ready, so not in the shortlist — a build-all that tried it anyway
+    // would fail its way through every missing report.
+    expect(targets.some((t) => t.id === "sales_by_currency")).toBe(false);
+
+    for (const target of targets) {
+      const result = await buildReport({ reportType: target.id, periodLabel: PERIOD });
+
+      expect(result.ok).toBe(true);
+    }
 
     const after = await loadDashboard(session.tenantId);
     const offAmazon = after.reports.find((report) => report.id === "off_amazon_sales")!;
@@ -169,10 +179,10 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     expect(offAmazon.stale).toBe(false);
     expect(after.buildable).toBe(0);
 
-    const second = await buildAllReady({ periodLabel: PERIOD });
+    // A second pass finds nothing left to build — same shortlist, now empty.
+    const second = after.reports.filter((report) => report.state === "ready" || report.stale);
 
-    expect(second.ok).toBe(true);
-    expect(second.message).toContain("already built");
+    expect(second).toHaveLength(0);
   }, 300_000);
 
   it("marks the built report stale after a re-upload of its source", async () => {

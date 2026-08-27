@@ -7,7 +7,6 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 import {
-  App,
   Badge,
   Button,
   Card,
@@ -23,9 +22,10 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, useTransition } from "react";
 
 import type { AuditRow } from "@/lib/audit/record";
-import { buildAllReady } from "@/lib/dashboard/actions";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
+
+import { useBuildQueue } from "@/components/reports/build-queue";
 
 import { MonthPicker } from "./month-picker";
 import { ReportDeadlinesBlock } from "./report-deadlines-block";
@@ -45,6 +45,8 @@ export function DashboardView({
   flaggedRows,
   deadlines,
   canBuild,
+  canEditSkuMappings,
+  canEditCurrencyMappings,
   uploadAction,
 }: {
   data: DashboardData;
@@ -55,13 +57,19 @@ export function DashboardView({
   /** Reports due for their current reporting period, already sorted. */
   deadlines: DeadlineDashboardRow[];
   canBuild: boolean;
+  /** SKU mapping is company settings — only the owner sees the gate's form. */
+  canEditSkuMappings: boolean;
+  /** Allegro's currency_map is company settings too — same rule again. */
+  canEditCurrencyMappings: boolean;
   /** The Upload files control, provided by the page so roles stay server-side. */
   uploadAction: React.ReactNode;
 }) {
   const router = useRouter();
-  const { message } = App.useApp();
   const { token } = theme.useToken();
-  const [building, startTransition] = useTransition();
+  const { startQueue, queueTotal, queueDone, busy, modals } = useBuildQueue({
+    canEditSkuMappings,
+    canEditCurrencyMappings,
+  });
   // Switching months is a server round trip. Until the new page commits, the
   // month the user asked for is the one we show as chosen, with a spinner on
   // it — otherwise the click looks ignored and gets repeated.
@@ -120,28 +128,28 @@ export function DashboardView({
 
   const allClear = attention.length === 0 && data.buildable === 0;
 
+  // Same shortlist the server used to compute for `data.buildable`: never
+  // built, or built before a re-upload made the run stale. `data.reports`
+  // already carries both, one entry per report for the month shown.
   const buildAll = () => {
     if (!data.month) return;
 
     const period = data.month;
+    const targets = data.reports
+      .filter((report) => report.state === "ready" || report.stale)
+      .map((report) => ({
+        reportType: report.id,
+        periodLabel: period,
+        label: `${report.label} · ${period}`,
+      }));
 
-    startTransition(async () => {
-      try {
-        const result = await buildAllReady({ periodLabel: period });
-
-        if (result.ok) message.success(result.message, 8);
-        else message.error(result.message, 12);
-      } catch {
-        message.error("The server could not be reached — nothing was changed. Check the connection and try again.", 8);
-      }
-
-      router.refresh();
-    });
+    startQueue(targets);
   };
 
   const empty = data.months.length === 0;
 
   return (
+    <>
     <Space direction="vertical" size="small" style={{ width: "100%" }}>
       {/* Row 1: greeting and overall progress, with what's due this month
           alongside — the two things worth seeing before anything else. */}
@@ -188,13 +196,15 @@ export function DashboardView({
                       <Button
                         type="primary"
                         icon={<ThunderboltOutlined />}
-                        loading={building}
-                        disabled={data.buildable === 0}
+                        loading={busy}
+                        disabled={data.buildable === 0 || busy}
                         onClick={buildAll}
                       >
-                        {data.buildable === 0
-                          ? "All built"
-                          : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
+                        {busy && queueTotal > 1
+                          ? `Building ${queueDone + 1} of ${queueTotal}…`
+                          : data.buildable === 0
+                            ? "All built"
+                            : `Build ${data.buildable} report${data.buildable === 1 ? "" : "s"}`}
                       </Button>
                     </Tooltip>
                   ) : null}
@@ -326,6 +336,8 @@ export function DashboardView({
         )}
       </Card>
     </Space>
+    {modals}
+    </>
   );
 }
 
