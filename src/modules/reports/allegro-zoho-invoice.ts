@@ -286,7 +286,21 @@ export function generateAllegroZohoInvoice(
   const productAgg = new Map<string, { qty: Decimal; netEur: Decimal }>();
   const vatAgg = new Map<string, Decimal>();
 
+  // A control total, independent of the per-line conversion above: the raw
+  // amounts added together across every currency, PLN and HUF and all,
+  // nonsensical as a sum but useful as a magnitude anchor. Every currency
+  // Allegro settles in here is worth less than one euro, so a correct
+  // conversion can only ever shrink that mixed sum, never grow past it by
+  // much — a rate applied backwards (this report's actual production bug:
+  // dividing by an already-inverted rate instead of multiplying) inflates it
+  // by that rate squared instead, which blows past any reasonable multiple
+  // of the raw total. See the fix for the real incident this guards against.
+  let rawTotal = new Decimal(0);
+  let eurTotal = new Decimal(0);
+
   for (const line of lines) {
+    rawTotal = rawTotal.plus(line.lineTotal);
+
     const rule = allegroCurrencyRule(context.rules, line.currency);
 
     // Defensive only: `unmappedCurrencies` below refuses the build first on
@@ -326,6 +340,8 @@ export function generateAllegroZohoInvoice(
     const netEur = net.times(fxRate);
     const vatEur = vat.times(fxRate);
 
+    eurTotal = eurTotal.plus(netEur).plus(vatEur);
+
     // VAT is owed on every sale regardless of whether its SKU is one the
     // invoice itself lists — an ignored SKU is a bookkeeping choice, not a
     // tax exemption.
@@ -346,6 +362,25 @@ export function generateAllegroZohoInvoice(
     } else {
       productAgg.set(line.rawSku, { qty: line.qty, netEur });
     }
+  }
+
+  // Every current Allegro currency (PLN, CZK, HUF) is worth well under one
+  // euro, so a correct conversion only ever shrinks `rawTotal`, never grows
+  // past it — the factor of 5 leaves generous room for a future currency
+  // genuinely stronger than the euro without weakening the check on the
+  // ones that broke it: a rate applied backwards inflates by roughly its
+  // own square, which cleared this bound by several orders of magnitude in
+  // the actual incident (HUF alone: ~378² ≈ 143,000x).
+  const SANITY_FACTOR = 5;
+
+  if (eurTotal.greaterThan(rawTotal.times(SANITY_FACTOR))) {
+    throw new Error(
+      `Allegro invoice: total came to €${eurTotal.toFixed(2)}, more than ${SANITY_FACTOR}x the ` +
+        `${rawTotal.toFixed(2)} of raw amounts summed across every currency this period (not a ` +
+        "real figure, since currencies don't add like that, but a large gap from it means an " +
+        "exchange rate or the conversion itself is very likely wrong). Refusing rather than " +
+        "printing a total nobody would trust — check Settings -> Exchange rates.",
+    );
   }
 
   const invoiceDate = `${context.period.end} 00:00:00`;

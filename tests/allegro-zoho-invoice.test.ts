@@ -42,6 +42,7 @@ const rules: RulesSnapshot = {
   vatRates: [
     { country: "PL", rate: "23", validFrom: "2020-01-01", validTo: null },
     { country: "CZ", rate: "21", validFrom: "2020-01-01", validTo: null },
+    { country: "HU", rate: "27", validFrom: "2020-01-01", validTo: null },
   ],
   sellerVatNumbers: [],
   skuMappings: [
@@ -156,6 +157,30 @@ describe("generateAllegroZohoInvoice", () => {
     const noFxContext: ReportContext = { ...context, fx: {} };
 
     expect(() => generateAllegroZohoInvoice(rows, noFxContext)).toThrow(/PLN exchange rate/);
+  });
+
+  it("refuses when a bad exchange rate would blow the total far past a sane bound", () => {
+    // This is the actual production incident: a currency far from 1 (HUF's
+    // real rate is roughly 0.0026 EUR per HUF) combined with a rate applied
+    // the wrong way inflated the total by orders of magnitude. The sanity
+    // check here doesn't know or care *why* the rate is wrong — a raw,
+    // un-inverted "378" is exactly the kind of value that class of bug (or a
+    // bad cached rate) would produce — it just refuses a total that could
+    // not possibly be right.
+    const rows: LedgerRow[] = [
+      row({
+        currency: "HUF",
+        countryCode: "HU",
+        gross: new Decimal("12690.00"),
+        raw: { oferta: "111;Widget A;1 szt.", dostawa: "0.00 zł", kwota: "12690.00 Ft" },
+      }),
+    ];
+    const badRateContext: ReportContext = {
+      ...context,
+      fx: { HUF: { rate: "378", rateDate: "2026-01-31", source: "ecb" } },
+    };
+
+    expect(() => generateAllegroZohoInvoice(rows, badRateContext)).toThrow(/more than 5x/);
   });
 
   it("splits an unequal multi-item order proportionally and reconciles to the cent", () => {
