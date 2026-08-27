@@ -17,6 +17,13 @@ Follow the steps in order. Steps 0–2 are research; skipping them is the
 single biggest source of rework (guessing the header row, or the decimal
 separator, wrong costs a full redo).
 
+`docs/EXTENDING.md` ("Добавить новый канал продаж") is the human-facing
+version of this same workflow, written by the project's original author for
+the client — shorter, in Russian, without the file-by-file mechanics below.
+The two should stay in agreement: if you change how this process actually
+works, update both, and check `docs/EXTENDING.md` isn't now saying something
+this skill contradicts.
+
 ## Step 0 — Understand the file, not the task description
 
 Get at least one real (or realistic) sample export before writing any code.
