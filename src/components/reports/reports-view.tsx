@@ -61,11 +61,13 @@ const STATUS_LABELS: Record<string, string> = {
 const SKU_MAPPING_CHANNEL: Partial<Record<ReportTypeId, string>> = {
   amazon_zoho_invoice: "amazon",
   allegro_zoho_invoice: "allegro",
+  shopify_zoho_invoice: "shopify",
 };
 
 const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = {
   amazon_zoho_invoice: "Amazon",
   allegro_zoho_invoice: "Allegro",
+  shopify_zoho_invoice: "Shopify",
 };
 
 /** One buildable card: a report, or one tenant-defined variant of one. */

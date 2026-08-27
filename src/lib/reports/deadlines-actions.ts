@@ -19,6 +19,7 @@ const inputSchema = z.object({
     "off_amazon_sales",
     "amazon_zoho_invoice",
     "allegro_zoho_invoice",
+    "shopify_zoho_invoice",
   ]),
   granularity: z.enum(["month", "quarter", "year"]),
   day: z.number().int().min(1).max(31),
