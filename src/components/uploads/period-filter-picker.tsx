@@ -127,17 +127,6 @@ export function PeriodFilterPicker({
       </div>
 
       <div style={{ margin: "10px 0 8px", borderTop: `1px solid ${token.colorSplit}` }} />
-      <div
-        style={{
-          fontSize: 11,
-          color: token.colorTextTertiary,
-          marginBottom: 6,
-          textTransform: "uppercase",
-          letterSpacing: ".03em",
-        }}
-      >
-        Or a quarter
-      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
         {[1, 2, 3, 4].map((quarter) => {
           const label = `${viewYear}.Q${quarter}`;

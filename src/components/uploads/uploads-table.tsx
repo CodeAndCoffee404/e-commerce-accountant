@@ -87,11 +87,20 @@ export function UploadsTable({
     <Select
       allowClear
       showSearch
-      style={{ minWidth: width, flex: "none" }}
+      style={{ width, flex: "none" }}
       placeholder={placeholder}
       value={params.get(key) ?? undefined}
       onChange={(value) => update(key, value ?? null)}
       options={values.map((value) => ({ value, label: labelFor(value) }))}
+      // The field itself stays a fixed width so it doesn't blow out the
+      // filter row, but the open dropdown is free to size to its longest
+      // option instead of matching that width and clipping it.
+      popupMatchSelectWidth={false}
+      optionRender={(option) => (
+        <Tooltip title={option.data.label} placement="right" mouseEnterDelay={0.4}>
+          <span>{option.data.label}</span>
+        </Tooltip>
+      )}
     />
   );
 
@@ -109,7 +118,7 @@ export function UploadsTable({
             style={{ width: 220, flex: "none" }}
             onSearch={(value) => update("q", value || null)}
           />
-          {selector("dataset", "Type", options.datasets, undefined, 260)}
+          {selector("dataset", "Type", options.datasets, undefined, 340)}
           <PeriodFilterPicker
             value={params.get("period")}
             options={options.periods}

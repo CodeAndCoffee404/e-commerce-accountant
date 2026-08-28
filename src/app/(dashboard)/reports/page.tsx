@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/session";
 import {
   allReportPeriodRows,
   availablePeriods,
+  listReportRuns,
   loadReportSettings,
   missingChannelRules,
 } from "@/lib/reports/queries";
@@ -12,9 +13,10 @@ export const metadata = { title: "Reports — E-commerce Accountant" };
 export default async function ReportsPage() {
   const user = await requireUser();
   const settings = await loadReportSettings(user.tenantId);
-  const [periods, missingRules] = await Promise.all([
+  const [periods, missingRules, runs] = await Promise.all([
     availablePeriods(user.tenantId, settings),
     missingChannelRules(user.tenantId, settings),
+    listReportRuns(user.tenantId),
   ]);
   const periodRows = await allReportPeriodRows(user.tenantId, periods);
 
@@ -25,6 +27,7 @@ export default async function ReportsPage() {
       <ReportsView
         periods={periods}
         periodRows={periodRows}
+        runs={runs}
         missingRules={missingRules}
         canBuild={user.role !== "viewer"}
         canRestore={user.role === "owner"}

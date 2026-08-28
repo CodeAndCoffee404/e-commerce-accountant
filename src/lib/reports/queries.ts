@@ -23,6 +23,132 @@ const VARIANT_CHANNELS = REPORT_DEFINITIONS.flatMap((definition) =>
   definition.variants ? [definition.variants.rulesChannel] : [],
 );
 
+const LABELS = new Map(REPORT_DEFINITIONS.map((definition) => [definition.id, definition.label]));
+
+export type ReportRunCard = {
+  id: string;
+  reportType: ReportTypeId;
+  label: string;
+  periodLabel: string;
+  /** The period's own start date (ISO), for sorting by real chronology rather than the label text. */
+  periodStart: string | null;
+  status: string;
+  requestedAt: Date;
+  finishedAt: Date | null;
+  errorMessage: string | null;
+  stats: {
+    ledgerRows?: number;
+    outputRows?: number;
+    sourceFiles?: number;
+    warnings?: string[];
+    skipped?: { reason: string; count: number }[];
+  } | null;
+  sources: string[];
+  artifacts: {
+    id: string;
+    filename: string;
+    sizeBytes: number | null;
+    driveUrl: string | null;
+    driveStatus: string | null;
+  }[];
+};
+
+/**
+ * key → display name for every stored variant, so a run named by its variant
+ * key shows the definition's name. A deleted definition falls back to the key;
+ * the workbook filename still carries the name it was built under.
+ */
+async function loadVariantNames(tenantId: string): Promise<Map<string, string>> {
+  if (VARIANT_CHANNELS.length === 0) return new Map();
+
+  const rows = await getDb()
+    .select({ key: schema.channelRules.key, value: schema.channelRules.value })
+    .from(schema.channelRules)
+    .where(
+      and(
+        eq(schema.channelRules.tenantId, tenantId),
+        inArray(schema.channelRules.channel, VARIANT_CHANNELS),
+      ),
+    );
+
+  return new Map(rows.map((row) => [row.key, variantDisplayName(row.value, row.key)]));
+}
+
+export async function listReportRuns(tenantId: string, limit = 50): Promise<ReportRunCard[]> {
+  const db = getDb();
+
+  const runs = await db
+    .select()
+    .from(schema.reportRuns)
+    .where(eq(schema.reportRuns.tenantId, tenantId))
+    .orderBy(desc(schema.reportRuns.createdAt))
+    .limit(limit);
+
+  if (runs.length === 0) return [];
+
+  const ids = runs.map((run) => run.id);
+  const variantNames = runs.some((run) => run.variant !== null)
+    ? await loadVariantNames(tenantId)
+    : new Map<string, string>();
+
+  const [sources, artifacts, periodStarts] = await Promise.all([
+    db
+      .select({
+        runId: schema.reportRunSources.reportRunId,
+        filename: schema.sourceFiles.originalFilename,
+      })
+      .from(schema.reportRunSources)
+      .innerJoin(
+        schema.sourceFiles,
+        eq(schema.sourceFiles.id, schema.reportRunSources.sourceFileId),
+      )
+      .where(inArray(schema.reportRunSources.reportRunId, ids)),
+
+    db
+      .select()
+      .from(schema.reportArtifacts)
+      .where(inArray(schema.reportArtifacts.reportRunId, ids)),
+
+    // The runs' own periods may not all still be open (a report setting can
+    // change), so this is looked up rather than assumed present.
+    db
+      .select({ label: schema.periods.label, start: schema.periods.startDate })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId)),
+  ]);
+
+  const startByLabel = new Map(periodStarts.map((period) => [period.label, period.start]));
+
+  return runs.map((run) => ({
+    id: run.id,
+    reportType: run.reportType,
+    label: run.variant
+      ? variantNames.get(run.variant) ?? run.variant
+      : LABELS.get(run.reportType) ?? run.reportType,
+    periodLabel: run.periodLabel,
+    periodStart: startByLabel.get(run.periodLabel) ?? null,
+    status: run.status,
+    requestedAt: run.createdAt,
+    finishedAt: run.finishedAt,
+    errorMessage: run.errorMessage,
+    stats: run.stats as ReportRunCard["stats"],
+    sources: sources
+      .filter((source) => source.runId === run.id)
+      .map((source) => source.filename)
+      .sort(),
+    artifacts: artifacts
+      .filter((artifact) => artifact.reportRunId === run.id)
+      .map((artifact) => ({
+        id: artifact.id,
+        filename: artifact.filename,
+        sizeBytes: artifact.sizeBytes,
+        driveUrl: artifact.driveUrl,
+        driveStatus: artifact.driveStatus,
+      }))
+      .sort((a, b) => a.filename.localeCompare(b.filename)),
+  }));
+}
+
 export type ReportAvailability = {
   /** False hides the card entirely; the report also refuses to build. */
   enabled: boolean;
