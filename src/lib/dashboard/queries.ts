@@ -45,6 +45,11 @@ export type CloseReport = {
    * reaches Drive — or forever, if Drive was never connected.
    */
   artifact: { id: string; filename: string; driveUrl: string | null } | null;
+  /**
+   * The run that produced it, which is what a re-send to Drive is keyed on —
+   * `republish` works per run, not per file.
+   */
+  runId: string | null;
   drive: { synced: number; failed: number; pending: number; total: number };
 };
 
@@ -371,6 +376,7 @@ async function loadReports(
       warnings: stats.warnings?.length ?? 0,
       builtAt: succeeded ? latest!.finishedAt : null,
       stale,
+      runId: succeeded ? latest!.id : null,
       // One workbook per run in practice; the first is the one to offer.
       artifact:
         succeeded && runArtifacts[0]
