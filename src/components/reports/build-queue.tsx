@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Alert, Button, Input, Modal, Select, Space, Switch, Table, Typography } from "antd";
+import { App, Alert, Button, Input, Modal, Select, Space, Switch, Table, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -143,6 +143,25 @@ export function useBuildQueue({
     setQueueDone(0);
   };
 
+  // Leaves this one target unbuilt — nothing is saved, nothing is mapped —
+  // and moves on to whatever is left in the queue, rather than abandoning
+  // the whole batch over the one report that needs a decision first.
+  const skipSku = () => {
+    if (!skuGate) return;
+
+    setSkuGate(null);
+    setQueueDone((done) => done + 1);
+    advanceQueue();
+  };
+
+  const skipCurrency = () => {
+    if (!currencyGate) return;
+
+    setCurrencyGate(null);
+    setQueueDone((done) => done + 1);
+    advanceQueue();
+  };
+
   const saveSkusAndBuild = () => {
     if (!skuGate) return;
 
@@ -239,6 +258,7 @@ export function useBuildQueue({
           canEdit={canEditSkuMappings}
           saving={savingSkus}
           onCancel={cancelQueue}
+          onSkip={skipSku}
           onSave={saveSkusAndBuild}
         />
         <CurrencyGateModal
@@ -248,6 +268,7 @@ export function useBuildQueue({
           canEdit={canEditCurrencyMappings}
           saving={savingCurrencies}
           onCancel={cancelQueue}
+          onSkip={skipCurrency}
           onSave={saveCurrenciesAndBuild}
         />
       </>
@@ -269,6 +290,7 @@ function SkuGateModal({
   canEdit,
   saving,
   onCancel,
+  onSkip,
   onSave,
 }: {
   gate: { target: Target; skus: string[] } | null;
@@ -281,6 +303,8 @@ function SkuGateModal({
   canEdit: boolean;
   saving: boolean;
   onCancel: () => void;
+  /** Leaves this report unbuilt and moves on to the rest of the queue. */
+  onSkip: () => void;
   onSave: () => void;
 }) {
   const skus = gate?.skus ?? [];
@@ -395,8 +419,13 @@ function SkuGateModal({
                 </Typography.Text>
                 <Space>
                   <Button onClick={onCancel} disabled={saving}>
-                    Cancel
+                    Cancel build
                   </Button>
+                  <Tooltip title="Leaves this report unbuilt for now and moves on to the rest of the queue.">
+                    <Button onClick={onSkip} disabled={saving}>
+                      Skip this report
+                    </Button>
+                  </Tooltip>
                   <Button
                     type="primary"
                     loading={saving}
@@ -423,7 +452,10 @@ function SkuGateModal({
                 there today.
               </Typography.Text>
               <Space style={{ width: "100%", justifyContent: "flex-end" }}>
-                <Button onClick={onCancel}>Close</Button>
+                <Button onClick={onCancel}>Cancel build</Button>
+                <Tooltip title="Leaves this report unbuilt for now and moves on to the rest of the queue.">
+                  <Button onClick={onSkip}>Skip this report</Button>
+                </Tooltip>
               </Space>
             </>
           )}
@@ -453,6 +485,7 @@ function CurrencyGateModal({
   canEdit,
   saving,
   onCancel,
+  onSkip,
   onSave,
 }: {
   gate: { target: Target; currencies: string[] } | null;
@@ -465,6 +498,8 @@ function CurrencyGateModal({
   canEdit: boolean;
   saving: boolean;
   onCancel: () => void;
+  /** Leaves this report unbuilt and moves on to the rest of the queue. */
+  onSkip: () => void;
   onSave: () => void;
 }) {
   const currencies = gate?.currencies ?? [];
@@ -575,8 +610,13 @@ function CurrencyGateModal({
                 </Typography.Text>
                 <Space>
                   <Button onClick={onCancel} disabled={saving}>
-                    Cancel
+                    Cancel build
                   </Button>
+                  <Tooltip title="Leaves this report unbuilt for now and moves on to the rest of the queue.">
+                    <Button onClick={onSkip} disabled={saving}>
+                      Skip this report
+                    </Button>
+                  </Tooltip>
                   <Button
                     type="primary"
                     loading={saving}
@@ -603,7 +643,10 @@ function CurrencyGateModal({
                 there today.
               </Typography.Text>
               <Space style={{ width: "100%", justifyContent: "flex-end" }}>
-                <Button onClick={onCancel}>Close</Button>
+                <Button onClick={onCancel}>Cancel build</Button>
+                <Tooltip title="Leaves this report unbuilt for now and moves on to the rest of the queue.">
+                  <Button onClick={onSkip}>Skip this report</Button>
+                </Tooltip>
               </Space>
             </>
           )}

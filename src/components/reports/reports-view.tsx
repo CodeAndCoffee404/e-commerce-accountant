@@ -1,14 +1,37 @@
 "use client";
 
-import { DownloadOutlined, ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Space, Tag, theme, Tooltip, Typography } from "antd";
+import {
+  CloudUploadOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  ReloadOutlined,
+  ThunderboltOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
+import {
+  Alert,
+  App,
+  Button,
+  Empty,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  theme,
+  Tooltip,
+  Typography,
+} from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { restoreDefaults } from "@/lib/reference/actions";
+import { deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
-import type { ReportAvailability, ReportPeriodRow } from "@/lib/reports/queries";
+import type { ReportAvailability, ReportPeriodRow, ReportRunCard } from "@/lib/reports/queries";
+import { summariseWarnings } from "@/lib/reports/warnings";
 
 import { targetKey, useBuildQueue } from "./build-queue";
 
@@ -20,6 +43,24 @@ const STATUS_TAG: Record<ReportPeriodRow["state"], { color: string; text: string
   failed: { color: "red", text: "failed" },
   running: { color: "processing", text: "building" },
   queued: { color: "processing", text: "queued" },
+};
+
+const RUN_STATUS_COLOURS: Record<string, string> = {
+  queued: "default",
+  running: "blue",
+  succeeded: "green",
+  failed: "red",
+};
+
+/**
+ * Display labels only — the stored status (`queued`, `running`, …) never
+ * changes, so filtering and the database stay exactly as they were.
+ */
+const RUN_STATUS_LABELS: Record<string, string> = {
+  queued: "Pending",
+  running: "Building",
+  succeeded: "Ready",
+  failed: "Failed",
 };
 
 /**
@@ -48,6 +89,7 @@ type RailItem = {
 export function ReportsView({
   periods,
   periodRows,
+  runs,
   missingRules,
   canBuild,
   canRestore,
@@ -56,6 +98,7 @@ export function ReportsView({
 }: {
   periods: Record<ReportTypeId, ReportAvailability>;
   periodRows: Record<ReportTypeId, ReportPeriodRow[]>;
+  runs: ReportRunCard[];
   /** Required channel rules this tenant does not have. Usually empty. */
   missingRules: string[];
   canBuild: boolean;
@@ -68,6 +111,7 @@ export function ReportsView({
 }) {
   const router = useRouter();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [pending, startTransition] = useTransition();
 
   const { startQueue, runningKey, queueTotal, queueDone, busy, modals } = useBuildQueue({
@@ -135,6 +179,40 @@ export function ReportsView({
   const [selectedKey, setSelectedKey] = useState<string>(items[0]?.key ?? "");
   const selected = items.find((item) => item.key === selectedKey) ?? items[0] ?? null;
   const rows = selected ? (periodRows[selected.reportType] ?? []) : [];
+
+  // The run history's own search and filters — client-side, since every run
+  // shown here is already in `runs` (the query caps at 50, the same page a
+  // filter would otherwise have to re-fetch).
+  const [runQuery, setRunQuery] = useState("");
+  const [runType, setRunType] = useState<string | undefined>(undefined);
+  const [runPeriod, setRunPeriod] = useState<string | undefined>(undefined);
+  const [runStatus, setRunStatus] = useState<string | undefined>(undefined);
+
+  const runTypeOptions = useMemo(
+    () =>
+      [...new Set(runs.map((run) => run.reportType))]
+        .map((id) => ({ value: id, label: REPORT_DEFINITIONS.find((d) => d.id === id)?.label ?? id }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [runs],
+  );
+  const runPeriodOptions = useMemo(
+    () => [...new Set(runs.map((run) => run.periodLabel))].sort().reverse(),
+    [runs],
+  );
+  const runStatusOptions = useMemo(() => [...new Set(runs.map((run) => run.status))], [runs]);
+
+  const filteredRuns = useMemo(() => {
+    const q = runQuery.trim().toLowerCase();
+
+    return runs.filter((run) => {
+      if (q && !run.label.toLowerCase().includes(q)) return false;
+      if (runType && run.reportType !== runType) return false;
+      if (runPeriod && run.periodLabel !== runPeriod) return false;
+      if (runStatus && run.status !== runStatus) return false;
+
+      return true;
+    });
+  }, [runs, runQuery, runType, runPeriod, runStatus]);
 
   return (
     <>
@@ -246,6 +324,238 @@ export function ReportsView({
           ) : null}
         </div>
       )}
+
+      {runs.length > 0 ? (
+        <div style={{ marginTop: 24 }}>
+          <Typography.Title level={5} style={{ marginBottom: 12 }}>
+            Run history
+          </Typography.Title>
+
+          <Space wrap style={{ marginBottom: 16 }}>
+            <Input.Search
+              allowClear
+              placeholder="Report"
+              style={{ width: 220 }}
+              value={runQuery}
+              onChange={(event) => setRunQuery(event.target.value)}
+            />
+            <Select
+              allowClear
+              showSearch
+              style={{ width: 340 }}
+              placeholder="Type"
+              value={runType}
+              onChange={(value) => setRunType(value ?? undefined)}
+              options={runTypeOptions}
+              popupMatchSelectWidth={false}
+              optionRender={(option) => (
+                <Tooltip title={option.data.label} placement="right" mouseEnterDelay={0.4}>
+                  <span>{option.data.label}</span>
+                </Tooltip>
+              )}
+            />
+            <Select
+              allowClear
+              showSearch
+              style={{ minWidth: 160 }}
+              placeholder="Period"
+              value={runPeriod}
+              onChange={(value) => setRunPeriod(value ?? undefined)}
+              options={runPeriodOptions.map((value) => ({ value, label: value }))}
+            />
+            <Select
+              allowClear
+              style={{ minWidth: 140 }}
+              placeholder="Status"
+              value={runStatus}
+              onChange={(value) => setRunStatus(value ?? undefined)}
+              options={runStatusOptions.map((value) => ({
+                value,
+                label: RUN_STATUS_LABELS[value] ?? value,
+              }))}
+            />
+          </Space>
+
+          <Table<ReportRunCard>
+            dataSource={filteredRuns}
+            rowKey="id"
+            size="small"
+            loading={pending}
+            scroll={{ x: 1100 }}
+            pagination={filteredRuns.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
+            locale={{
+              emptyText: <Empty description="No reports match these filters." />,
+            }}
+            expandable={{
+              expandedRowRender: (run) => <RunDetails run={run} />,
+              rowExpandable: (run) => run.sources.length > 0 || run.errorMessage !== null,
+            }}
+            columns={[
+              { title: "Report", dataIndex: "label", width: 230 },
+              {
+                title: "Period",
+                dataIndex: "periodLabel",
+                width: 150,
+                // By the period's own start date, not the label text — see
+                // the same reasoning on the Uploads screen.
+                sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
+              },
+              {
+                title: "Status",
+                dataIndex: "status",
+                width: 110,
+                render: (status: string, run) => (
+                  <Space size={4}>
+                    <Tag color={RUN_STATUS_COLOURS[status] ?? "default"}>
+                      {RUN_STATUS_LABELS[status] ?? status}
+                    </Tag>
+                    {(run.stats?.warnings?.length ?? 0) > 0 ? (
+                      <WarningOutlined
+                        style={{ color: token.colorWarning }}
+                        aria-label={`${run.stats?.warnings?.length} warnings — expand this row`}
+                      />
+                    ) : null}
+                  </Space>
+                ),
+              },
+              {
+                title: (
+                  <Tooltip title="Rows written into the report, after the channel rules dropped what does not belong in it.">
+                    Rows
+                  </Tooltip>
+                ),
+                dataIndex: "stats",
+                width: 100,
+                render: (stats: ReportRunCard["stats"]) => stats?.outputRows ?? "—",
+              },
+              {
+                title: "Built",
+                dataIndex: "requestedAt",
+                width: 175,
+                render: (value: Date) => new Date(value).toLocaleString("en-GB"),
+              },
+              {
+                title: "Files",
+                key: "artifacts",
+                render: (_, run) => (
+                  <Space wrap size={4}>
+                    {run.artifacts.map((artifact) => (
+                      <Space.Compact key={artifact.id} size="small">
+                        <Button
+                          size="small"
+                          icon={<DownloadOutlined />}
+                          href={`/api/reports/${artifact.id}`}
+                          download={artifact.filename}
+                        >
+                          {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
+                        </Button>
+                        {artifact.driveUrl ? (
+                          <Tooltip title="Open in Google Drive">
+                            <Button
+                              size="small"
+                              href={artifact.driveUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Drive
+                            </Button>
+                          </Tooltip>
+                        ) : null}
+                      </Space.Compact>
+                    ))}
+                    {run.artifacts.length === 0 ? "—" : null}
+                  </Space>
+                ),
+              },
+              {
+                title: (
+                  <Tooltip title="Whether the files reached the client's Google Drive. A failed upload does not affect the report — the files are here and can be sent again.">
+                    Drive
+                  </Tooltip>
+                ),
+                key: "drive",
+                width: 120,
+                render: (_, run) => {
+                  if (run.artifacts.length === 0) return "—";
+
+                  const failed = run.artifacts.some((artifact) => artifact.driveStatus === "failed");
+                  const synced = run.artifacts.every((artifact) => artifact.driveStatus === "synced");
+
+                  if (synced) return <Tag color="green">synced</Tag>;
+
+                  return (
+                    <Button
+                      size="small"
+                      icon={<CloudUploadOutlined />}
+                      danger={failed}
+                      loading={pending}
+                      onClick={() =>
+                        startTransition(async () => {
+                          try {
+                            const result = await republish(run.id);
+
+                            if (result.ok) message.success(result.message, 6);
+                            else message.error(result.message, 8);
+                          } catch {
+                            message.error(
+                              "The server could not be reached — nothing was changed. Check the connection and try again.",
+                              8,
+                            );
+                          }
+
+                          router.refresh();
+                        })
+                      }
+                    >
+                      {failed ? "Retry" : "Send"}
+                    </Button>
+                  );
+                },
+              },
+              {
+                title: "",
+                key: "remove",
+                width: 60,
+                render: (_, run) => (
+                  <Popconfirm
+                    title="Delete this report?"
+                    description="Its files go too. Anything already in Google Drive stays there."
+                    okText="Delete"
+                    okButtonProps={{ danger: true }}
+                    cancelText="Keep"
+                    disabled={!canBuild}
+                    onConfirm={() =>
+                      startTransition(async () => {
+                        try {
+                          const result = await deleteRun(run.id);
+
+                          if (result.ok) message.success(result.message);
+                          else message.error(result.message, 6);
+                        } catch {
+                          message.error(
+                            "The server could not be reached — nothing was changed. Check the connection and try again.",
+                            8,
+                          );
+                        }
+
+                        router.refresh();
+                      })
+                    }
+                  >
+                    <Button
+                      size="small"
+                      danger
+                      disabled={!canBuild}
+                      icon={<DeleteOutlined />}
+                      aria-label="Delete"
+                    />
+                  </Popconfirm>
+                ),
+              },
+            ]}
+          />
+        </div>
+      ) : null}
 
       {modals}
     </>
@@ -598,5 +908,74 @@ function PeriodRow({
         ) : null}
       </Space>
     </div>
+  );
+}
+
+function RunDetails({ run }: { run: ReportRunCard }) {
+  // Collapsed here as well as when stored, because runs built before this
+  // existed still hold their original three hundred lines.
+  const warnings = summariseWarnings(run.stats?.warnings ?? []);
+  const shown = warnings.slice(0, 20);
+
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      {run.errorMessage ? <Alert type="error" showIcon message={run.errorMessage} /> : null}
+
+      {warnings.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={warnings.length === 1 ? "Warning" : `Warnings (${warnings.length})`}
+          description={
+            <>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {shown.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              {warnings.length > shown.length ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  and {warnings.length - shown.length} more
+                </Typography.Text>
+              ) : null}
+            </>
+          }
+        />
+      ) : null}
+
+      <div>
+        <Typography.Text strong>Sources</Typography.Text>
+        <br />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          The uploads this run read. Rebuilding after a new upload uses whatever is current then.
+        </Typography.Text>
+        <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+          {run.sources.map((source) => (
+            <li key={source}>
+              <Typography.Text type="secondary">{source}</Typography.Text>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {(run.stats?.skipped?.length ?? 0) > 0 ? (
+        <div>
+          <Typography.Text strong>Skipped rows</Typography.Text>
+          <br />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Deliberate, not lost: fees, draft orders and anything the channel rules exclude.
+          </Typography.Text>
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {run.stats?.skipped?.map((entry) => (
+              <li key={entry.reason}>
+                <Typography.Text type="secondary">
+                  {entry.count} — {entry.reason}
+                </Typography.Text>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </Space>
   );
 }
