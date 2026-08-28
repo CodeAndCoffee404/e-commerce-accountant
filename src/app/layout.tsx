@@ -18,7 +18,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "E-commerce Accountant",
+  // Brand first — "Halum · Reports" — so the name survives however narrow
+  // the browser tab gets. Pages contribute only their own name.
+  title: {
+    template: "Halum · %s",
+    default: "Halum",
+  },
   description: "VAT and invoicing reports for multi-channel e-commerce sellers",
   icons: {
     // Two flattened PNGs rather than the file-convention icon.png: a

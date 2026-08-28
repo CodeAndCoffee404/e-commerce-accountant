@@ -9,7 +9,7 @@ import {
   type TransactionFilters,
 } from "@/lib/transactions/queries";
 
-export const metadata = { title: "Transactions — E-commerce Accountant" };
+export const metadata = { title: "Transactions" };
 
 export default async function TransactionsPage({ searchParams }: PageProps<"/transactions">) {
   const user = await requireUser();

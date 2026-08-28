@@ -23,8 +23,10 @@ import { useState, useSyncExternalStore, useTransition } from "react";
 
 import type { AuditRow } from "@/lib/audit/record";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
+import { monthLabelName, monthLabelShort } from "@/lib/ingest/period";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
+import { KindIcon } from "@/components/common/kind-icon";
 import { useBuildQueue } from "@/components/reports/build-queue";
 
 import { MonthPicker } from "./month-picker";
@@ -148,6 +150,17 @@ export function DashboardView({
 
   const empty = data.months.length === 0;
 
+  // The Hero's eyebrow and watermark speak about the month on show: its name,
+  // and whether its reports are all built ("filed") or still owed ("open").
+  const periodName = shownMonth ? monthLabelName(shownMonth) : null;
+  const period =
+    !empty && periodName
+      ? {
+          name: periodName,
+          open: !(data.reports.length > 0 && built === data.reports.length),
+        }
+      : null;
+
   return (
     <>
     <Space direction="vertical" size="small" style={{ width: "100%" }}>
@@ -157,6 +170,7 @@ export function DashboardView({
         <div style={{ flex: "3 1 480px", display: "flex", minWidth: 0 }}>
           <Hero
             firstName={firstName}
+            period={period}
             intro={
               empty
                 ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
@@ -237,7 +251,12 @@ export function DashboardView({
         <div id="dashboard-files" style={{ display: "flex" }}>
           <Card
             size="small"
-            title="Uploads"
+            title={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <KindIcon kind="upload" size={22} />
+                Uploads
+              </span>
+            }
             style={{ width: "100%" }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -266,7 +285,12 @@ export function DashboardView({
         <div id="dashboard-reports" style={{ display: "flex" }}>
           <Card
             size="small"
-            title="Reports"
+            title={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <KindIcon kind="report" size={22} />
+                Reports
+              </span>
+            }
             style={{ width: "100%" }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -355,6 +379,7 @@ function timeGreeting(hour: number): string {
 
 function Hero({
   firstName,
+  period,
   intro,
   attention,
   allClear,
@@ -362,6 +387,8 @@ function Hero({
   toolbar,
 }: {
   firstName: string;
+  /** The month on show, for the eyebrow line and the background watermark. */
+  period: { name: string; open: boolean } | null;
   intro: string | null;
   attention: { key: string; text: string; href: string }[];
   allClear: boolean;
@@ -382,6 +409,13 @@ function Hero({
     () => false,
   );
   const greeting = mounted ? timeGreeting(new Date().getHours()) : "Hey";
+  // The eyebrow's date is the visitor's own calendar, so it waits for the
+  // client clock the same way the greeting does.
+  const todayLine = mounted
+    ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
+    : null;
+  const periodLine = period ? `${period.name} period ${period.open ? "open" : "filed"}` : null;
+  const eyebrow = [todayLine, periodLine].filter(Boolean).join(" · ");
 
   return (
     <section
@@ -411,6 +445,29 @@ function Hero({
         }}
       />
 
+      {/* The month on show, oversized and nearly transparent in the corner —
+          an ambient label, not content, hence aria-hidden and no pointer. */}
+      {period ? (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            right: -8,
+            bottom: -26,
+            fontSize: 88,
+            fontWeight: 800,
+            letterSpacing: "-0.03em",
+            lineHeight: 1,
+            color: token.colorPrimary,
+            opacity: 0.06,
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {period.name.slice(0, 3).toUpperCase()}
+        </div>
+      ) : null}
+
       <div
         style={{
           position: "relative",
@@ -422,6 +479,20 @@ function Hero({
         }}
       >
         <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          {eyebrow ? (
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: ".08em",
+                textTransform: "uppercase",
+                color: token.colorPrimary,
+                marginBottom: 4,
+              }}
+            >
+              {eyebrow}
+            </div>
+          ) : null}
           <Title level={3} style={{ margin: 0 }}>
             {greeting}, {firstName} <span aria-hidden>👋</span>
           </Title>
@@ -709,7 +780,7 @@ function MatrixTable({
       size="small"
       pagination={false}
       loading={switching}
-      scroll={{ x: 320 + matrix.months.length * 72 }}
+      scroll={{ x: 320 + matrix.months.length * 92 }}
       columns={[
         {
           title: "",
@@ -735,11 +806,11 @@ function MatrixTable({
               onClick={() => onSelect(month)}
               style={{ fontSize: 12, fontWeight: month === selected ? 600 : 400 }}
             >
-              {month.slice(0, 7)}
+              {monthLabelShort(month)}
             </Button>
           ),
           key: month,
-          width: 72,
+          width: 92,
           align: "center" as const,
           render: (_: unknown, row: Row) => {
             const cell = row.cells[index];

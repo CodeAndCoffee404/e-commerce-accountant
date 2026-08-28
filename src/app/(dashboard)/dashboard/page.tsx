@@ -7,7 +7,7 @@ import { loadDashboard } from "@/lib/dashboard/queries";
 import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
 import { countNeedsAttention } from "@/lib/transactions/queries";
 
-export const metadata = { title: "Dashboard — E-commerce Accountant" };
+export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
+import { KindIcon } from "@/components/common/kind-icon";
 import { restoreDefaults } from "@/lib/reference/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportPeriodRow } from "@/lib/reports/queries";
@@ -428,7 +429,11 @@ function ReportDetail({
           }}
         >
           <div style={{ minWidth: 0 }}>
-            <Typography.Title level={5} style={{ margin: 0 }}>
+            <Typography.Title
+              level={5}
+              style={{ margin: 0, display: "flex", alignItems: "center", gap: 10 }}
+            >
+              <KindIcon kind="report" />
               {item.title}
             </Typography.Title>
             <Typography.Paragraph type="secondary" style={{ marginTop: 6, marginBottom: 0, maxWidth: 560 }}>

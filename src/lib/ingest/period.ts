@@ -167,6 +167,25 @@ export function monthLabelWords(label: string): string {
   return match ? `${match[1]} ${label.slice(0, 4)}` : label;
 }
 
+/**
+ * `2026.07 July` -> `Jul 2026` — the same reading as `monthLabelWords`,
+ * shortened for places that show many months side by side (the History
+ * matrix fits up to thirteen columns, and full month names would force a
+ * horizontal scroll far sooner).
+ */
+export function monthLabelShort(label: string): string {
+  const match = /^\d{4}\.\d{2} (.+)$/.exec(label);
+
+  return match ? `${match[1].slice(0, 3)} ${label.slice(0, 4)}` : label;
+}
+
+/** `2026.07 July` -> `July`, for prose that already names the year elsewhere. */
+export function monthLabelName(label: string): string | null {
+  const match = /^\d{4}\.\d{2} (.+)$/.exec(label);
+
+  return match ? match[1] : null;
+}
+
 /** Deduplicates while preserving nothing but year+month — the rest is noise. */
 export function collectPeriods(values: Iterable<YearMonth>): YearMonth[] {
   const unique = new Map<string, YearMonth>();
