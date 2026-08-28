@@ -1,6 +1,6 @@
 "use client";
 
-import { LeftOutlined, RightOutlined } from "@ant-design/icons";
+import { DownOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Button, Popover, Space, Spin, theme } from "antd";
 import { useMemo, useState } from "react";
 
@@ -21,12 +21,17 @@ function parseLabel(label: string): { year: number; month: number } | null {
  * dropdown for the year sitting next to a dropdown for the month. The
  * arrows either side step one open month at a time through `months` itself,
  * so a step never lands on one that isn't actually open.
+ *
+ * `bare` drops the trigger's border and sets the month at heading size: on
+ * the dashboard the month *is* the page's title, and a bordered control
+ * sitting where a heading belongs reads as a form field.
  */
 export function MonthPicker({
   months,
   value,
   loading,
   disabled,
+  bare = false,
   onChange,
 }: {
   /** Open months, as period labels, newest first — the order `months` already arrives in. */
@@ -34,6 +39,8 @@ export function MonthPicker({
   value: string | null;
   loading: boolean;
   disabled: boolean;
+  /** Heading-sized and borderless, for the dashboard's period bar. */
+  bare?: boolean;
   onChange: (month: string) => void;
 }) {
   const { token } = theme.useToken();
@@ -111,10 +118,29 @@ export function MonthPicker({
           />
         }
       >
-        <Button disabled={disabled} style={{ minWidth: 150 }}>
-          {loading ? <Spin size="small" style={{ marginInlineEnd: 8 }} /> : null}
-          {shown ? `${monthLabel} ${shown.year}` : "No open period"}
-        </Button>
+        {bare ? (
+          <Button
+            type="text"
+            disabled={disabled}
+            style={{
+              height: 36,
+              paddingInline: 8,
+              fontSize: 24,
+              fontWeight: 600,
+              lineHeight: 1.2,
+              color: token.colorText,
+            }}
+          >
+            {loading ? <Spin size="small" style={{ marginInlineEnd: 8 }} /> : null}
+            {shown ? `${monthLabel} ${shown.year}` : "No open period"}
+            <DownOutlined style={{ fontSize: 12, color: token.colorTextTertiary }} />
+          </Button>
+        ) : (
+          <Button disabled={disabled} style={{ minWidth: 150 }}>
+            {loading ? <Spin size="small" style={{ marginInlineEnd: 8 }} /> : null}
+            {shown ? `${monthLabel} ${shown.year}` : "No open period"}
+          </Button>
+        )}
       </Popover>
       <Button
         type="text"

@@ -4,6 +4,7 @@ import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
+import { loadConnection } from "@/lib/google/connection";
 import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
 import { countNeedsAttention } from "@/lib/transactions/queries";
 
@@ -17,25 +18,27 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   // rather than joining the initial fan-out.
   const data = await loadDashboard(user.tenantId, one(params.month));
 
-  const [activity, flaggedRows, deadlines] = await Promise.all([
-    listAudit(user.tenantId, 8),
+  const [activity, flaggedRows, deadlines, connection] = await Promise.all([
+    // Ten so the Activity card has something to expand into: it shows six
+    // and offers the rest in place.
+    listAudit(user.tenantId, 10),
     countNeedsAttention(user.tenantId),
     data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
+    // Whether a built report that is not in Drive is *waiting* to go or was
+    // never going anywhere. Without this the screen cannot tell the two
+    // apart, and says "not in Drive yet" to a tenant that never connected it.
+    loadConnection(user.tenantId),
   ]);
 
-  // The greeting addresses a person, not an account. The email prefix is the
-  // fallback for a Google account with no display name.
-  const firstName = user.name?.split(" ")[0] ?? user.email.split("@")[0];
-
-  // No PageHeader here on purpose: the app bar already says Dashboard, and a
-  // page that opens with a greeting does not introduce itself twice.
+  // No PageHeader here on purpose: the app bar already says Dashboard, and
+  // the page opens by naming the month it is about.
   return (
     <DashboardView
       data={data}
       activity={activity}
-      firstName={firstName}
       flaggedRows={flaggedRows}
       deadlines={deadlines}
+      driveConnected={Boolean(connection?.folderId)}
       canBuild={user.role !== "viewer"}
       canEditSkuMappings={user.role === "owner"}
       canEditCurrencyMappings={user.role === "owner"}
