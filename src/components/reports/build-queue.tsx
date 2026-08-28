@@ -58,6 +58,10 @@ export function useBuildQueue({
   const [runningKey, setRunningKey] = useState<string | null>(null);
   const [queueTotal, setQueueTotal] = useState(0);
   const [queueDone, setQueueDone] = useState(0);
+  // Which control asked for the work now in the queue. A row's Build and a
+  // "build everything" shortcut share this queue, and each should show its
+  // own progress rather than the other's.
+  const [queueSource, setQueueSource] = useState<string | null>(null);
 
   const [skuGate, setSkuGate] = useState<{ target: Target; skus: string[] } | null>(null);
   const [skuDrafts, setSkuDrafts] = useState<
@@ -80,6 +84,7 @@ export function useBuildQueue({
       setRunningKey(null);
       setQueueTotal(0);
       setQueueDone(0);
+      setQueueSource(null);
       router.refresh();
       return;
     }
@@ -125,13 +130,30 @@ export function useBuildQueue({
     advanceQueue();
   }
 
-  const startQueue = (targets: Target[]) => {
-    if (runningKey !== null || targets.length === 0) return;
+  const startQueue = (targets: Target[], source?: string) => {
+    if (targets.length === 0) return;
 
-    queueRef.current = targets.slice(1);
-    setQueueTotal(targets.length);
-    setQueueDone(0);
-    void runTarget(targets[0]);
+    if (runningKey === null) {
+      queueRef.current = targets.slice(1);
+      setQueueTotal(targets.length);
+      setQueueDone(0);
+      setQueueSource(source ?? null);
+      void runTarget(targets[0]);
+      return;
+    }
+
+    // A queue is already moving. Refusing the click would make the second
+    // button look broken — it lights up, nothing happens — so what is asked
+    // for joins the queue instead, minus anything already in it. Builds still
+    // run one at a time; only the way they are asked for has changed.
+    const queued = new Set([runningKey, ...queueRef.current.map(targetKey)]);
+    const extra = targets.filter((target) => !queued.has(targetKey(target)));
+
+    if (extra.length === 0) return;
+
+    queueRef.current.push(...extra);
+    setQueueTotal((total) => total + extra.length);
+    setQueueSource(source ?? null);
   };
 
   const cancelQueue = () => {
@@ -141,6 +163,7 @@ export function useBuildQueue({
     setRunningKey(null);
     setQueueTotal(0);
     setQueueDone(0);
+    setQueueSource(null);
   };
 
   // Leaves this one target unbuilt — nothing is saved, nothing is mapped —
@@ -248,6 +271,7 @@ export function useBuildQueue({
     runningKey,
     queueTotal,
     queueDone,
+    queueSource,
     busy: runningKey !== null,
     modals: (
       <>

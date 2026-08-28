@@ -159,7 +159,10 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
 
   return (
     <>
-      <Button type="primary" icon={<UploadOutlined />} onClick={() => setOpen(true)}>
+      {/* Default, not primary: on the dashboard this sits beside Build, and
+          two filled buttons side by side compete for the one action that
+          actually finishes the month. */}
+      <Button icon={<UploadOutlined />} onClick={() => setOpen(true)}>
         Upload files
       </Button>
 

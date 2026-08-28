@@ -90,10 +90,8 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { token } = theme.useToken();
-  const { startQueue, runningKey, queueTotal, queueDone, busy, modals } = useBuildQueue({
-    canEditSkuMappings,
-    canEditCurrencyMappings,
-  });
+  const { startQueue, runningKey, queueTotal, queueDone, queueSource, busy, modals } =
+    useBuildQueue({ canEditSkuMappings, canEditCurrencyMappings });
 
   // Switching months is a server round trip. Until the new page commits, the
   // month the user asked for is the one we show as chosen, with a spinner on
@@ -164,9 +162,14 @@ export function DashboardView({
 
   // The same shortlist the server counted for `data.buildable`: never built,
   // or built before a re-upload made the run stale.
+  //
+  // Tagged "all" so this button shows its own progress and not a row's: both
+  // feed the same one-at-a-time queue, and the shortcut greying out for one
+  // report's build made the whole screen look busy.
   const buildAll = () =>
     startQueue(
       targetsFor(data.reports.filter((report) => report.state === "ready" || report.stale)),
+      "all",
     );
 
   // What actually needs a person, each carrying the thing that fixes it.
@@ -222,6 +225,7 @@ export function DashboardView({
         <PeriodBar
           months={data.months}
           shownMonth={shownMonth}
+          currentMonth={data.currentMonth}
           switching={switching}
           onSelectMonth={goToMonth}
           files={{ done: requiredIn, total: requiredItems.length }}
@@ -239,11 +243,11 @@ export function DashboardView({
                 <Button
                   type="primary"
                   icon={<ThunderboltOutlined />}
-                  loading={busy}
-                  disabled={data.buildable === 0 || busy}
+                  loading={queueSource === "all"}
+                  disabled={data.buildable === 0}
                   onClick={buildAll}
                 >
-                  {busy && queueTotal > 1
+                  {queueSource === "all" && queueTotal > 1
                     ? `Building ${queueDone + 1} of ${queueTotal}…`
                     : data.buildable === 0
                       ? "All built"
@@ -317,7 +321,7 @@ export function DashboardView({
         ) : null}
 
         {empty ? null : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch" }}>
             <Panel
               className="ea-rise ea-rise-1"
               id="dashboard-reports"
@@ -366,7 +370,6 @@ export function DashboardView({
                       building={key !== null && runningKey === key}
                       buildDisabled={busy && runningKey !== key}
                       onBuild={() => startQueue(targetsFor([report]))}
-                      onShowFiles={revealFiles}
                     />
                   );
                 })}
@@ -382,7 +385,10 @@ export function DashboardView({
                 minWidth: 0,
               }}
             >
-              <Panel className="ea-rise ea-rise-2" style={dim}>
+              {/* No `dim` here: a month's deadlines are dates on a calendar,
+                  not a reading of its files, so dimming them made the one part
+                  of the screen that barely changes look like it was reloading. */}
+              <Panel className="ea-rise ea-rise-2">
                 <PanelHeader
                   title="Deadlines"
                   extra={
@@ -409,7 +415,9 @@ export function DashboardView({
               </Panel>
 
               {activity.length > 0 ? (
-                <Panel className="ea-rise ea-rise-3">
+                // Takes up the slack in the column, so its lower edge meets
+                // Month close's rather than stopping short of it.
+                <Panel className="ea-rise ea-rise-3" style={{ flex: "1 1 auto" }}>
                   <PanelHeader
                     title="Activity"
                     extra={
@@ -541,6 +549,7 @@ function LinkButton({ children, onClick }: { children: React.ReactNode; onClick:
 function PeriodBar({
   months,
   shownMonth,
+  currentMonth,
   switching,
   onSelectMonth,
   files,
@@ -550,6 +559,8 @@ function PeriodBar({
 }: {
   months: string[];
   shownMonth: string | null;
+  /** Today's month, when it is open — what the shortcut goes back to. */
+  currentMonth: string | null;
   switching: boolean;
   onSelectMonth: (month: string) => void;
   files: { done: number; total: number };
@@ -582,16 +593,35 @@ function PeriodBar({
             marginBottom: 6,
           }}
         >
-          Monthly close
+          {/* Which month this is, not what the screen is for: on the month we
+              are actually in the answer is "this one", and on any other it is
+              a look back at a month already worked. */}
+          {shownMonth !== null && shownMonth === currentMonth ? "Current month" : "Month overview"}
         </div>
-        <MonthPicker
-          bare
-          months={months}
-          value={shownMonth}
-          loading={switching}
-          disabled={switching}
-          onChange={onSelectMonth}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          <MonthPicker
+            bare
+            months={months}
+            value={shownMonth}
+            loading={switching}
+            disabled={switching}
+            onChange={onSelectMonth}
+          />
+          {/* Stepping back a few months is two clicks; getting back is one.
+              Absent while it is already showing, so the bar never offers a
+              move that would do nothing. */}
+          {currentMonth && shownMonth !== currentMonth && months.includes(currentMonth) ? (
+            <Button
+              size="small"
+              type="text"
+              disabled={switching}
+              onClick={() => onSelectMonth(currentMonth)}
+              style={{ fontSize: 12.5, color: token.colorPrimary }}
+            >
+              Current month
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div
@@ -884,7 +914,6 @@ function ReportRow({
   building,
   buildDisabled,
   onBuild,
-  onShowFiles,
 }: {
   report: CloseReport;
   canBuild: boolean;
@@ -895,7 +924,6 @@ function ReportRow({
   /** Something else is building: this row's button waits its turn. */
   buildDisabled: boolean;
   onBuild: () => void;
-  onShowFiles: () => void;
 }) {
   const { token } = theme.useToken();
   const router = useRouter();
@@ -969,16 +997,7 @@ function ReportRow({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 2, flex: "none" }}>
-        {waiting ? (
-          <Button
-            type="link"
-            size="small"
-            style={{ paddingInline: 4, fontSize: 12.5 }}
-            onClick={onShowFiles}
-          >
-            {"See what's missing"}
-          </Button>
-        ) : (
+        {waiting ? null : (
           <>
             {report.artifact?.driveUrl ? (
               <Tooltip title="Open in Google Drive — the whole table, with Sheets' own sorting and search.">
@@ -1028,7 +1047,6 @@ function ReportRow({
               >
                 <Button
                   size="small"
-                  icon={<ThunderboltOutlined />}
                   loading={building}
                   disabled={buildDisabled}
                   onClick={onBuild}

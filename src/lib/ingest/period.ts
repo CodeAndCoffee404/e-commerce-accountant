@@ -372,3 +372,43 @@ export function parseAmazonMonthlyDate(value: string): YearMonth | null {
 
   return month ? toYearMonth(year, month.number, day) : null;
 }
+
+/**
+ * Shortest period first when two cover the same ground: a month before the
+ * quarter that contains it, a quarter before its year.
+ */
+const GRANULARITY_RANK: Record<PeriodGranularity, number> = { month: 0, quarter: 1, year: 2 };
+
+/** The `YYYY-MM` a period runs to, derived from where it starts and how long it is. */
+function endMonth(period: { start: string; granularity: PeriodGranularity }): string {
+  const year = period.start.slice(0, 4);
+
+  if (period.granularity === "year") return `${year}-12`;
+
+  if (period.granularity === "quarter") {
+    // Quarters start in month 1, 4, 7 or 10 and run three months.
+    const last = Number(period.start.slice(5, 7)) + 2;
+
+    return `${year}-${String(last).padStart(2, "0")}`;
+  }
+
+  return period.start.slice(0, 7);
+}
+
+/**
+ * By the month a period *ends* in, then shortest first — which is what makes a
+ * list read January, February, March, then Q1.
+ *
+ * Sorting by the start date instead ties Q1 with January, since they begin on
+ * the same day, and drops the quarter in between the months it contains.
+ */
+export function comparePeriods(
+  a: { start: string; granularity: PeriodGranularity },
+  b: { start: string; granularity: PeriodGranularity },
+): number {
+  const byEnd = endMonth(a).localeCompare(endMonth(b));
+
+  if (byEnd !== 0) return byEnd;
+
+  return GRANULARITY_RANK[a.granularity] - GRANULARITY_RANK[b.granularity];
+}

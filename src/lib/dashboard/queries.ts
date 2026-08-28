@@ -77,6 +77,13 @@ export type DashboardData = {
   reports: CloseReport[];
   /** Reports the one-button build would run right now. */
   buildable: number;
+  /**
+   * The calendar month we are actually in, when it is one of the open
+   * periods. The screen opens on the month being closed, which is usually the
+   * one before — so this is what tells the bar whether it is showing today's
+   * month, and what the shortcut back to it jumps to.
+   */
+  currentMonth: string | null;
   matrix: {
     months: string[];
     groups: MatrixGroup[];
@@ -305,6 +312,13 @@ export async function loadDashboard(
     items,
     reports,
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
+    currentMonth:
+      openPeriods.find(
+        (period) =>
+          period.granularity === "month" &&
+          period.startDate <= today &&
+          today <= period.endDate,
+      )?.label ?? null,
     matrix,
   };
 }
