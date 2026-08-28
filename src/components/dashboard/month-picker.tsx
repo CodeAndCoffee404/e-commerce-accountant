@@ -86,7 +86,12 @@ export function MonthPicker({
   // move that does not need a bordered box of its own on either side of the
   // month it steps. The one spinner for "the switch is in flight" stays on
   // the month button between them.
+  //
+  // 28 square, not the 32 an icon-only Button defaults to: these sit either
+  // side of a 36px heading and a full-size control there reads as chrome
+  // competing with the month rather than a nudge next to it.
   const arrow = { fontSize: 12, color: token.colorTextTertiary };
+  const step_ = { width: 28, height: 28 };
 
   return (
     <Space size={2} align="center">
@@ -95,6 +100,7 @@ export function MonthPicker({
         icon={<LeftOutlined style={arrow} />}
         disabled={disabled || atOldest}
         aria-label="Previous open month"
+        style={step_}
         onClick={() => step(1)}
       />
       <Popover
@@ -147,6 +153,7 @@ export function MonthPicker({
         icon={<RightOutlined style={arrow} />}
         disabled={disabled || atNewest}
         aria-label="Next open month"
+        style={step_}
         onClick={() => step(-1)}
       />
     </Space>

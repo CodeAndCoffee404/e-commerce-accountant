@@ -9,6 +9,16 @@ body {
 body {
   margin: 0;
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  /* Geist is drawn for the lighter of the two rasterisers. Left on the
+     default, WebKit and Blink render it with subpixel antialiasing, which
+     thickens every stem and is why the built screen reads heavier than the
+     design it was built from. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Money and counts line up by digit — the accounting look. Every screen
+     here is counts and dates, not only the tables, so this belongs on the
+     page rather than on two selectors. */
+  font-variant-numeric: tabular-nums;
 }
 
 * {
@@ -28,12 +38,6 @@ html {
 #dashboard-files,
 #dashboard-reports {
   scroll-margin-top: 72px;
-}
-
-/* Money and counts line up by digit — the accounting look. */
-.ant-table,
-.ant-statistic-content {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Sections settle into place, top to bottom — motion as arrival, not
