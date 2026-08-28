@@ -57,9 +57,9 @@ export type CloseReport = {
 export type MatrixCell = "yes" | "no" | "optional";
 
 /**
- * One labelled band of the history matrix. Uploads and reports are the two
- * halves of a month and read as one grid, but they are counted differently —
- * a dot is a file that arrived in one and a run that succeeded in the other —
+ * One labelled band of the history matrix. Source files and reports are the
+ * two halves of a month and read as one grid, but they are counted differently
+ * — a dot is a file that arrived in one and a run that succeeded in the other —
  * so each keeps its own header rather than being flattened into one list.
  */
 export type MatrixGroup = {
@@ -283,7 +283,7 @@ export async function loadDashboard(
     groups: [
       {
         key: "uploads",
-        label: "Uploads",
+        label: "Source files",
         kind: "upload" as const,
         rows: items.map((item) => ({
           key: item.key,

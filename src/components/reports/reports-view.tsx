@@ -200,8 +200,8 @@ export function ReportsView({
         .sort((a, b) => a.label.localeCompare(b.label)),
     [runs],
   );
-  // The calendar filter wants the same shape the Uploads screen feeds it:
-  // a label, the date it starts on, and which kind of period it is. A run
+  // The calendar filter wants the same shape the Source files screen feeds
+  // it: a label, the date it starts on, and which kind of period it is. A run
   // only carries the label and the start, so the kind is read off the
   // label's own shape.
   const runPeriodOptions = useMemo(() => {
@@ -413,7 +413,7 @@ export function ReportsView({
                 dataIndex: "periodLabel",
                 width: 150,
                 // By the period's own start date, not the label text — see
-                // the same reasoning on the Uploads screen.
+                // the same reasoning on the Source files screen.
                 sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
                 render: (label: string) => periodLabelWords(label),
               },
@@ -983,7 +983,8 @@ function RunDetails({ run }: { run: ReportRunCard }) {
         <Typography.Text strong>Sources</Typography.Text>
         <br />
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          The uploads this run read. Rebuilding after a new upload uses whatever is current then.
+          The source files this run read. Rebuilding after a new one uses whatever is current
+          then.
         </Typography.Text>
         <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
           {run.sources.map((source) => (

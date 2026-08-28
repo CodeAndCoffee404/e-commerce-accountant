@@ -398,7 +398,7 @@ export function ReportSettingsTab({
           >
             {!current.enabled ? (
               <Typography.Text type="secondary">
-                Hidden from Reports and refuses to build. Nothing else changes — uploads for its
+                Hidden from Reports and refuses to build. Nothing else changes — source files for its
                 channels are still accepted and kept.
               </Typography.Text>
             ) : (

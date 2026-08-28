@@ -9,7 +9,7 @@ import type { Member } from "@/lib/members/queries";
 
 const ROLES = [
   { value: "owner", label: "Owner", hint: "Everything, including who else gets in." },
-  { value: "accountant", label: "Accountant", hint: "Uploads, reports and reference data." },
+  { value: "accountant", label: "Accountant", hint: "Source files, reports and reference data." },
   { value: "viewer", label: "Viewer", hint: "Can look, cannot change anything." },
 ];
 

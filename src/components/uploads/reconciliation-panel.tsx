@@ -32,7 +32,7 @@ export function ReconciliationPanel({
         <Alert
           type="warning"
           showIcon
-          message="A later upload replaced this file"
+          message="A later file replaced this one"
           description="Its rows are kept but no longer count towards reports. Reports built before the replacement still trace back to them."
         />
       ) : null}
@@ -75,7 +75,7 @@ export function ReconciliationPanel({
       {data.needsAttention > 0 ? (
         <Typography.Text type="secondary">
           A flagged row is one whose number or date could not be read. Correct it in the source
-          file and upload that file again — the corrected upload replaces this one.
+          file and upload that file again — the corrected one replaces this.
         </Typography.Text>
       ) : null}
 

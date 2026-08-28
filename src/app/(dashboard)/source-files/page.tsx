@@ -5,9 +5,9 @@ import { requireUser } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
-export const metadata = { title: "Uploads" };
+export const metadata = { title: "Source files" };
 
-export default async function UploadsPage({ searchParams }: PageProps<"/uploads">) {
+export default async function SourceFilesPage({ searchParams }: PageProps<"/source-files">) {
   const user = await requireUser();
   const params = await searchParams;
 
@@ -30,7 +30,7 @@ export default async function UploadsPage({ searchParams }: PageProps<"/uploads"
     ),
   );
 
-  // No PageHeader here on purpose: the app bar already says Uploads, and a
+  // No PageHeader here on purpose: the app bar already says Source files, and a
   // page that opens with a greeting does not introduce itself twice.
   return (
     <UploadsTable
