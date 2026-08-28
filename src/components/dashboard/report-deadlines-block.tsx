@@ -117,33 +117,48 @@ function formatDeadline(iso: string): string {
 }
 
 /**
- * The state as a short coloured word rather than a filled tag: three tags
- * stacked down the block's right edge read as three buttons, and the colour
- * alone already carries the urgency.
+ * The state written the way a report's state is written on the dashboard: a
+ * coloured dot and a short word, so a deadline and the report it belongs to
+ * read as the same kind of thing rather than as a tag next to a status.
  */
 function StatusLabel({ state }: { state: DeadlineDashboardRow["state"] }) {
   const { token } = theme.useToken();
-  const style = { fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap" as const, flex: "none" };
 
-  switch (state.kind) {
-    case "completed":
-      return <Text style={{ ...style, color: token.colorSuccess }}>Done</Text>;
-    case "overdue":
-      return <Text style={{ ...style, color: token.colorError }}>{state.days}d late</Text>;
-    case "due_today":
-      return <Text style={{ ...style, color: token.colorWarning }}>Due today</Text>;
-    case "due_tomorrow":
-      return <Text style={{ ...style, color: token.colorWarning }}>Due tomorrow</Text>;
-    case "due_in":
-      return (
-        <Text
-          style={{
-            ...style,
-            color: state.days <= 3 ? token.colorWarning : token.colorTextSecondary,
-          }}
-        >
-          In {state.days}d
-        </Text>
-      );
-  }
+  const shown =
+    state.kind === "completed"
+      ? { color: token.colorSuccess, text: "Done" }
+      : state.kind === "overdue"
+        ? { color: token.colorError, text: `${state.days}d late` }
+        : state.kind === "due_today"
+          ? { color: token.colorWarning, text: "Due today" }
+          : state.kind === "due_tomorrow"
+            ? { color: token.colorWarning, text: "Tomorrow" }
+            : {
+                color: state.days <= 3 ? token.colorWarning : token.colorTextQuaternary,
+                text: `In ${state.days}d`,
+              };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        flex: "none",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: 999,
+          background: shown.color,
+          flex: "none",
+        }}
+      />
+      <Text style={{ fontSize: 11.5, fontWeight: 500, color: shown.color }}>{shown.text}</Text>
+    </span>
+  );
 }

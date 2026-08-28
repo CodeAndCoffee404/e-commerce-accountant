@@ -1,7 +1,7 @@
 "use client";
 
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
-import { Button, Popover, Space, Spin } from "antd";
+import { Button, Popover, Space, Spin, theme } from "antd";
 import { useMemo, useState } from "react";
 
 import { MONTHS } from "@/lib/ingest/months";
@@ -36,6 +36,7 @@ export function MonthPicker({
   disabled: boolean;
   onChange: (month: string) => void;
 }) {
+  const { token } = theme.useToken();
   const [open, setOpen] = useState(false);
 
   const byYear = useMemo(() => {
@@ -74,13 +75,17 @@ export function MonthPicker({
 
   const monthLabel = shown ? (MONTHS[shown.month - 1]?.fullName ?? String(shown.month)) : "—";
 
+  // Chevrons rather than buttons: stepping a month is a small, reversible
+  // move that does not need a bordered box of its own on either side of the
+  // month it steps. The one spinner for "the switch is in flight" stays on
+  // the month button between them.
+  const arrow = { fontSize: 12, color: token.colorTextTertiary };
+
   return (
-    <Space.Compact>
-      {/* The one spinner for "the switch is in flight" lives on the month
-          button below — the arrows just disable, so a step doesn't spin
-          three controls in the same compact group at once. */}
+    <Space size={2} align="center">
       <Button
-        icon={<LeftOutlined />}
+        type="text"
+        icon={<LeftOutlined style={arrow} />}
         disabled={disabled || atOldest}
         aria-label="Previous open month"
         onClick={() => step(1)}
@@ -112,12 +117,13 @@ export function MonthPicker({
         </Button>
       </Popover>
       <Button
-        icon={<RightOutlined />}
+        type="text"
+        icon={<RightOutlined style={arrow} />}
         disabled={disabled || atNewest}
         aria-label="Next open month"
         onClick={() => step(-1)}
       />
-    </Space.Compact>
+    </Space>
   );
 }
 
