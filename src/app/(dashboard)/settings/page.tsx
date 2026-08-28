@@ -9,7 +9,7 @@ import { loadReferenceData } from "@/lib/reference/queries";
 import { loadDeadlineRules } from "@/lib/reports/deadlines-queries";
 import { loadReportSettings } from "@/lib/reports/queries";
 
-export const metadata = { title: "Settings — E-commerce Accountant" };
+export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const user = await requireUser();

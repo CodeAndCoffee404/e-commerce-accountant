@@ -8,7 +8,7 @@ import {
   missingChannelRules,
 } from "@/lib/reports/queries";
 
-export const metadata = { title: "Reports — E-commerce Accountant" };
+export const metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
   const user = await requireUser();

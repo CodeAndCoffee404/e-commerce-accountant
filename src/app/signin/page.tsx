@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { DEFAULT_ROUTE } from "@/lib/navigation";
 
-export const metadata = { title: "Sign in — E-commerce Accountant" };
+export const metadata = { title: "Sign in" };
 
 export default async function SignInPage({ searchParams }: PageProps<"/signin">) {
   const session = await auth();

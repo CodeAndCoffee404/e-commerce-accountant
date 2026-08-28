@@ -18,6 +18,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
+import { KindIcon } from "@/components/common/kind-icon";
 import { formatSize } from "@/lib/format";
 import type { UploadOptions, UploadRow } from "@/lib/uploads/queries";
 import type { FileReconciliation } from "@/lib/uploads/reconciliation";
@@ -174,16 +175,19 @@ export function UploadsTable({
             // by letter.
             width: 280,
             render: (filename: string, row) => (
-              <div>
-                <Typography.Text ellipsis={{ tooltip: filename }} style={{ maxWidth: 250 }}>
-                  {filename}
-                </Typography.Text>
-                <br />
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {formatSize(row.sizeBytes)}
-                  {row.format ? ` · ${row.format.toUpperCase()}` : ""}
-                  {row.rowCount ? ` · ${row.rowCount} rows` : ""}
-                </Typography.Text>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <KindIcon kind="upload" />
+                <div style={{ minWidth: 0 }}>
+                  <Typography.Text ellipsis={{ tooltip: filename }} style={{ maxWidth: 214 }}>
+                    {filename}
+                  </Typography.Text>
+                  <br />
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {formatSize(row.sizeBytes)}
+                    {row.format ? ` · ${row.format.toUpperCase()}` : ""}
+                    {row.rowCount ? ` · ${row.rowCount} rows` : ""}
+                  </Typography.Text>
+                </div>
               </div>
             ),
           },

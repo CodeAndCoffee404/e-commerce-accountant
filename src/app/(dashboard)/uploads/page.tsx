@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
-export const metadata = { title: "Uploads — E-commerce Accountant" };
+export const metadata = { title: "Uploads" };
 
 export default async function UploadsPage({ searchParams }: PageProps<"/uploads">) {
   const user = await requireUser();

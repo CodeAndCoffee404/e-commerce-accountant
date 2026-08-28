@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { DEFAULT_ROUTE } from "@/lib/navigation";
 
-export const metadata = { title: "Not found — E-commerce Accountant" };
+export const metadata = { title: "Not found" };
 
 /**
  * Plain HTML on purpose: this file also answers requests that never reached a
