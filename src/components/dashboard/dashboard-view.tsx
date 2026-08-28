@@ -212,11 +212,6 @@ export function DashboardView({
     });
   }
 
-  // The rows arrive with the overdue first, so the first one that is not done
-  // is the one that matters — but it is only the *next* deadline while it is
-  // still ahead of us. One that is late is named as late.
-  const nextDeadline = deadlines.find((row) => row.state.kind !== "completed") ?? null;
-  const deadlineLead = nextDeadline?.state.kind === "overdue" ? "Overdue" : "Next deadline";
   const dim = staleStyle(switching);
 
   return (
@@ -307,15 +302,6 @@ export function DashboardView({
                   <AlertChip key={alert.key} alert={alert} />
                 ))}
               </div>
-
-              {nextDeadline ? (
-                <Text
-                  type="secondary"
-                  style={{ marginInlineStart: "auto", fontSize: 12, flex: "none" }}
-                >
-                  {deadlineLead}: {nextDeadline.label}, {deadlineWhen(nextDeadline)}
-                </Text>
-              ) : null}
             </div>
           </Panel>
         ) : null}
@@ -784,6 +770,11 @@ function FilesSection({
 }) {
   const { token } = theme.useToken();
   const required = items.filter((item) => item.requirement === "required");
+  // A missing file already has a chip on the summary line. Expanding reveals
+  // what is *not* up there — otherwise the same file appears twice, once in
+  // each row, and reads as two files of the same name.
+  const onShow = new Set(missing.map((item) => item.key));
+  const rest = items.filter((item) => !onShow.has(item.key));
 
   return (
     <>
@@ -845,7 +836,7 @@ function FilesSection({
 
       {expanded ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
-          {items.map((item) => (
+          {rest.map((item) => (
             <FileChip key={item.key} item={item} />
           ))}
         </div>
@@ -1429,22 +1420,6 @@ function formatDeadline(iso: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
-}
-
-/** The strip's own shorthand for when the next deadline falls. */
-function deadlineWhen(row: DeadlineDashboardRow): string {
-  switch (row.state.kind) {
-    case "completed":
-      return "done";
-    case "overdue":
-      return `${row.state.days}d late`;
-    case "due_today":
-      return "due today";
-    case "due_tomorrow":
-      return "due tomorrow";
-    case "due_in":
-      return `in ${row.state.days}d`;
-  }
 }
 
 /**
