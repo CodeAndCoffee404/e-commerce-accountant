@@ -2,14 +2,14 @@
 
 import {
   CheckCircleFilled,
-  CloudOutlined,
+  CloudUploadOutlined,
   DownloadOutlined,
   ExportOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
 import {
-  Badge,
+  App,
   Button,
   Card,
   Progress,
@@ -30,6 +30,7 @@ import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
 import { KindIcon } from "@/components/common/kind-icon";
 import { targetKey, useBuildQueue } from "@/components/reports/build-queue";
+import { republish } from "@/lib/reports/actions";
 
 import { MonthPicker } from "./month-picker";
 import { ReportDeadlinesBlock } from "./report-deadlines-block";
@@ -167,8 +168,8 @@ export function DashboardView({
 
   const empty = data.months.length === 0;
 
-  // The Hero's eyebrow and watermark speak about the month on show: its name,
-  // and whether its reports are all built ("filed") or still owed ("open").
+  // The Hero's eyebrow speaks about the month on show: its name, and whether
+  // its reports are all built ("filed") or still owed ("open").
   const periodName = shownMonth ? monthLabelName(shownMonth) : null;
   const period =
     !empty && periodName
@@ -275,25 +276,19 @@ export function DashboardView({
                 Uploads
               </span>
             }
-            style={{
-              width: "100%",
-              // The kind's own colour, as a stripe: the same amber that marks
-              // an upload everywhere else in the app, so the two cards of this
-              // row are told apart before either title is read.
-              borderLeft: `3px solid ${token.colorWarning}`,
-              ...staleStyle(switching),
-            }}
+            style={{ width: "100%", ...staleStyle(switching) }}
+            // The kind's own colour fills the title strip: the same amber that
+            // marks an upload everywhere else, so the two cards of this row are
+            // told apart before either title is read. The body stays plain, so
+            // the colour reads as a label rather than as noise.
+            styles={{ header: { background: token.colorWarningBg, borderRadius: 0 } }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {requiredIn}/{requiredItems.length} required
+                {requiredIn}/{requiredItems.length}
               </Text>
             }
           >
-            <Space size={[6, 6]} wrap>
-              {data.items.map((item) => (
-                <FileChip key={item.key} item={item} />
-              ))}
-            </Space>
+            <UploadsBody items={data.items} />
           </Card>
         </div>
 
@@ -306,11 +301,8 @@ export function DashboardView({
                 Reports
               </span>
             }
-            style={{
-              width: "100%",
-              borderLeft: `3px solid ${token.colorPrimary}`,
-              ...staleStyle(switching),
-            }}
+            style={{ width: "100%", ...staleStyle(switching) }}
+            styles={{ header: { background: token.colorPrimaryBg, borderRadius: 0 } }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {built}/{data.reports.length} built
@@ -424,7 +416,7 @@ function Hero({
   toolbar,
 }: {
   firstName: string;
-  /** The month on show, for the eyebrow line and the background watermark. */
+  /** The month on show, for the eyebrow line. */
   period: { name: string; open: boolean } | null;
   /**
    * A month switch is in flight: `attention`, `allClear` and `rings` are
@@ -492,29 +484,6 @@ function Hero({
           opacity: 0.9,
         }}
       />
-
-      {/* The month on show, oversized and nearly transparent in the corner —
-          an ambient label, not content, hence aria-hidden and no pointer. */}
-      {period ? (
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            right: -8,
-            bottom: -26,
-            fontSize: 88,
-            fontWeight: 800,
-            letterSpacing: "-0.03em",
-            lineHeight: 1,
-            color: token.colorPrimary,
-            opacity: 0.06,
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          {period.name.slice(0, 3).toUpperCase()}
-        </div>
-      ) : null}
 
       <div
         style={{
@@ -679,7 +648,7 @@ function Dot({ color, size = 7 }: { color: string; size?: number }) {
   );
 }
 
-function FileChip({ item }: { item: ChecklistItem }) {
+function FileChip({ item, wanted = false }: { item: ChecklistItem; wanted?: boolean }) {
   const { token } = theme.useToken();
 
   // Fourteen solid orange tags shout; fourteen quiet chips with a status dot
@@ -707,9 +676,16 @@ function FileChip({ item }: { item: ChecklistItem }) {
           gap: 7,
           padding: "3px 10px",
           borderRadius: 999,
-          background: token.colorFillTertiary,
+          // A chip standing alone because the file is missing carries the
+          // warning colour itself; in the full list, where every chip is one
+          // of fourteen, the dot is enough and a wall of amber would not be.
+          background: wanted ? token.colorWarningBg : token.colorFillTertiary,
           fontSize: 12,
-          color: item.uploaded ? token.colorText : token.colorTextSecondary,
+          color: wanted
+            ? token.colorWarningText
+            : item.uploaded
+              ? token.colorText
+              : token.colorTextSecondary,
           opacity: !item.uploaded && item.requirement === "optional" ? 0.65 : 1,
           cursor: "default",
         }}
@@ -721,6 +697,81 @@ function FileChip({ item }: { item: ChecklistItem }) {
   );
 }
 
+/**
+ * The month's files, said as briefly as the month allows: one line while
+ * everything required is in, and the chips only for what is not. Fourteen
+ * green chips saying "all fine" cost more attention than the sentence they
+ * add up to — and they buried the one amber chip that mattered.
+ */
+function UploadsBody({ items }: { items: ChecklistItem[] }) {
+  const { token } = theme.useToken();
+  const [expanded, setExpanded] = useState(false);
+
+  const missing = items.filter((item) => item.requirement === "required" && !item.uploaded);
+  const required = items.filter((item) => item.requirement === "required");
+
+  if (items.length === 0) {
+    return (
+      <Text type="secondary" style={{ fontSize: 12.5 }}>
+        No files are expected for this month.
+      </Text>
+    );
+  }
+
+  if (missing.length > 0) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
+          <WarningOutlined style={{ color: token.colorWarning, fontSize: 14 }} />
+          <Text style={{ fontSize: 13 }}>
+            {missing.length} of {required.length} required file
+            {required.length === 1 ? "" : "s"} still missing.
+          </Text>
+        </div>
+        <Space size={[6, 6]} wrap>
+          {missing.map((item) => (
+            <FileChip key={item.key} item={item} wanted />
+          ))}
+        </Space>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+        <CheckCircleFilled style={{ color: token.colorSuccess, fontSize: 15 }} />
+        <Text style={{ fontSize: 13 }}>Every required file is in.</Text>
+        <Button
+          type="link"
+          size="small"
+          style={{ paddingInline: 2 }}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? "Hide" : `Show all ${items.length}`}
+        </Button>
+      </div>
+
+      {expanded ? (
+        <Space size={[6, 6]} wrap style={{ marginTop: 12 }}>
+          {items.map((item) => (
+            <FileChip key={item.key} item={item} />
+          ))}
+        </Space>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One report, one status. The state is a coloured dot with the word in its
+ * tooltip rather than a badge, because three badges on one line — built,
+ * warnings, failed — read as three statuses that contradict each other.
+ *
+ * There is always a second icon beside Download: the workbook either opens
+ * in Drive or can be sent there, so "not in Drive" is a thing to act on
+ * rather than a label to read.
+ */
 function ReportLine({
   report,
   canBuild,
@@ -737,74 +788,104 @@ function ReportLine({
   onBuild: () => void;
 }) {
   const { token } = theme.useToken();
+  const router = useRouter();
+  const { message } = App.useApp();
+  const [sending, startSending] = useTransition();
+
   // Same shortlist the "Build all" button uses: never built, or built before
   // a re-upload made the run stale.
   const buildable = report.state === "ready" || report.stale;
+  const status = report.stale
+    ? { color: token.colorWarning, text: "Built, but a file it used has been replaced since." }
+    : report.state === "built"
+      ? { color: token.colorSuccess, text: "Built." }
+      : report.state === "ready"
+        ? { color: token.colorPrimary, text: "Everything is in — ready to build." }
+        : { color: token.colorTextQuaternary, text: "Waiting for files." };
+
+  const sendToDrive = () => {
+    const runId = report.runId;
+
+    if (!runId) return;
+
+    startSending(async () => {
+      try {
+        const result = await republish(runId);
+
+        if (result.ok) message.success(result.message, 5);
+        else message.error(result.message, 8);
+      } catch {
+        message.error("The server could not be reached — nothing was changed.", 8);
+      }
+
+      router.refresh();
+    });
+  };
 
   return (
     <div
       style={{
         display: "flex",
-        flexWrap: "wrap",
-        alignItems: "baseline",
-        gap: 8,
+        alignItems: "center",
+        gap: 10,
         justifyContent: "space-between",
+        minHeight: 30,
       }}
     >
-      <Space size={10} wrap>
-        <Text strong style={{ fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+        <Tooltip title={status.text}>
+          <span style={{ display: "inline-flex" }}>
+            <Dot color={status.color} />
+          </span>
+        </Tooltip>
+
+        <Text style={{ fontSize: 13 }} ellipsis={{ tooltip: report.label }}>
           {report.label}
         </Text>
 
-        {report.state === "built" && !report.stale ? (
-          <Badge status="success" text={<Text style={{ fontSize: 12 }}>built</Text>} />
-        ) : report.state === "built" && report.stale ? (
-          <Tooltip title="A file it was built from has been replaced by a re-upload since. The build button above will rebuild it.">
-            <Badge status="warning" text={<Text style={{ fontSize: 12 }}>built, now stale</Text>} />
+        {report.lastFailure ? (
+          <Tooltip title={`The last attempt failed: ${report.lastFailure}`}>
+            <WarningOutlined style={{ color: token.colorError, fontSize: 12.5, flex: "none" }} />
           </Tooltip>
-        ) : report.state === "ready" ? (
-          // The processing dot pulses — "this one is actionable right now".
-          <Badge status="processing" text={<Text style={{ fontSize: 12 }}>ready</Text>} />
-        ) : (
-          <Badge status="default" text={<Text type="secondary" style={{ fontSize: 12 }}>waiting</Text>} />
-        )}
+        ) : null}
 
         {report.warnings > 0 ? (
-          <Tooltip title="Open Reports and expand the run to read them.">
-            <Text style={{ fontSize: 12, color: token.colorWarning }}>
-              <WarningOutlined /> {report.warnings}
-            </Text>
+          <Tooltip
+            title={`${report.warnings} warning${report.warnings === 1 ? "" : "s"} — open Reports and expand the run to read them.`}
+          >
+            <WarningOutlined style={{ color: token.colorWarning, fontSize: 12.5, flex: "none" }} />
           </Tooltip>
         ) : null}
-
-        {report.lastFailure ? (
-          <Tooltip title={report.lastFailure}>
-            <Badge status="error" text={<Text style={{ fontSize: 12 }}>failed</Text>} />
-          </Tooltip>
-        ) : null}
-
-        {report.state === "built" ? <DriveBadge drive={report.drive} /> : null}
-      </Space>
+      </div>
 
       {report.state === "waiting" ? (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          missing: {report.missing.slice(0, 4).join(", ")}
-          {report.missing.length > 4 ? ` and ${report.missing.length - 4} more` : ""}
+        <Text type="secondary" style={{ fontSize: 12, flex: "none" }} ellipsis>
+          missing: {report.missing.slice(0, 3).join(", ")}
+          {report.missing.length > 3 ? ` +${report.missing.length - 3}` : ""}
         </Text>
       ) : (
-        // Looking at the workbook and building it are icons and a word
-        // respectively: opening a file is reversible and needs no label,
-        // starting a build writes a run and says so.
-        <Space size={4}>
+        <Space size={2} style={{ flex: "none" }}>
           {report.artifact?.driveUrl ? (
-            <Tooltip title="Open the workbook in Google Drive — the whole table, with Sheets' own sorting and search.">
+            <Tooltip title="Open in Google Drive — the whole table, with Sheets' own sorting and search.">
               <Button
                 size="small"
+                type="text"
                 icon={<ExportOutlined />}
                 href={report.artifact.driveUrl}
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open ${report.label} in Drive`}
+              />
+            </Tooltip>
+          ) : report.artifact && report.runId ? (
+            <Tooltip title="Not in Drive yet — send it now.">
+              <Button
+                size="small"
+                type="text"
+                icon={<CloudUploadOutlined />}
+                loading={sending}
+                onClick={sendToDrive}
+                aria-label={`Send ${report.label} to Drive`}
               />
             </Tooltip>
           ) : null}
@@ -813,6 +894,7 @@ function ReportLine({
             <Tooltip title="Download the workbook this run produced.">
               <Button
                 size="small"
+                type="text"
                 icon={<DownloadOutlined />}
                 href={`/api/reports/${report.artifact.id}`}
                 download={report.artifact.filename}
@@ -831,11 +913,11 @@ function ReportLine({
             >
               <Button
                 size="small"
-                type="primary"
                 icon={<ThunderboltOutlined />}
                 loading={building}
                 disabled={buildDisabled}
                 onClick={onBuild}
+                style={{ marginInlineStart: 4 }}
               >
                 {report.stale ? "Rebuild" : "Build"}
               </Button>
@@ -847,37 +929,6 @@ function ReportLine({
   );
 }
 
-function DriveBadge({ drive }: { drive: CloseReport["drive"] }) {
-  const { token } = theme.useToken();
-
-  if (drive.total === 0) return null;
-
-  if (drive.failed > 0) {
-    return (
-      <Tooltip title="Delivery to Drive failed for some files. Retry lives on Reports; the workbooks are safe here either way.">
-        <Text style={{ fontSize: 12, color: token.colorError }}>
-          <CloudOutlined /> {drive.failed} failed
-        </Text>
-      </Tooltip>
-    );
-  }
-
-  if (drive.pending > 0) {
-    return (
-      <Tooltip title="Not in Drive yet. If Drive is not connected, connect it under Settings — the workbooks are downloadable here regardless.">
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          <CloudOutlined /> not in Drive
-        </Text>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <Text style={{ fontSize: 12, color: token.colorSuccess }}>
-      <CloudOutlined /> in Drive
-    </Text>
-  );
-}
 
 function MatrixTable({
   matrix,

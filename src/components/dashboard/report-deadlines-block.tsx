@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Space, Tag, Typography } from "antd";
+import { Card, Space, theme, Typography } from "antd";
 
 import { KindIcon } from "@/components/common/kind-icon";
 import { describePeriodLabel, monthLabelWords } from "@/lib/ingest/period";
@@ -80,14 +80,19 @@ export function ReportDeadlinesBlock({
                       <Text strong style={{ fontSize: 12.5 }} ellipsis>
                         {row.label}
                       </Text>
-                      <StatusTag state={row.state} />
+                      <StatusLabel state={row.state} />
                     </div>
                     <Text type="secondary" style={{ fontSize: 11.5 }}>
-                      {/* Named plainly — "(month)" / "(quarter)" / "(year)" — so a
-                          monthly and a quarterly deadline never look alike at a
-                          glance, the way `2026.07 July` and `2026.Q3` can. */}
-                      {describePeriodLabel(row.periodLabel, row.granularity)} · due{" "}
-                      {formatDeadline(row.deadline)}
+                      {/* The period is named only when it is not the month the
+                          card's own header already names. At a month end a
+                          quarterly deadline stands beside the monthly ones and
+                          is otherwise indistinguishable from them; the rest of
+                          the time repeating "July 2026" under a card headed
+                          "July 2026" says nothing. */}
+                      {row.periodLabel === month
+                        ? null
+                        : `${describePeriodLabel(row.periodLabel, row.granularity)} · `}
+                      due {formatDeadline(row.deadline)}
                     </Text>
                   </div>
                 </div>
@@ -111,39 +116,34 @@ function formatDeadline(iso: string): string {
   });
 }
 
-function StatusTag({ state }: { state: DeadlineDashboardRow["state"] }) {
-  const style = { margin: 0, fontSize: 11, lineHeight: "16px", padding: "0 6px" };
+/**
+ * The state as a short coloured word rather than a filled tag: three tags
+ * stacked down the block's right edge read as three buttons, and the colour
+ * alone already carries the urgency.
+ */
+function StatusLabel({ state }: { state: DeadlineDashboardRow["state"] }) {
+  const { token } = theme.useToken();
+  const style = { fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap" as const, flex: "none" };
 
   switch (state.kind) {
     case "completed":
-      return (
-        <Tag color="success" style={style}>
-          Completed
-        </Tag>
-      );
+      return <Text style={{ ...style, color: token.colorSuccess }}>Done</Text>;
     case "overdue":
-      return (
-        <Tag color="error" style={style}>
-          Overdue {state.days}d
-        </Tag>
-      );
+      return <Text style={{ ...style, color: token.colorError }}>{state.days}d late</Text>;
     case "due_today":
-      return (
-        <Tag color="warning" style={style}>
-          Due today
-        </Tag>
-      );
+      return <Text style={{ ...style, color: token.colorWarning }}>Due today</Text>;
     case "due_tomorrow":
-      return (
-        <Tag color="warning" style={style}>
-          Due tomorrow
-        </Tag>
-      );
+      return <Text style={{ ...style, color: token.colorWarning }}>Due tomorrow</Text>;
     case "due_in":
       return (
-        <Tag color={state.days <= 3 ? "warning" : "default"} style={style}>
-          Due in {state.days}d
-        </Tag>
+        <Text
+          style={{
+            ...style,
+            color: state.days <= 3 ? token.colorWarning : token.colorTextSecondary,
+          }}
+        >
+          In {state.days}d
+        </Text>
       );
   }
 }
