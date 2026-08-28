@@ -42,6 +42,18 @@ const ACTIVITY_PREVIEW = 6;
 const ICON_BUTTON = { width: 26, height: 26 } as const;
 
 /**
+ * The row's own build control. `size="small"` alone would give it antd's
+ * small metrics — 14px text in a 4px-radius box — next to icon buttons drawn
+ * at 26 with a 6px radius, which is what makes one row look like two kits.
+ */
+const ROW_BUTTON = {
+  height: 26,
+  paddingInline: 10,
+  fontSize: 13,
+  marginInlineStart: 4,
+} as const;
+
+/**
  * The month as the accountant works it: which month, how far along, what needs
  * a person, and the two halves of the close — the files that came in and the
  * reports that go out — in one card rather than two.
@@ -1020,7 +1032,7 @@ function ReportRow({
                   loading={building}
                   disabled={buildDisabled}
                   onClick={onBuild}
-                  style={{ height: 26, marginInlineStart: 4 }}
+                  style={{ ...ROW_BUTTON, borderRadius: token.borderRadius }}
                 >
                   {report.stale ? "Rebuild" : "Build"}
                 </Button>
