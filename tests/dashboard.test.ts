@@ -146,7 +146,17 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     }).label;
 
     expect(data.matrix.months).toEqual([current, PERIOD]);
-    expect(data.matrix.rows.find((row) => row.key === "allegro")!.cells).toEqual(["no", "yes"]);
+
+    const uploads = data.matrix.groups.find((group) => group.kind === "upload")!;
+
+    expect(uploads.rows.find((row) => row.key === "allegro")!.cells).toEqual(["no", "yes"]);
+
+    // The reports band spans the same months and says which of them were
+    // actually built — nothing has been built here yet, so it is all dashes.
+    const built = data.matrix.groups.find((group) => group.kind === "report")!;
+
+    expect(built.rows.length).toBeGreaterThan(0);
+    expect(built.rows.every((row) => row.cells.every((cell) => cell === "no"))).toBe(true);
 
     // ...and the screen still opens on the month being worked on, not on the
     // empty one that has only just begun.

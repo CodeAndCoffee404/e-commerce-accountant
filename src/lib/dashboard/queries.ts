@@ -53,6 +53,22 @@ export type CloseReport = {
   drive: { synced: number; failed: number; pending: number; total: number };
 };
 
+/** A cell of the history matrix: the thing arrived, did not, or was never required. */
+export type MatrixCell = "yes" | "no" | "optional";
+
+/**
+ * One labelled band of the history matrix. Uploads and reports are the two
+ * halves of a month and read as one grid, but they are counted differently —
+ * a dot is a file that arrived in one and a run that succeeded in the other —
+ * so each keeps its own header rather than being flattened into one list.
+ */
+export type MatrixGroup = {
+  key: string;
+  label: string;
+  kind: "upload" | "report";
+  rows: { key: string; label: string; cells: MatrixCell[] }[];
+};
+
 export type DashboardData = {
   /** Months with any parsed upload, newest first. */
   months: string[];
@@ -61,9 +77,15 @@ export type DashboardData = {
   reports: CloseReport[];
   /** Reports the one-button build would run right now. */
   buildable: number;
+  /**
+   * The shown month has been filed. The screen says "overview" rather than
+   * "close" for one of these: closing is not what is left to do.
+   */
+  closed: boolean;
+  closedAt: Date | null;
   matrix: {
     months: string[];
-    rows: { key: string; label: string; cells: ("yes" | "no" | "optional")[] }[];
+    groups: MatrixGroup[];
   };
 };
 
@@ -105,6 +127,8 @@ export async function loadDashboard(
         granularity: schema.periods.granularity,
         startDate: schema.periods.startDate,
         endDate: schema.periods.endDate,
+        status: schema.periods.status,
+        closedAt: schema.periods.closedAt,
       })
       .from(schema.periods)
       .where(eq(schema.periods.tenantId, tenantId))
@@ -217,7 +241,9 @@ export async function loadDashboard(
     ? await loadReports(tenantId, month, monthStart, availability, settings)
     : [];
 
-  // History: the same checklist across every month on record.
+  // History: the checklist across every month on record, and beside it the
+  // same months' reports. Two bands rather than one list — a dot means a file
+  // arrived in the first and a run succeeded in the second.
   const matrixMonths = months.slice(0, 13);
   const uploadedByMonth = new Set(
     monthly
@@ -230,18 +256,58 @@ export async function loadDashboard(
       ),
   );
 
+  // One query for the whole band: every run that succeeded in any month on
+  // show, which is all the report half of the grid needs to know.
+  const matrixRuns = matrixMonths.length
+    ? await db
+        .select({
+          reportType: schema.reportRuns.reportType,
+          periodLabel: schema.reportRuns.periodLabel,
+        })
+        .from(schema.reportRuns)
+        .where(
+          and(
+            eq(schema.reportRuns.tenantId, tenantId),
+            eq(schema.reportRuns.status, "succeeded"),
+            inArray(schema.reportRuns.periodLabel, matrixMonths),
+          ),
+        )
+    : [];
+
+  const builtByMonth = new Set(matrixRuns.map((run) => `${run.periodLabel}|${run.reportType}`));
+
+  const reportRows = REPORT_DEFINITIONS.filter(
+    (definition) => settings[definition.id].enabled && !definition.informational,
+  ).map((definition) => ({
+    key: definition.id,
+    label: definition.label,
+    cells: matrixMonths.map((candidate): MatrixCell =>
+      builtByMonth.has(`${candidate}|${definition.id}`) ? "yes" : "no",
+    ),
+  }));
+
   const matrix = {
     months: matrixMonths,
-    rows: items.map((item) => ({
-      key: item.key,
-      label: item.label,
-      cells: matrixMonths.map((candidate): "yes" | "no" | "optional" => {
-        if (uploadedByMonth.has(`${candidate}|${item.key}`)) return "yes";
+    groups: [
+      {
+        key: "uploads",
+        label: "Uploads",
+        kind: "upload" as const,
+        rows: items.map((item) => ({
+          key: item.key,
+          label: item.label,
+          cells: matrixMonths.map((candidate): MatrixCell => {
+            if (uploadedByMonth.has(`${candidate}|${item.key}`)) return "yes";
 
-        return item.requirement === "optional" ? "optional" : "no";
-      }),
-    })),
+            return item.requirement === "optional" ? "optional" : "no";
+          }),
+        })),
+      },
+      { key: "reports", label: "Reports", kind: "report" as const, rows: reportRows },
+    ],
   };
+
+  const shownPeriod = month ? openPeriods.find((period) => period.label === month) : undefined;
 
   return {
     months,
@@ -249,6 +315,8 @@ export async function loadDashboard(
     items,
     reports,
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
+    closed: shownPeriod?.status === "closed",
+    closedAt: shownPeriod?.closedAt ?? null,
     matrix,
   };
 }

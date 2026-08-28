@@ -18,22 +18,19 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const data = await loadDashboard(user.tenantId, one(params.month));
 
   const [activity, flaggedRows, deadlines] = await Promise.all([
-    listAudit(user.tenantId, 8),
+    // Ten so the Activity card has something to expand into: it shows six
+    // and offers the rest in place.
+    listAudit(user.tenantId, 10),
     countNeedsAttention(user.tenantId),
     data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
   ]);
 
-  // The greeting addresses a person, not an account. The email prefix is the
-  // fallback for a Google account with no display name.
-  const firstName = user.name?.split(" ")[0] ?? user.email.split("@")[0];
-
-  // No PageHeader here on purpose: the app bar already says Dashboard, and a
-  // page that opens with a greeting does not introduce itself twice.
+  // No PageHeader here on purpose: the app bar already says Dashboard, and
+  // the page opens by naming the month it is about.
   return (
     <DashboardView
       data={data}
       activity={activity}
-      firstName={firstName}
       flaggedRows={flaggedRows}
       deadlines={deadlines}
       canBuild={user.role !== "viewer"}
