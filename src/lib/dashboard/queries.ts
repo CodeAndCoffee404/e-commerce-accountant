@@ -78,10 +78,12 @@ export type DashboardData = {
   /** Reports the one-button build would run right now. */
   buildable: number;
   /**
-   * The calendar month we are actually in, when it is one of the open
-   * periods. The screen opens on the month being closed, which is usually the
-   * one before — so this is what tells the bar whether it is showing today's
-   * month, and what the shortcut back to it jumps to.
+   * The month this company is currently working — the last one that has
+   * finished, not the calendar month we are standing in. Through August the
+   * accountant is closing July; August is not closable until it ends.
+   *
+   * The same month the screen opens on, so the shortcut in the period bar
+   * always lands where the dashboard started.
    */
   currentMonth: string | null;
   matrix: {
@@ -159,10 +161,12 @@ export async function loadDashboard(
     .filter((period) => period.granularity === "month")
     .map((period) => period.label);
 
+  // The month being closed, which is what "current" means here — see
+  // `defaultMonth`. Held in a name because the period bar reports it too, and
+  // the shortcut back to it must land on the month the screen opened on.
+  const reportingMonth = defaultMonth(openPeriods, today) ?? months[0] ?? null;
   const month =
-    requestedMonth && months.includes(requestedMonth)
-      ? requestedMonth
-      : defaultMonth(openPeriods, today) ?? months[0] ?? null;
+    requestedMonth && months.includes(requestedMonth) ? requestedMonth : reportingMonth;
 
   // The chosen month's own start date, compared against a report's
   // `startsFrom` — never the label, which sorts and compares nothing like a
@@ -312,13 +316,7 @@ export async function loadDashboard(
     items,
     reports,
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
-    currentMonth:
-      openPeriods.find(
-        (period) =>
-          period.granularity === "month" &&
-          period.startDate <= today &&
-          today <= period.endDate,
-      )?.label ?? null,
+    currentMonth: reportingMonth,
     matrix,
   };
 }

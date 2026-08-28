@@ -385,10 +385,7 @@ export function DashboardView({
                 minWidth: 0,
               }}
             >
-              {/* No `dim` here: a month's deadlines are dates on a calendar,
-                  not a reading of its files, so dimming them made the one part
-                  of the screen that barely changes look like it was reloading. */}
-              <Panel className="ea-rise ea-rise-2">
+              <Panel className="ea-rise ea-rise-2" style={dim}>
                 <PanelHeader
                   title="Deadlines"
                   extra={
@@ -559,7 +556,7 @@ function PeriodBar({
 }: {
   months: string[];
   shownMonth: string | null;
-  /** Today's month, when it is open — what the shortcut goes back to. */
+  /** The month being closed — what the shortcut goes back to. */
   currentMonth: string | null;
   switching: boolean;
   onSelectMonth: (month: string) => void;
@@ -593,9 +590,9 @@ function PeriodBar({
             marginBottom: 6,
           }}
         >
-          {/* Which month this is, not what the screen is for: on the month we
-              are actually in the answer is "this one", and on any other it is
-              a look back at a month already worked. */}
+          {/* Which month this is, not what the screen is for. "Current" is the
+              month being closed — July through August — not the calendar month,
+              because that is the one the work is actually about. */}
           {shownMonth !== null && shownMonth === currentMonth ? "Current month" : "Month overview"}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
