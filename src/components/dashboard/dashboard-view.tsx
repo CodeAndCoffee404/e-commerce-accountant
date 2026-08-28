@@ -3,6 +3,8 @@
 import {
   CheckCircleFilled,
   CloudOutlined,
+  DownloadOutlined,
+  ExportOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
@@ -27,7 +29,7 @@ import { monthLabelName, monthLabelShort } from "@/lib/ingest/period";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
 import { KindIcon } from "@/components/common/kind-icon";
-import { useBuildQueue } from "@/components/reports/build-queue";
+import { targetKey, useBuildQueue } from "@/components/reports/build-queue";
 
 import { MonthPicker } from "./month-picker";
 import { ReportDeadlinesBlock } from "./report-deadlines-block";
@@ -69,7 +71,7 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { token } = theme.useToken();
-  const { startQueue, queueTotal, queueDone, busy, modals } = useBuildQueue({
+  const { startQueue, runningKey, queueTotal, queueDone, busy, modals } = useBuildQueue({
     canEditSkuMappings,
     canEditCurrencyMappings,
   });
@@ -147,6 +149,20 @@ export function DashboardView({
       }));
 
     startQueue(targets);
+  };
+
+  // A single report, built on its own — the same queue the "Build all"
+  // button feeds, handed one target instead of every ready one.
+  const buildOne = (report: CloseReport) => {
+    if (!data.month) return;
+
+    startQueue([
+      {
+        reportType: report.id,
+        periodLabel: data.month,
+        label: `${report.label} · ${data.month}`,
+      },
+    ]);
   };
 
   const empty = data.months.length === 0;
@@ -259,23 +275,20 @@ export function DashboardView({
                 Uploads
               </span>
             }
-            style={{ width: "100%", ...staleStyle(switching) }}
+            style={{
+              width: "100%",
+              // The kind's own colour, as a stripe: the same amber that marks
+              // an upload everywhere else in the app, so the two cards of this
+              // row are told apart before either title is read.
+              borderLeft: `3px solid ${token.colorWarning}`,
+              ...staleStyle(switching),
+            }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {requiredIn}/{requiredItems.length} required
               </Text>
             }
           >
-            <Progress
-              percent={
-                requiredItems.length === 0
-                  ? 100
-                  : Math.round((requiredIn / requiredItems.length) * 100)
-              }
-              size="small"
-              style={{ marginBottom: 12 }}
-            />
-
             <Space size={[6, 6]} wrap>
               {data.items.map((item) => (
                 <FileChip key={item.key} item={item} />
@@ -293,7 +306,11 @@ export function DashboardView({
                 Reports
               </span>
             }
-            style={{ width: "100%", ...staleStyle(switching) }}
+            style={{
+              width: "100%",
+              borderLeft: `3px solid ${token.colorPrimary}`,
+              ...staleStyle(switching),
+            }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {built}/{data.reports.length} built
@@ -301,9 +318,26 @@ export function DashboardView({
             }
           >
             <Space direction="vertical" size="small" style={{ width: "100%" }}>
-              {data.reports.map((report) => (
-                <ReportLine key={report.id} report={report} />
-              ))}
+              {data.reports.map((report) => {
+                const key = data.month
+                  ? targetKey({
+                      reportType: report.id,
+                      periodLabel: data.month,
+                      label: "",
+                    })
+                  : null;
+
+                return (
+                  <ReportLine
+                    key={report.id}
+                    report={report}
+                    canBuild={canBuild}
+                    building={key !== null && runningKey === key}
+                    buildDisabled={busy && runningKey !== key}
+                    onBuild={() => buildOne(report)}
+                  />
+                );
+              })}
             </Space>
           </Card>
         </div>
@@ -687,8 +721,26 @@ function FileChip({ item }: { item: ChecklistItem }) {
   );
 }
 
-function ReportLine({ report }: { report: CloseReport }) {
+function ReportLine({
+  report,
+  canBuild,
+  building,
+  buildDisabled,
+  onBuild,
+}: {
+  report: CloseReport;
+  canBuild: boolean;
+  /** This report is the one the queue is building right now. */
+  building: boolean;
+  /** Something else is building: this row's button waits its turn. */
+  buildDisabled: boolean;
+  onBuild: () => void;
+}) {
   const { token } = theme.useToken();
+  // Same shortlist the "Build all" button uses: never built, or built before
+  // a re-upload made the run stale.
+  const buildable = report.state === "ready" || report.stale;
+
   return (
     <div
       style={{
@@ -740,9 +792,56 @@ function ReportLine({ report }: { report: CloseReport }) {
           {report.missing.length > 4 ? ` and ${report.missing.length - 4} more` : ""}
         </Text>
       ) : (
-        <Link href="/reports" style={{ fontSize: 12 }}>
-          details
-        </Link>
+        // Looking at the workbook and building it are icons and a word
+        // respectively: opening a file is reversible and needs no label,
+        // starting a build writes a run and says so.
+        <Space size={4}>
+          {report.artifact?.driveUrl ? (
+            <Tooltip title="Open the workbook in Google Drive — the whole table, with Sheets' own sorting and search.">
+              <Button
+                size="small"
+                icon={<ExportOutlined />}
+                href={report.artifact.driveUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${report.label} in Drive`}
+              />
+            </Tooltip>
+          ) : null}
+
+          {report.artifact ? (
+            <Tooltip title="Download the workbook this run produced.">
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                href={`/api/reports/${report.artifact.id}`}
+                download={report.artifact.filename}
+                aria-label={`Download ${report.label}`}
+              />
+            </Tooltip>
+          ) : null}
+
+          {canBuild && buildable ? (
+            <Tooltip
+              title={
+                report.stale
+                  ? "A file it was built from has been replaced since. Building again records a separate run."
+                  : "Builds this report alone. The run is recorded with the rules and rates it used."
+              }
+            >
+              <Button
+                size="small"
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                loading={building}
+                disabled={buildDisabled}
+                onClick={onBuild}
+              >
+                {report.stale ? "Rebuild" : "Build"}
+              </Button>
+            </Tooltip>
+          ) : null}
+        </Space>
       )}
     </div>
   );

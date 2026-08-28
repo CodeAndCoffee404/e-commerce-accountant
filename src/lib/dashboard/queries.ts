@@ -39,6 +39,12 @@ export type CloseReport = {
    * still exists and still traces, but it no longer reflects the ledger.
    */
   stale: boolean;
+  /**
+   * The workbook the latest successful run produced, for the row's own
+   * download and "open in Drive" buttons. `driveUrl` is null until the file
+   * reaches Drive — or forever, if Drive was never connected.
+   */
+  artifact: { id: string; filename: string; driveUrl: string | null } | null;
   drive: { synced: number; failed: number; pending: number; total: number };
 };
 
@@ -299,6 +305,9 @@ async function loadReports(
       ? db
           .select({
             runId: schema.reportArtifacts.reportRunId,
+            id: schema.reportArtifacts.id,
+            filename: schema.reportArtifacts.filename,
+            driveUrl: schema.reportArtifacts.driveUrl,
             driveStatus: schema.reportArtifacts.driveStatus,
           })
           .from(schema.reportArtifacts)
@@ -362,6 +371,15 @@ async function loadReports(
       warnings: stats.warnings?.length ?? 0,
       builtAt: succeeded ? latest!.finishedAt : null,
       stale,
+      // One workbook per run in practice; the first is the one to offer.
+      artifact:
+        succeeded && runArtifacts[0]
+          ? {
+              id: runArtifacts[0].id,
+              filename: runArtifacts[0].filename,
+              driveUrl: runArtifacts[0].driveUrl,
+            }
+          : null,
       drive: {
         synced: runArtifacts.filter((a) => a.driveStatus === "synced").length,
         failed: runArtifacts.filter((a) => a.driveStatus === "failed").length,

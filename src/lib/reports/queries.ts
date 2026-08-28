@@ -415,6 +415,12 @@ export async function missingChannelRules(
   return [...absent].sort();
 }
 
+/**
+ * Shortest period first when several begin on the same day: a month before
+ * the quarter that contains it, a quarter before its year.
+ */
+const GRANULARITY_ORDER: Record<PeriodGranularity, number> = { month: 0, quarter: 1, year: 2 };
+
 export type ReportPeriodRow = {
   period: string;
   granularity: PeriodGranularity;
@@ -426,7 +432,7 @@ export type ReportPeriodRow = {
   builtAt: Date | null;
   outputRows: number | null;
   errorMessage: string | null;
-  artifact: { id: string; filename: string } | null;
+  artifact: { id: string; filename: string; driveUrl: string | null } | null;
 };
 
 /**
@@ -491,6 +497,7 @@ export async function allReportPeriodRows(
             runId: schema.reportArtifacts.reportRunId,
             id: schema.reportArtifacts.id,
             filename: schema.reportArtifacts.filename,
+            driveUrl: schema.reportArtifacts.driveUrl,
           })
           .from(schema.reportArtifacts)
           .where(inArray(schema.reportArtifacts.reportRunId, latestIds))
@@ -565,11 +572,30 @@ export async function allReportPeriodRows(
         builtAt: latest?.status === "succeeded" ? latest.finishedAt : null,
         outputRows: stats.outputRows ?? null,
         errorMessage: latest?.status === "failed" ? latest.errorMessage : null,
-        artifact: runArtifact ? { id: runArtifact.id, filename: runArtifact.filename } : null,
+        artifact: runArtifact
+          ? {
+              id: runArtifact.id,
+              filename: runArtifact.filename,
+              driveUrl: runArtifact.driveUrl,
+            }
+          : null,
       };
     });
 
-    rows.sort((a, b) => (periodStart.get(b.period) ?? "").localeCompare(periodStart.get(a.period) ?? ""));
+    // Newest first by the period's own start date — and where several share
+    // one (a quarter starts the same day as its first month, a year the same
+    // day as its first quarter), the shorter period comes first. That is what
+    // makes the list read as three months, then the quarter holding them,
+    // then the next three, rather than interleaving them arbitrarily.
+    rows.sort((a, b) => {
+      const byStart = (periodStart.get(b.period) ?? "").localeCompare(
+        periodStart.get(a.period) ?? "",
+      );
+
+      if (byStart !== 0) return byStart;
+
+      return GRANULARITY_ORDER[a.granularity] - GRANULARITY_ORDER[b.granularity];
+    });
 
     result[definition.id] = rows;
   }
