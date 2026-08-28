@@ -45,16 +45,13 @@ const ICON_BUTTON = { width: 26, height: 26 } as const;
  * The month as the accountant works it: which month, how far along, what needs
  * a person, and the two halves of the close — the files that came in and the
  * reports that go out — in one card rather than two.
- *
- * A month that is already filed reframes rather than re-renders: the same
- * blocks, worded as an overview, because closing is not what is left to do
- * there.
  */
 export function DashboardView({
   data,
   activity,
   flaggedRows,
   deadlines,
+  driveConnected,
   canBuild,
   canEditSkuMappings,
   canEditCurrencyMappings,
@@ -66,6 +63,11 @@ export function DashboardView({
   flaggedRows: number;
   /** Reports due for the month shown, already sorted. */
   deadlines: DeadlineDashboardRow[];
+  /**
+   * A Drive folder is chosen for this tenant. A built workbook with no Drive
+   * link means something different when it is false — nothing is on its way.
+   */
+  driveConnected: boolean;
   canBuild: boolean;
   /** SKU mapping is company settings — only the owner sees the gate's form. */
   canEditSkuMappings: boolean;
@@ -159,50 +161,53 @@ export function DashboardView({
   // Order: by how wrong it is to ignore.
   const alerts: AlertItem[] = [];
 
-  if (!data.closed) {
-    if (flaggedRows > 0) {
-      alerts.push({
-        key: "flagged",
-        text: `${flaggedRows} unreadable row${flaggedRows === 1 ? "" : "s"}`,
-        detail: "on Uploads",
-        href: "/uploads",
-      });
-    }
-    if (missing.length > 0) {
-      alerts.push({
-        key: "missing",
-        text: `${missing.length} required file${missing.length === 1 ? "" : "s"} missing`,
-        detail: missing.map((item) => shortLabel(item.label)).join(", "),
-        act: revealFiles,
-      });
-    }
-    if (staleReports.length > 0) {
-      alerts.push({
-        key: "stale",
-        text: `${staleReports.length} report${staleReports.length === 1 ? " is" : "s are"} stale`,
-        detail: staleReports.map((report) => shortLabel(report.label)).join(", "),
-        act: canBuild ? () => startQueue(targetsFor(staleReports)) : undefined,
-      });
-    }
-    if (driveFailed > 0) {
-      alerts.push({
-        key: "drive",
-        text: `Drive delivery failed for ${driveFailed} file${driveFailed === 1 ? "" : "s"}`,
-        detail: "retry on Reports",
-        href: "/reports",
-      });
-    }
+  if (flaggedRows > 0) {
+    alerts.push({
+      key: "flagged",
+      // Every current row waiting for a person, in any month — the one chip
+      // here that is not about the month on screen, so it says so rather than
+      // reading as a count for it.
+      text: `${flaggedRows} unreadable row${flaggedRows === 1 ? "" : "s"}`,
+      detail: "across all months",
+      href: "/uploads",
+    });
+  }
+  if (missing.length > 0) {
+    alerts.push({
+      key: "missing",
+      text: `${missing.length} required file${missing.length === 1 ? "" : "s"} missing`,
+      detail: missing.map((item) => shortLabel(item.label)).join(", "),
+      act: revealFiles,
+    });
+  }
+  if (staleReports.length > 0) {
+    alerts.push({
+      key: "stale",
+      text: `${staleReports.length} report${staleReports.length === 1 ? " is" : "s are"} stale`,
+      detail: staleReports.map((report) => shortLabel(report.label)).join(", "),
+      act: canBuild ? () => startQueue(targetsFor(staleReports)) : undefined,
+    });
+  }
+  if (driveFailed > 0) {
+    alerts.push({
+      key: "drive",
+      text: `Drive delivery failed for ${driveFailed} file${driveFailed === 1 ? "" : "s"}`,
+      detail: "retry on Reports",
+      href: "/reports",
+    });
   }
 
+  // The rows arrive with the overdue first, so the first one that is not done
+  // is the one that matters — but it is only the *next* deadline while it is
+  // still ahead of us. One that is late is named as late.
   const nextDeadline = deadlines.find((row) => row.state.kind !== "completed") ?? null;
+  const deadlineLead = nextDeadline?.state.kind === "overdue" ? "Overdue" : "Next deadline";
   const dim = staleStyle(switching);
 
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <PeriodBar
-          closed={data.closed}
-          closedAt={data.closedAt}
           months={data.months}
           shownMonth={shownMonth}
           switching={switching}
@@ -211,7 +216,7 @@ export function DashboardView({
           reports={{ done: built, total: data.reports.length }}
           uploadAction={uploadAction}
           buildAction={
-            canBuild && !data.closed && !empty ? (
+            canBuild && !empty ? (
               <Tooltip
                 title={
                   data.buildable === 0
@@ -292,7 +297,7 @@ export function DashboardView({
                   type="secondary"
                   style={{ marginInlineStart: "auto", fontSize: 12, flex: "none" }}
                 >
-                  Next deadline: {nextDeadline.label}, {deadlineWhen(nextDeadline)}
+                  {deadlineLead}: {nextDeadline.label}, {deadlineWhen(nextDeadline)}
                 </Text>
               ) : null}
             </div>
@@ -307,10 +312,10 @@ export function DashboardView({
               style={{ flex: "2 1 520px", minWidth: 0 }}
             >
               <PanelHeader
-                title={data.closed ? "Month summary" : "Month close"}
+                title="Month close"
                 extra={
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    {data.closed ? "Filed and closed" : "In progress"}
+                    In progress
                   </Text>
                 }
               />
@@ -345,6 +350,7 @@ export function DashboardView({
                       key={report.id}
                       report={report}
                       canBuild={canBuild}
+                      driveConnected={driveConnected}
                       building={key !== null && runningKey === key}
                       buildDisabled={busy && runningKey !== key}
                       onBuild={() => startQueue(targetsFor([report]))}
@@ -413,6 +419,15 @@ export function DashboardView({
                     {(activityAll ? activity : activity.slice(0, ACTIVITY_PREVIEW)).map((row) => (
                       <ActivityRow key={row.id} row={row} />
                     ))}
+
+                    {/*
+                      "All 10" in the header expands the ten rows the page
+                      fetched, which is not the whole log. The log lives on
+                      Settings, and this is the only way back to it.
+                    */}
+                    <Link href="/settings?tab=activity" style={{ fontSize: 12, marginTop: 3 }}>
+                      Full activity log
+                    </Link>
                   </div>
                 </Panel>
               ) : null}
@@ -512,8 +527,6 @@ function LinkButton({ children, onClick }: { children: React.ReactNode; onClick:
  * ------------------------------------------------------------------ */
 
 function PeriodBar({
-  closed,
-  closedAt,
   months,
   shownMonth,
   switching,
@@ -523,8 +536,6 @@ function PeriodBar({
   uploadAction,
   buildAction,
 }: {
-  closed: boolean;
-  closedAt: Date | null;
   months: string[];
   shownMonth: string | null;
   switching: boolean;
@@ -559,7 +570,7 @@ function PeriodBar({
             marginBottom: 6,
           }}
         >
-          {closed ? "Month overview" : "Monthly close"}
+          Monthly close
         </div>
         <MonthPicker
           bare
@@ -582,34 +593,13 @@ function PeriodBar({
           ...staleStyle(switching),
         }}
       >
-        <Meter label="Files in" done={files.done} total={files.total} />
+        <Meter label="Required files" done={files.done} total={files.total} />
         <Meter label="Reports built" done={reports.done} total={reports.total} />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
         {uploadAction}
         {buildAction}
-        {closed ? (
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              height: 32,
-              padding: "0 14px",
-              borderRadius: token.borderRadius,
-              background: token.colorSuccessBg,
-              border: `1px solid ${token.colorSuccessBorder}`,
-              fontSize: 13,
-              fontWeight: 500,
-              color: token.colorSuccessText,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <CheckCircleFilled style={{ fontSize: 14 }} />
-            {closedAt ? `Closed ${shortDate(closedAt)}` : "Closed"}
-          </span>
-        ) : null}
       </div>
     </section>
   );
@@ -776,7 +766,7 @@ function FilesSection({
           {missing.length === 0 ? (
             <>
               <CheckCircleFilled style={{ fontSize: 14, color: token.colorSuccess }} />
-              <span style={{ fontSize: 13 }}>All {required.length} required files are in.</span>
+              <span style={{ fontSize: 13 }}>All {required.length} required files uploaded.</span>
             </>
           ) : (
             <>
@@ -807,7 +797,7 @@ function FilesSection({
           }
           iconPosition="end"
         >
-          {expanded ? "Hide" : `All ${items.length}`}
+          {expanded ? "Hide" : "All files"}
         </Button>
       </div>
 
@@ -878,6 +868,7 @@ function FileChip({ item }: { item: ChecklistItem }) {
 function ReportRow({
   report,
   canBuild,
+  driveConnected,
   building,
   buildDisabled,
   onBuild,
@@ -885,6 +876,8 @@ function ReportRow({
 }: {
   report: CloseReport;
   canBuild: boolean;
+  /** A Drive folder is chosen, so a missing link means "on its way". */
+  driveConnected: boolean;
   /** This report is the one the queue is building right now. */
   building: boolean;
   /** Something else is building: this row's button waits its turn. */
@@ -957,7 +950,9 @@ function ReportRow({
               </Tooltip>
             ) : null}
           </div>
-          <div style={{ fontSize: 11.5, color: token.colorTextTertiary }}>{reportMeta(report)}</div>
+          <div style={{ fontSize: 11.5, color: token.colorTextTertiary }}>
+            {reportMeta(report, driveConnected)}
+          </div>
         </div>
       </div>
 
@@ -969,9 +964,7 @@ function ReportRow({
             style={{ paddingInline: 4, fontSize: 12.5 }}
             onClick={onShowFiles}
           >
-            {report.missing.length === 1
-              ? "Upload the file"
-              : `Upload the ${report.missing.length} files`}
+            {"See what's missing"}
           </Button>
         ) : (
           <>
@@ -987,7 +980,7 @@ function ReportRow({
                   style={ICON_BUTTON}
                 />
               </Tooltip>
-            ) : report.artifact && report.runId ? (
+            ) : driveConnected && report.artifact && report.runId ? (
               <Tooltip title="Not in Drive yet — send it now.">
                 <Button
                   type="text"
@@ -1013,8 +1006,14 @@ function ReportRow({
               </Tooltip>
             ) : null}
 
-            {canBuild && report.state === "ready" ? (
-              <Tooltip title="Builds this report alone. The run is recorded with the rules and rates it used.">
+            {canBuild && (report.state === "ready" || report.stale) ? (
+              <Tooltip
+                title={
+                  report.stale
+                    ? "Runs it again on the files as they stand now. The old run stays on Reports."
+                    : "Builds this report alone. The run is recorded with the rules and rates it used."
+                }
+              >
                 <Button
                   size="small"
                   icon={<ThunderboltOutlined />}
@@ -1023,7 +1022,7 @@ function ReportRow({
                   onClick={onBuild}
                   style={{ height: 26, marginInlineStart: 4 }}
                 >
-                  Build
+                  {report.stale ? "Rebuild" : "Build"}
                 </Button>
               </Tooltip>
             ) : null}
@@ -1383,10 +1382,6 @@ function shortLabel(label: string): string {
   return label.replace("Amazon Monthly Transaction report", "Amazon");
 }
 
-function shortDate(value: Date): string {
-  return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
 function shortDateTime(value: Date): string {
   const date = new Date(value);
 
@@ -1426,7 +1421,7 @@ function deadlineWhen(row: DeadlineDashboardRow): string {
  * states are mutually exclusive on purpose — a row saying three things at once
  * is the noise this line replaced.
  */
-function reportMeta(report: CloseReport): string {
+function reportMeta(report: CloseReport, driveConnected: boolean): string {
   if (report.state === "waiting") {
     if (report.missing.length === 0) return "Waiting for files";
 
@@ -1451,7 +1446,12 @@ function reportMeta(report: CloseReport): string {
     parts.push(`${report.warnings} warning${report.warnings === 1 ? "" : "s"}`);
   }
 
-  parts.push(report.artifact?.driveUrl ? "in Drive" : "not in Drive yet");
+  // "yet" is a promise, and it holds only when there is a Drive for the file
+  // to arrive in. With no folder connected the workbook is not late — it was
+  // never going anywhere, and saying so is what makes the download the answer.
+  parts.push(
+    report.artifact?.driveUrl ? "in Drive" : driveConnected ? "not in Drive yet" : "download only",
+  );
 
   return parts.join(" · ");
 }

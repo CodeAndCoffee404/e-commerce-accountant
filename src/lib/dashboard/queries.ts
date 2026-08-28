@@ -77,12 +77,6 @@ export type DashboardData = {
   reports: CloseReport[];
   /** Reports the one-button build would run right now. */
   buildable: number;
-  /**
-   * The shown month has been filed. The screen says "overview" rather than
-   * "close" for one of these: closing is not what is left to do.
-   */
-  closed: boolean;
-  closedAt: Date | null;
   matrix: {
     months: string[];
     groups: MatrixGroup[];
@@ -127,8 +121,6 @@ export async function loadDashboard(
         granularity: schema.periods.granularity,
         startDate: schema.periods.startDate,
         endDate: schema.periods.endDate,
-        status: schema.periods.status,
-        closedAt: schema.periods.closedAt,
       })
       .from(schema.periods)
       .where(eq(schema.periods.tenantId, tenantId))
@@ -307,16 +299,12 @@ export async function loadDashboard(
     ],
   };
 
-  const shownPeriod = month ? openPeriods.find((period) => period.label === month) : undefined;
-
   return {
     months,
     month,
     items,
     reports,
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
-    closed: shownPeriod?.status === "closed",
-    closedAt: shownPeriod?.closedAt ?? null,
     matrix,
   };
 }
