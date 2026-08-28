@@ -1,21 +1,17 @@
 "use client";
 
 import { FileTextOutlined, InboxOutlined } from "@ant-design/icons";
-import { theme } from "antd";
+
+import { useKindAccent, type EntityKind } from "./kind-accent";
 
 /**
  * The one visual vocabulary for "this is a report" vs "this is an upload",
  * used wherever either entity appears as a row: a small rounded chip, blue
- * document for reports, amber inbox tray for uploads. Colours come from the
- * theme tokens so both chips keep their contrast in dark mode.
+ * document for reports, purple inbox tray for uploads. Colours come from
+ * `useKindAccent`, so changing either one changes it everywhere at once.
  */
-export function KindIcon({ kind, size = 26 }: { kind: "report" | "upload"; size?: number }) {
-  const { token } = theme.useToken();
-
-  const palette =
-    kind === "report"
-      ? { background: token.colorPrimaryBg, color: token.colorPrimary }
-      : { background: token.colorWarningBg, color: token.colorWarning };
+export function KindIcon({ kind, size = 26 }: { kind: EntityKind; size?: number }) {
+  const { accent, tint } = useKindAccent(kind);
 
   return (
     <span
@@ -29,8 +25,8 @@ export function KindIcon({ kind, size = 26 }: { kind: "report" | "upload"; size?
         justifyContent: "center",
         flex: "none",
         fontSize: Math.round(size * 0.55),
-        background: palette.background,
-        color: palette.color,
+        background: tint,
+        color: accent,
       }}
     >
       {kind === "report" ? <FileTextOutlined /> : <InboxOutlined />}

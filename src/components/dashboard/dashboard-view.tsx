@@ -4,6 +4,7 @@ import {
   CheckCircleFilled,
   CloudUploadOutlined,
   DownloadOutlined,
+  DownOutlined,
   ExportOutlined,
   ThunderboltOutlined,
   WarningOutlined,
@@ -25,9 +26,10 @@ import { useState, useSyncExternalStore, useTransition } from "react";
 
 import type { AuditRow } from "@/lib/audit/record";
 import type { ChecklistItem, CloseReport, DashboardData } from "@/lib/dashboard/queries";
-import { monthLabelName, monthLabelShort } from "@/lib/ingest/period";
+import { monthLabelShort } from "@/lib/ingest/period";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
+import { useKindAccent } from "@/components/common/kind-accent";
 import { KindIcon } from "@/components/common/kind-icon";
 import { targetKey, useBuildQueue } from "@/components/reports/build-queue";
 import { republish } from "@/lib/reports/actions";
@@ -72,6 +74,12 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { token } = theme.useToken();
+  const uploadAccent = useKindAccent("upload");
+  const reportAccent = useKindAccent("report");
+  // The wash runs out across the strip rather than filling it flat, so the
+  // colour names the card without becoming a band of paint above every row.
+  const uploadHeader = `linear-gradient(90deg, ${uploadAccent.tint} 0%, ${token.colorBgContainer} 100%)`;
+  const reportHeader = `linear-gradient(90deg, ${reportAccent.tint} 0%, ${token.colorBgContainer} 100%)`;
   const { startQueue, runningKey, queueTotal, queueDone, busy, modals } = useBuildQueue({
     canEditSkuMappings,
     canEditCurrencyMappings,
@@ -168,17 +176,6 @@ export function DashboardView({
 
   const empty = data.months.length === 0;
 
-  // The Hero's eyebrow speaks about the month on show: its name, and whether
-  // its reports are all built ("filed") or still owed ("open").
-  const periodName = shownMonth ? monthLabelName(shownMonth) : null;
-  const period =
-    !empty && periodName
-      ? {
-          name: periodName,
-          open: !(data.reports.length > 0 && built === data.reports.length),
-        }
-      : null;
-
   return (
     <>
     <Space direction="vertical" size="small" style={{ width: "100%" }}>
@@ -188,7 +185,6 @@ export function DashboardView({
         <div style={{ flex: "3 1 480px", display: "flex", minWidth: 0 }}>
           <Hero
             firstName={firstName}
-            period={period}
             switching={switching}
             intro={
               empty
@@ -277,11 +273,11 @@ export function DashboardView({
               </span>
             }
             style={{ width: "100%", ...staleStyle(switching) }}
-            // The kind's own colour fills the title strip: the same amber that
-            // marks an upload everywhere else, so the two cards of this row are
-            // told apart before either title is read. The body stays plain, so
-            // the colour reads as a label rather than as noise.
-            styles={{ header: { background: token.colorWarningBg, borderRadius: 0 } }}
+            // The kind's own colour washes the title strip and fades out
+            // across it, so the two cards of this row are told apart before
+            // either title is read without the header reading as a solid
+            // block of paint. The body stays plain.
+            styles={{ header: { background: uploadHeader, borderRadius: 0 } }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {requiredIn}/{requiredItems.length}
@@ -302,7 +298,7 @@ export function DashboardView({
               </span>
             }
             style={{ width: "100%", ...staleStyle(switching) }}
-            styles={{ header: { background: token.colorPrimaryBg, borderRadius: 0 } }}
+            styles={{ header: { background: reportHeader, borderRadius: 0 } }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {built}/{data.reports.length} built
@@ -407,7 +403,6 @@ function timeGreeting(hour: number): string {
 
 function Hero({
   firstName,
-  period,
   switching,
   intro,
   attention,
@@ -416,8 +411,6 @@ function Hero({
   toolbar,
 }: {
   firstName: string;
-  /** The month on show, for the eyebrow line. */
-  period: { name: string; open: boolean } | null;
   /**
    * A month switch is in flight: `attention`, `allClear` and `rings` are
    * still last month's numbers until the new page commits, so they dim
@@ -450,12 +443,7 @@ function Hero({
   const todayLine = mounted
     ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
     : null;
-  const periodLine = period
-    ? switching
-      ? `${period.name} period`
-      : `${period.name} period ${period.open ? "open" : "filed"}`
-    : null;
-  const eyebrow = [todayLine, periodLine].filter(Boolean).join(" · ");
+  const eyebrow = todayLine;
 
   return (
     <section
@@ -648,7 +636,7 @@ function Dot({ color, size = 7 }: { color: string; size?: number }) {
   );
 }
 
-function FileChip({ item, wanted = false }: { item: ChecklistItem; wanted?: boolean }) {
+function FileChip({ item }: { item: ChecklistItem }) {
   const { token } = theme.useToken();
 
   // Fourteen solid orange tags shout; fourteen quiet chips with a status dot
@@ -676,16 +664,9 @@ function FileChip({ item, wanted = false }: { item: ChecklistItem; wanted?: bool
           gap: 7,
           padding: "3px 10px",
           borderRadius: 999,
-          // A chip standing alone because the file is missing carries the
-          // warning colour itself; in the full list, where every chip is one
-          // of fourteen, the dot is enough and a wall of amber would not be.
-          background: wanted ? token.colorWarningBg : token.colorFillTertiary,
+          background: token.colorFillTertiary,
           fontSize: 12,
-          color: wanted
-            ? token.colorWarningText
-            : item.uploaded
-              ? token.colorText
-              : token.colorTextSecondary,
+          color: item.uploaded ? token.colorText : token.colorTextSecondary,
           opacity: !item.uploaded && item.requirement === "optional" ? 0.65 : 1,
           cursor: "default",
         }}
@@ -730,7 +711,7 @@ function UploadsBody({ items }: { items: ChecklistItem[] }) {
         </div>
         <Space size={[6, 6]} wrap>
           {missing.map((item) => (
-            <FileChip key={item.key} item={item} wanted />
+            <FileChip key={item.key} item={item} />
           ))}
         </Space>
       </div>
@@ -739,16 +720,38 @@ function UploadsBody({ items }: { items: ChecklistItem[] }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-        <CheckCircleFilled style={{ color: token.colorSuccess, fontSize: 15 }} />
-        <Text style={{ fontSize: 13 }}>Every required file is in.</Text>
+      {/* The sentence and the way to the detail sit at opposite ends of one
+          line: a link tucked against the full stop read as part of it. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+          <CheckCircleFilled style={{ color: token.colorSuccess, fontSize: 15, flex: "none" }} />
+          <Text style={{ fontSize: 13 }}>Every required file is in.</Text>
+        </span>
+
         <Button
-          type="link"
+          type="text"
           size="small"
-          style={{ paddingInline: 2 }}
           onClick={() => setExpanded((open) => !open)}
+          style={{ flex: "none", fontSize: 12.5, color: token.colorTextSecondary }}
+          icon={
+            <DownOutlined
+              style={{
+                fontSize: 10,
+                transition: "transform 150ms ease",
+                transform: expanded ? "rotate(180deg)" : undefined,
+              }}
+            />
+          }
+          iconPosition="end"
         >
-          {expanded ? "Hide" : `Show all ${items.length}`}
+          {expanded ? "Hide" : `All ${items.length}`}
         </Button>
       </div>
 
