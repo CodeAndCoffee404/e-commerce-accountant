@@ -76,10 +76,12 @@ export function MonthPicker({
 
   return (
     <Space.Compact>
+      {/* The one spinner for "the switch is in flight" lives on the month
+          button below — the arrows just disable, so a step doesn't spin
+          three controls in the same compact group at once. */}
       <Button
         icon={<LeftOutlined />}
         disabled={disabled || atOldest}
-        loading={loading}
         aria-label="Previous open month"
         onClick={() => step(1)}
       />
@@ -112,7 +114,6 @@ export function MonthPicker({
       <Button
         icon={<RightOutlined />}
         disabled={disabled || atNewest}
-        loading={loading}
         aria-label="Next open month"
         onClick={() => step(-1)}
       />

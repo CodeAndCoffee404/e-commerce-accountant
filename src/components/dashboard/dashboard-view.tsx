@@ -31,6 +31,7 @@ import { useBuildQueue } from "@/components/reports/build-queue";
 
 import { MonthPicker } from "./month-picker";
 import { ReportDeadlinesBlock } from "./report-deadlines-block";
+import { staleStyle } from "./stale-style";
 
 const { Text, Title } = Typography;
 
@@ -171,6 +172,7 @@ export function DashboardView({
           <Hero
             firstName={firstName}
             period={period}
+            switching={switching}
             intro={
               empty
                 ? "Nothing uploaded yet. Press Upload files above and drop a month's exports — the month appears here the moment the first file lands."
@@ -229,7 +231,7 @@ export function DashboardView({
         </div>
 
         <div style={{ flex: "1 1 260px", display: "flex", minWidth: 0 }}>
-          <ReportDeadlinesBlock rows={deadlines} month={shownMonth} />
+          <ReportDeadlinesBlock rows={deadlines} month={shownMonth} switching={switching} />
         </div>
       </div>
 
@@ -257,7 +259,7 @@ export function DashboardView({
                 Uploads
               </span>
             }
-            style={{ width: "100%" }}
+            style={{ width: "100%", ...staleStyle(switching) }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {requiredIn}/{requiredItems.length} required
@@ -291,7 +293,7 @@ export function DashboardView({
                 Reports
               </span>
             }
-            style={{ width: "100%" }}
+            style={{ width: "100%", ...staleStyle(switching) }}
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {built}/{data.reports.length} built
@@ -380,6 +382,7 @@ function timeGreeting(hour: number): string {
 function Hero({
   firstName,
   period,
+  switching,
   intro,
   attention,
   allClear,
@@ -389,6 +392,13 @@ function Hero({
   firstName: string;
   /** The month on show, for the eyebrow line and the background watermark. */
   period: { name: string; open: boolean } | null;
+  /**
+   * A month switch is in flight: `attention`, `allClear` and `rings` are
+   * still last month's numbers until the new page commits, so they dim
+   * rather than sit there looking current. `period.open` is the same kind
+   * of number — dropped from the eyebrow rather than shown stale.
+   */
+  switching: boolean;
   intro: string | null;
   attention: { key: string; text: string; href: string }[];
   allClear: boolean;
@@ -414,7 +424,11 @@ function Hero({
   const todayLine = mounted
     ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
     : null;
-  const periodLine = period ? `${period.name} period ${period.open ? "open" : "filed"}` : null;
+  const periodLine = period
+    ? switching
+      ? `${period.name} period`
+      : `${period.name} period ${period.open ? "open" : "filed"}`
+    : null;
   const eyebrow = [todayLine, periodLine].filter(Boolean).join(" · ");
 
   return (
@@ -502,57 +516,66 @@ function Hero({
             </Text>
           ) : null}
 
-          {allClear ? (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 10,
-                padding: "5px 12px",
-                borderRadius: 999,
-                background: token.colorSuccessBg,
-                border: `1px solid ${token.colorSuccessBorder}`,
-              }}
-            >
-              <CheckCircleFilled style={{ color: token.colorSuccess }} />
-              <Text strong style={{ color: token.colorSuccessText }}>
-                Everything is in order — nothing needs you. Have a great day.
-              </Text>
-            </div>
-          ) : attention.length > 0 ? (
-            <Space size={[8, 8]} wrap style={{ marginTop: 10 }}>
-              {attention.map((item) =>
-                item.href.startsWith("#") ? (
-                  <Button
-                    key={item.key}
-                    size="small"
-                    shape="round"
-                    icon={<WarningOutlined style={{ color: token.colorWarning }} />}
-                    href={item.href}
-                  >
-                    {item.text}
-                  </Button>
-                ) : (
-                  <Link key={item.key} href={item.href}>
+          <div style={staleStyle(switching)}>
+            {allClear ? (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 10,
+                  padding: "5px 12px",
+                  borderRadius: 999,
+                  background: token.colorSuccessBg,
+                  border: `1px solid ${token.colorSuccessBorder}`,
+                }}
+              >
+                <CheckCircleFilled style={{ color: token.colorSuccess }} />
+                <Text strong style={{ color: token.colorSuccessText }}>
+                  Everything is in order — nothing needs you. Have a great day.
+                </Text>
+              </div>
+            ) : attention.length > 0 ? (
+              <Space size={[8, 8]} wrap style={{ marginTop: 10 }}>
+                {attention.map((item) =>
+                  item.href.startsWith("#") ? (
                     <Button
+                      key={item.key}
                       size="small"
                       shape="round"
                       icon={<WarningOutlined style={{ color: token.colorWarning }} />}
+                      href={item.href}
                     >
                       {item.text}
                     </Button>
-                  </Link>
-                ),
-              )}
-            </Space>
-          ) : null}
+                  ) : (
+                    <Link key={item.key} href={item.href}>
+                      <Button
+                        size="small"
+                        shape="round"
+                        icon={<WarningOutlined style={{ color: token.colorWarning }} />}
+                      >
+                        {item.text}
+                      </Button>
+                    </Link>
+                  ),
+                )}
+              </Space>
+            ) : null}
+          </div>
 
           {toolbar ? <div style={{ marginTop: 14 }}>{toolbar}</div> : null}
         </div>
 
         {rings ? (
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              flexWrap: "wrap",
+              ...staleStyle(switching),
+            }}
+          >
             <Ring label="files in" done={rings.files.done} total={rings.files.total} />
             <Ring label="reports built" done={rings.reports.done} total={rings.reports.total} />
           </div>
@@ -779,7 +802,11 @@ function MatrixTable({
       rowKey="key"
       size="small"
       pagination={false}
-      loading={switching}
+      // Body rows dim like every other stale block; the one spinner for
+      // "this is the month you asked for" already lives on its own column
+      // header below, so the table doesn't also grow a second, whole-table
+      // one on top of it.
+      onRow={() => ({ style: staleStyle(switching) })}
       scroll={{ x: 320 + matrix.months.length * 92 }}
       columns={[
         {
