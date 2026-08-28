@@ -28,9 +28,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: "HomeOutlined",
   },
   {
+    // The key stays `uploads`: it is what the badge and the selected row are
+    // matched on, and nothing outside this file reads it as a name.
     key: "uploads",
-    href: "/uploads",
-    label: "Uploads",
+    href: "/source-files",
+    label: "Source files",
     icon: "InboxOutlined",
   },
   {
@@ -39,7 +41,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: "Transactions",
     icon: "SwapOutlined",
     disabled: true,
-    disabledReason: "Not in use yet. Row-level figures are on each upload, under the expander.",
+    disabledReason:
+      "Not in use yet. Row-level figures are on each source file, under the expander.",
   },
   {
     key: "reports",

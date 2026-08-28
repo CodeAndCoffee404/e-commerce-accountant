@@ -61,8 +61,8 @@ export function PeriodFilterPicker({
     [options],
   );
   // Whole-year periods exist only where a report is built for one, so the
-  // year row appears only for a list that actually holds some — the Uploads
-  // filter, whose options never include a year, is left exactly as it was.
+  // year row appears only for a list that actually holds some — the Source
+  // files filter, whose options never include a year, is left exactly as it was.
   const yearsWithData = useMemo(
     () => new Set(options.filter((o) => o.granularity === "year").map((o) => o.label)),
     [options],

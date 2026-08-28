@@ -76,7 +76,7 @@ export function UploadsTable({
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
 
-    startTransition(() => router.push(`/uploads?${next.toString()}`));
+    startTransition(() => router.push(`/source-files?${next.toString()}`));
   };
 
   const selector = (
@@ -145,7 +145,7 @@ export function UploadsTable({
         rowClassName={(row) => (row.status === "superseded" ? "ea-superseded" : "")}
         expandable={{
           // The reconciliation lives under the file it is about: "did all of
-          // this get in" is a question about one upload, not about a list.
+          // this get in" is a question about one source file, not about a list.
           expandedRowRender: (row) => (
             <ReconciliationPanel fileId={row.id} data={reconciliation[row.id]} />
           ),
@@ -277,12 +277,12 @@ export function UploadsTable({
 
                 {canDelete ? (
                   <Popconfirm
-                    title="Delete this upload?"
+                    title="Delete this source file?"
                     description={
                       <div style={{ maxWidth: 320 }}>
-                        The file, its rows and its stored copy all go. If it replaced an earlier
-                        upload for this period, that earlier one counts again. A file a report was
-                        built from cannot be deleted until that report is.
+                        The file, its rows and its stored copy all go. If it replaced an
+                        earlier file for this period, that earlier one counts again. A file a
+                        report was built from cannot be deleted until that report is.
                       </div>
                     }
                     okText="Delete"

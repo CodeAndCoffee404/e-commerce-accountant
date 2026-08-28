@@ -236,7 +236,7 @@ export async function registerUpload(raw: RegisterInput): Promise<RegisterResult
     })
     .where(eq(schema.sourceFiles.id, row.id));
 
-  revalidatePath("/uploads");
+  revalidatePath("/source-files");
   revalidatePath("/transactions");
   // The file that completes a period is the one that makes a report buildable,
   // so this page has to be told as well — otherwise the card that was waiting

@@ -89,7 +89,7 @@ export async function savePeriodSchedule(
   revalidatePath("/settings");
   revalidatePath("/dashboard");
   revalidatePath("/reports");
-  revalidatePath("/uploads");
+  revalidatePath("/source-files");
 
   if (opened.length === 0) return { ok: true, message: "Schedule saved." };
 

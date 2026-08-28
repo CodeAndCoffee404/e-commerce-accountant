@@ -76,9 +76,9 @@ export function AppShell({
   const menuItems = NAV_ITEMS.map((item) => {
     const Icon = ICONS[item.icon];
 
-    // The count sits on Uploads, which is where a flagged row can now be seen
-    // and acted on — one expander below the file that produced it. Without it
-    // a flagged row waits until somebody happens to look.
+    // The count sits on Source files, which is where a flagged row can now be
+    // seen and acted on — one expander below the file that produced it. Without
+    // it a flagged row waits until somebody happens to look.
     const badge =
       item.key === "uploads" && needsAttention > 0 ? (
         <Badge count={needsAttention} size="small" offset={[6, -2]} />

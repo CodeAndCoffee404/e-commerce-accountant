@@ -97,7 +97,7 @@ export function TransactionsView({
             checked={params.get("superseded") === "1"}
             onChange={(checked) => update("superseded", checked ? "1" : null)}
           />
-          <Tooltip title="Rows replaced by a later upload of the same period. Kept so older reports stay traceable.">
+          <Tooltip title="Rows replaced by a later source file for the same period. Kept so older reports stay traceable.">
             <Typography.Text>Include superseded</Typography.Text>
           </Tooltip>
         </Space>

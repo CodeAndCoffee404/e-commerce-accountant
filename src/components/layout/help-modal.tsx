@@ -81,8 +81,8 @@ export function HelpModal() {
               description: (
                 <>
                   <Paragraph>
-                    On <Text strong>Uploads</Text>, press <Text strong>Upload files</Text>. Add
-                    as many as you have — they queue up in a list and go one after another, and
+                    On <Text strong>Source files</Text>, press <Text strong>Upload files</Text>.
+                    Add as many as you have — they queue up in a list and go one after another, and
                     each one reports what it turned out to be. CSV or XLSX, up to 20 MB each.
                   </Paragraph>
                   <Paragraph type="secondary">
@@ -103,8 +103,8 @@ export function HelpModal() {
               description: (
                 <>
                   <Paragraph>
-                    Expand any row on <Text strong>Uploads</Text>. It shows how many rows the file
-                    offered, how many became transactions, and how many are in the ledger now.
+                    Expand any row on <Text strong>Source files</Text>. It shows how many rows the
+                    file offered, how many became transactions, and how many are in the ledger now.
                   </Paragraph>
                   <Paragraph type="secondary">
                     A difference between the first two is usually correct: a bank statement carries
@@ -116,8 +116,9 @@ export function HelpModal() {
                     compare against the original.
                   </Paragraph>
                   <Paragraph type="secondary">
-                    <Text strong>Delete</Text> removes an upload completely — the file, its rows
-                    and its stored copy. If it had replaced an earlier upload for the same period,
+                    <Text strong>Delete</Text> removes a source file completely — the file, its
+                    rows and its stored copy. If it had replaced an earlier file for the same
+                    period,
                     that earlier one starts counting again. A file some report was built from is
                     kept until that report is deleted, so no run is ever left unable to show what
                     it used.
@@ -131,8 +132,8 @@ export function HelpModal() {
                 <>
                   <Paragraph>
                     A number or date that could not be read flags its row. The count appears next to{" "}
-                    <Text strong>Uploads</Text> in the sidebar, and against the file itself in the
-                    list — expand it to see how many.
+                    <Text strong>Source files</Text> in the sidebar, and against the file itself in
+                    the list — expand it to see how many.
                   </Paragraph>
                   <Alert
                     type="info"
@@ -163,7 +164,7 @@ export function HelpModal() {
                     together — a sheet missing one would look complete and understate the rest.{" "}
                     <Text strong>Amazon invoice for Zoho</Text> needs all ten marketplaces, for the
                     same reason. <Text strong>Allegro invoice for Zoho</Text> reads the same Allegro
-                    upload, converted to euros. <Text strong>Sales report by currency</Text> needs
+                    file, converted to euros. <Text strong>Sales report by currency</Text> needs
                     only the Amazon VAT file.
                   </Paragraph>
                   <Paragraph type="secondary">
@@ -173,7 +174,8 @@ export function HelpModal() {
                     its file arrives — and a report you never use can be switched off entirely.
                   </Paragraph>
                   <Paragraph type="secondary">
-                    Each run records the uploads, the VAT rates and the exchange rates it used, so
+                    Each run records the source files, the VAT rates and the exchange rates it
+                    used, so
                     rebuilding the same period later gives the same numbers. Expanding a row shows
                     the sources and anything that was skipped.
                   </Paragraph>
@@ -231,7 +233,7 @@ export function HelpModal() {
 
           <Paragraph style={{ marginBottom: 0 }}>
             <Text strong>Buyer data.</Text> The exports contain names, addresses and phone numbers.
-            Files are stored privately with no shareable link, a rejected upload is deleted
+            Files are stored privately with no shareable link, a rejected file is deleted
             immediately, and the reports themselves carry none of it.
           </Paragraph>
         </Space>

@@ -181,7 +181,7 @@ export function DashboardView({
       // reading as a count for it.
       text: `${flaggedRows} unreadable row${flaggedRows === 1 ? "" : "s"}`,
       detail: "across all months",
-      href: "/uploads",
+      href: "/source-files",
     });
   }
   if (missing.length > 0) {
@@ -1182,7 +1182,8 @@ function HistorySection({
         <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: token.colorText }}>History</span>
           <span style={{ fontSize: 12, color: token.colorTextTertiary }}>
-            {matrix.months.length} month{matrix.months.length === 1 ? "" : "s"} · uploads and reports
+            {matrix.months.length} month{matrix.months.length === 1 ? "" : "s"} · source files and
+            reports
           </span>
         </span>
         <span

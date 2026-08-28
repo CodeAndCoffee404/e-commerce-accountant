@@ -184,7 +184,7 @@ export async function deleteUpload(fileId: string): Promise<DeleteUploadResult> 
     restoredFileId: restored?.id ?? null,
   });
 
-  revalidatePath("/uploads");
+  revalidatePath("/source-files");
   revalidatePath("/transactions");
   revalidatePath("/reports");
 
