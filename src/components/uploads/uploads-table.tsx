@@ -20,6 +20,7 @@ import { useState, useTransition } from "react";
 
 import { KindIcon } from "@/components/common/kind-icon";
 import { formatSize } from "@/lib/format";
+import { periodLabelWords } from "@/lib/ingest/period";
 import type { UploadOptions, UploadRow } from "@/lib/uploads/queries";
 import type { FileReconciliation } from "@/lib/uploads/reconciliation";
 
@@ -221,20 +222,11 @@ export function UploadsTable({
             // and '2026.10 October' would otherwise interleave by alphabet
             // instead of by when they actually fall.
             sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
-            render: (period: string | null, row) => (
-              <div>
-                <Typography.Text>{period ?? "—"}</Typography.Text>
-                {/* Where the period came from matters: a filename can be renamed,
-                  the data cannot. */}
-                {row.periodSource === "filename" ? (
-                  <>
-                    <br />
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      from filename
-                    </Typography.Text>
-                  </>
-                ) : null}
-              </div>
+            // Read as words — "August 2026", "Q3 2026" — so the cell matches
+            // what the filter button above it says. The stored label keeps its
+            // own shape; only the reading changes.
+            render: (period: string | null) => (
+              <Typography.Text>{period ? periodLabelWords(period) : "—"}</Typography.Text>
             ),
           },
           {

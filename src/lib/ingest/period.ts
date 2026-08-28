@@ -160,6 +160,45 @@ export function describePeriodLabel(label: string, granularity: PeriodGranularit
   return label;
 }
 
+/**
+ * Any stored period label read back as words, without having to be told its
+ * granularity: `2026.07 July` -> `July 2026`, `2026.Q3` -> `Q3 2026`,
+ * `2026.Y` -> `2026`. The label's own shape says which of the three it is,
+ * so a table cell or a filter button that holds nothing but the label can
+ * still print it properly. A label of an unexpected shape is returned as-is
+ * rather than mangled into a guess.
+ *
+ * Unlike `describePeriodLabel` this appends no ` (month)` / ` (quarter)`
+ * suffix — it is for places where the column itself already says "Period".
+ */
+export function periodLabelWords(label: string): string {
+  const month = /^(\d{4})\.\d{2} (.+)$/.exec(label);
+
+  if (month) return `${month[2]} ${month[1]}`;
+
+  const quarter = /^(\d{4})\.Q(\d)$/.exec(label);
+
+  if (quarter) return `Q${quarter[2]} ${quarter[1]}`;
+
+  const year = /^(\d{4})\.Y$/.exec(label);
+
+  if (year) return year[1];
+
+  return label;
+}
+
+/**
+ * The granularity a label carries, read from its shape. The database knows
+ * this for every period it stores, but lists assembled from runs alone —
+ * the Reports screen's history — only ever hold the label.
+ */
+export function periodGranularityFromLabel(label: string): PeriodGranularity {
+  if (/^\d{4}\.Q\d$/.test(label)) return "quarter";
+  if (/^\d{4}\.Y$/.test(label)) return "year";
+
+  return "month";
+}
+
 /** `2026.07 July` -> `July 2026`, matching how the dashboard's month picker itself reads a period. */
 export function monthLabelWords(label: string): string {
   const match = /^\d{4}\.\d{2} (.+)$/.exec(label);

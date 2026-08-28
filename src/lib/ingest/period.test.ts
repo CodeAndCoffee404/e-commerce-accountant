@@ -11,6 +11,8 @@ import {
   parseAmazonMonthlyDate,
   parseCdiscountDate,
   parseShopifyDate,
+  periodGranularityFromLabel,
+  periodLabelWords,
   type YearMonth,
 } from "./period";
 
@@ -174,6 +176,35 @@ describe("monthLabelWords", () => {
   it("leaves a label it doesn't recognise as-is", () => {
     expect(monthLabelWords("2026.Q3")).toBe("2026.Q3");
     expect(monthLabelWords("2026.Y")).toBe("2026.Y");
+  });
+});
+
+describe("periodLabelWords", () => {
+  it("reads a month, a quarter and a year the same way the filter button does", () => {
+    expect(periodLabelWords("2026.07 July")).toBe("July 2026");
+    expect(periodLabelWords("2026.Q3")).toBe("Q3 2026");
+    expect(periodLabelWords("2026.Y")).toBe("2026");
+  });
+
+  it("appends no granularity suffix, unlike describePeriodLabel", () => {
+    expect(periodLabelWords("2026.Q3")).not.toContain("quarter");
+  });
+
+  it("leaves a label of an unexpected shape alone rather than guessing", () => {
+    expect(periodLabelWords("garbled")).toBe("garbled");
+    expect(periodLabelWords("")).toBe("");
+  });
+});
+
+describe("periodGranularityFromLabel", () => {
+  it("reads the kind of period off the label's own shape", () => {
+    expect(periodGranularityFromLabel("2026.07 July")).toBe("month");
+    expect(periodGranularityFromLabel("2026.Q3")).toBe("quarter");
+    expect(periodGranularityFromLabel("2026.Y")).toBe("year");
+  });
+
+  it("treats anything else as a month, the only shape a file can carry", () => {
+    expect(periodGranularityFromLabel("garbled")).toBe("month");
   });
 });
 

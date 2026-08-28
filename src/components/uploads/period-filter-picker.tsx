@@ -5,6 +5,7 @@ import { Button, Popover, theme } from "antd";
 import { useMemo, useState } from "react";
 
 import { MONTHS } from "@/lib/ingest/months";
+import { periodLabelWords } from "@/lib/ingest/period";
 import type { PeriodOption } from "@/lib/uploads/queries";
 
 function parseMonth(label: string): { year: number; month: number } | null {
@@ -19,23 +20,16 @@ function parseQuarter(label: string): { year: number; quarter: number } | null {
   return match ? { year: Number(match[1]), quarter: Number(match[2]) } : null;
 }
 
-function closedLabel(value: string | null): string {
-  if (!value) return "Any period";
+function parseYear(label: string): number | null {
+  const match = /^(\d{4})\.Y$/.exec(label);
 
-  const month = parseMonth(value);
-
-  if (month) return `${MONTHS[month.month - 1]?.fullName ?? month.month} ${month.year}`;
-
-  const quarter = parseQuarter(value);
-
-  if (quarter) return `Q${quarter.quarter} ${quarter.year}`;
-
-  return value;
+  return match ? Number(match[1]) : null;
 }
 
 /**
- * A month/quarter filter, in one popover: a year switcher on top, every
- * month below it, every quarter below that — picking one clears the other.
+ * A period filter, in one popover: a year switcher on top, every month below
+ * it, every quarter below that, and — where the list holds any — the whole
+ * year at the bottom. Picking one clears the other.
  * Unlike the dashboard's own month picker, this one is a filter: any
  * calendar period can be picked, not only ones a file exists for (an empty
  * pick just shows an empty table), and clearing it means "every period" —
@@ -66,6 +60,14 @@ export function PeriodFilterPicker({
     () => new Set(options.filter((o) => o.granularity === "quarter").map((o) => o.label)),
     [options],
   );
+  // Whole-year periods exist only where a report is built for one, so the
+  // year row appears only for a list that actually holds some — the Uploads
+  // filter, whose options never include a year, is left exactly as it was.
+  const yearsWithData = useMemo(
+    () => new Set(options.filter((o) => o.granularity === "year").map((o) => o.label)),
+    [options],
+  );
+  const offersYears = yearsWithData.size > 0;
 
   const currentYear = new Date().getUTCFullYear();
   const dataYears = options.map((o) => Number(o.label.slice(0, 4))).filter((y) => !Number.isNaN(y));
@@ -77,7 +79,10 @@ export function PeriodFilterPicker({
 
   const shownMonth = value ? parseMonth(value) : null;
   const shownQuarter = value ? parseQuarter(value) : null;
-  const [viewYear, setViewYear] = useState(shownMonth?.year ?? shownQuarter?.year ?? currentYear);
+  const shownYear = value ? parseYear(value) : null;
+  const [viewYear, setViewYear] = useState(
+    shownMonth?.year ?? shownQuarter?.year ?? shownYear ?? currentYear,
+  );
 
   const pick = (label: string) => {
     onChange(label);
@@ -146,6 +151,25 @@ export function PeriodFilterPicker({
           );
         })}
       </div>
+
+      {offersYears ? (
+        <>
+          <div style={{ margin: "10px 0 8px", borderTop: `1px solid ${token.colorSplit}` }} />
+          <Button
+            size="small"
+            block
+            type={shownYear === viewYear ? "primary" : "text"}
+            style={
+              shownYear !== viewYear && !yearsWithData.has(`${viewYear}.Y`)
+                ? { color: token.colorTextQuaternary }
+                : undefined
+            }
+            onClick={() => pick(`${viewYear}.Y`)}
+          >
+            Whole year {viewYear}
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 
@@ -155,12 +179,14 @@ export function PeriodFilterPicker({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setViewYear(shownMonth?.year ?? shownQuarter?.year ?? currentYear);
+        if (next) setViewYear(shownMonth?.year ?? shownQuarter?.year ?? shownYear ?? currentYear);
       }}
       content={content}
     >
       <Button disabled={disabled} style={{ minWidth: 160, justifyContent: "space-between", display: "inline-flex" }}>
-        <span style={{ color: value ? undefined : token.colorTextPlaceholder }}>{closedLabel(value)}</span>
+        <span style={{ color: value ? undefined : token.colorTextPlaceholder }}>
+          {value ? periodLabelWords(value) : "Any period"}
+        </span>
         {value ? (
           <CloseCircleFilled
             style={{ color: token.colorTextQuaternary, marginInlineStart: 8 }}

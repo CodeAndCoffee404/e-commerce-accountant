@@ -1,12 +1,12 @@
 "use client";
 
-import { CloudUploadOutlined, FileTextOutlined } from "@ant-design/icons";
+import { FileTextOutlined, InboxOutlined } from "@ant-design/icons";
 import { theme } from "antd";
 
 /**
  * The one visual vocabulary for "this is a report" vs "this is an upload",
  * used wherever either entity appears as a row: a small rounded chip, blue
- * document for reports, amber cloud-arrow for uploads. Colours come from the
+ * document for reports, amber inbox tray for uploads. Colours come from the
  * theme tokens so both chips keep their contrast in dark mode.
  */
 export function KindIcon({ kind, size = 26 }: { kind: "report" | "upload"; size?: number }) {
@@ -33,7 +33,7 @@ export function KindIcon({ kind, size = 26 }: { kind: "report" | "upload"; size?
         color: palette.color,
       }}
     >
-      {kind === "report" ? <FileTextOutlined /> : <CloudUploadOutlined />}
+      {kind === "report" ? <FileTextOutlined /> : <InboxOutlined />}
     </span>
   );
 }

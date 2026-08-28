@@ -4,6 +4,7 @@ import {
   CloudUploadOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  ExportOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
   WarningOutlined,
@@ -28,6 +29,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { KindIcon } from "@/components/common/kind-icon";
+import { PeriodFilterPicker } from "@/components/uploads/period-filter-picker";
+import type { PeriodGranularity } from "@/lib/db/schema";
+import { periodGranularityFromLabel, periodLabelWords } from "@/lib/ingest/period";
 import { restoreDefaults } from "@/lib/reference/actions";
 import { deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
@@ -196,10 +200,25 @@ export function ReportsView({
         .sort((a, b) => a.label.localeCompare(b.label)),
     [runs],
   );
-  const runPeriodOptions = useMemo(
-    () => [...new Set(runs.map((run) => run.periodLabel))].sort().reverse(),
-    [runs],
-  );
+  // The calendar filter wants the same shape the Uploads screen feeds it:
+  // a label, the date it starts on, and which kind of period it is. A run
+  // only carries the label and the start, so the kind is read off the
+  // label's own shape.
+  const runPeriodOptions = useMemo(() => {
+    const byLabel = new Map<string, { label: string; start: string; granularity: PeriodGranularity }>();
+
+    for (const run of runs) {
+      if (byLabel.has(run.periodLabel)) continue;
+
+      byLabel.set(run.periodLabel, {
+        label: run.periodLabel,
+        start: run.periodStart ?? "",
+        granularity: periodGranularityFromLabel(run.periodLabel),
+      });
+    }
+
+    return [...byLabel.values()];
+  }, [runs]);
   const runStatusOptions = useMemo(() => [...new Set(runs.map((run) => run.status))], [runs]);
 
   const filteredRuns = useMemo(() => {
@@ -355,14 +374,10 @@ export function ReportsView({
                 </Tooltip>
               )}
             />
-            <Select
-              allowClear
-              showSearch
-              style={{ minWidth: 160 }}
-              placeholder="Period"
-              value={runPeriod}
+            <PeriodFilterPicker
+              value={runPeriod ?? null}
+              options={runPeriodOptions}
               onChange={(value) => setRunPeriod(value ?? undefined)}
-              options={runPeriodOptions.map((value) => ({ value, label: value }))}
             />
             <Select
               allowClear
@@ -400,6 +415,7 @@ export function ReportsView({
                 // By the period's own start date, not the label text — see
                 // the same reasoning on the Uploads screen.
                 sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
+                render: (label: string) => periodLabelWords(label),
               },
               {
                 title: "Status",
@@ -451,15 +467,15 @@ export function ReportsView({
                           {artifact.filename.replace(/^.* - /, "").replace(/\.xlsx$/, "")}
                         </Button>
                         {artifact.driveUrl ? (
-                          <Tooltip title="Open in Google Drive">
+                          <Tooltip title="Open the workbook in Google Drive — the whole table, with Sheets' own sorting and search.">
                             <Button
                               size="small"
+                              icon={<ExportOutlined />}
                               href={artifact.driveUrl}
                               target="_blank"
                               rel="noreferrer"
-                            >
-                              Drive
-                            </Button>
+                              aria-label={`Open ${artifact.filename} in Drive`}
+                            />
                           </Tooltip>
                         ) : null}
                       </Space.Compact>
@@ -870,7 +886,9 @@ function PeriodRow({
         minHeight: 52,
       }}
     >
-      <span style={{ width: 150, fontSize: 13.5, fontWeight: 500, flex: "none" }}>{row.period}</span>
+      <span style={{ width: 150, fontSize: 13.5, fontWeight: 500, flex: "none" }}>
+        {periodLabelWords(row.period)}
+      </span>
       <Tag color={tag.color} style={{ flex: "none" }}>
         {tag.text}
       </Tag>
@@ -883,6 +901,19 @@ function PeriodRow({
       </Typography.Text>
 
       <Space size={6} style={{ flex: "none" }}>
+        {row.artifact?.driveUrl ? (
+          <Tooltip title="Open the workbook in Google Drive — the whole table, with Sheets' own sorting and search.">
+            <Button
+              size="small"
+              icon={<ExportOutlined />}
+              href={row.artifact.driveUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open ${periodLabelWords(row.period)} in Drive`}
+            />
+          </Tooltip>
+        ) : null}
+
         {row.artifact ? (
           <Tooltip title="Download the workbook this run produced.">
             <Button
