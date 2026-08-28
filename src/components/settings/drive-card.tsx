@@ -62,6 +62,7 @@ type PickerBuilder = {
   addView: (view: DocsView) => PickerBuilder;
   enableFeature: (feature: string) => PickerBuilder;
   setOAuthToken: (token: string) => PickerBuilder;
+  setAppId: (appId: string) => PickerBuilder;
   setDeveloperKey: (key: string) => PickerBuilder;
   setTitle: (title: string) => PickerBuilder;
   setCallback: (callback: (data: PickerResponse) => void) => PickerBuilder;
@@ -106,10 +107,17 @@ function loadPicker(): Promise<void> {
 export function DriveCard({
   connection,
   apiKey,
+  appId,
   canEdit,
 }: {
   connection: ConnectionSummary;
   apiKey: string | null;
+  /**
+   * The Cloud project number. A `drive.file` app only reaches a folder the
+   * picker granted it, and the picker only records that grant when it knows
+   * which app to record it against.
+   */
+  appId: string | null;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -144,11 +152,18 @@ export function DriveCard({
         .setSelectFolderEnabled(true)
         .setMimeTypes("application/vnd.google-apps.folder");
 
-      new picker.PickerBuilder()
+      const builder = new picker.PickerBuilder()
         .addView(view)
         .enableFeature(picker.Feature.SUPPORT_DRIVES)
         .setOAuthToken(token.token)
-        .setDeveloperKey(apiKey)
+        .setDeveloperKey(apiKey);
+
+      // Without this the picker returns an id and no permission with it: the
+      // grant a `drive.file` app depends on is recorded per app, and the
+      // picker cannot name the app it is acting for unless it is told.
+      if (appId) builder.setAppId(appId);
+
+      builder
         .setTitle("Where reports should be written")
         .setCallback((data) => {
           if (data.action !== picker.Action.PICKED) return;

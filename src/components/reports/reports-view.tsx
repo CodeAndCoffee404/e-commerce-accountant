@@ -31,7 +31,7 @@ import { useMemo, useState, useTransition } from "react";
 import { KindIcon } from "@/components/common/kind-icon";
 import { PeriodFilterPicker } from "@/components/uploads/period-filter-picker";
 import type { PeriodGranularity } from "@/lib/db/schema";
-import { periodGranularityFromLabel, periodLabelWords } from "@/lib/ingest/period";
+import { comparePeriods, periodGranularityFromLabel, periodLabelWords } from "@/lib/ingest/period";
 import { restoreDefaults } from "@/lib/reference/actions";
 import { deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
@@ -413,8 +413,20 @@ export function ReportsView({
                 dataIndex: "periodLabel",
                 width: 150,
                 // By the period's own start date, not the label text — see
-                // the same reasoning on the Source files screen.
-                sorter: (a, b) => (a.periodStart ?? "").localeCompare(b.periodStart ?? ""),
+                // the same reasoning on the Source files screen. A quarter
+                // starts on the same day as its first month, so the tie is
+                // broken by length: January, February, March, then Q1.
+                sorter: (a, b) =>
+                  comparePeriods(
+                    {
+                      start: a.periodStart ?? "",
+                      granularity: periodGranularityFromLabel(a.periodLabel),
+                    },
+                    {
+                      start: b.periodStart ?? "",
+                      granularity: periodGranularityFromLabel(b.periodLabel),
+                    },
+                  ),
                 render: (label: string) => periodLabelWords(label),
               },
               {

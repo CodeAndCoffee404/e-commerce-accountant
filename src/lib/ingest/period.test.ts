@@ -4,6 +4,7 @@ import { monthByNumber } from "./months";
 import {
   buildPeriod,
   collectPeriods,
+  comparePeriods,
   describePeriodLabel,
   monthLabelWords,
   parseAllegroDate,
@@ -225,5 +226,25 @@ describe("describePeriodLabel", () => {
     expect(describePeriodLabel("garbled", "month")).toBe("garbled");
     expect(describePeriodLabel("garbled", "quarter")).toBe("garbled");
     expect(describePeriodLabel("garbled", "year")).toBe("garbled");
+  });
+});
+
+describe("comparePeriods", () => {
+  const jan = { start: "2026-01-01", granularity: "month" as const };
+  const feb = { start: "2026-02-01", granularity: "month" as const };
+  const mar = { start: "2026-03-01", granularity: "month" as const };
+  const q1 = { start: "2026-01-01", granularity: "quarter" as const };
+  const year = { start: "2026-01-01", granularity: "year" as const };
+
+  it("puts a quarter after the months it holds", () => {
+    expect([q1, mar, jan, feb].sort(comparePeriods)).toEqual([jan, feb, mar, q1]);
+  });
+
+  it("breaks a shared last month by length", () => {
+    expect([year, q1, mar].sort(comparePeriods)).toEqual([mar, q1, year]);
+  });
+
+  it("puts a month ending earlier before a quarter that outlasts it", () => {
+    expect(comparePeriods(feb, q1)).toBeLessThan(0);
   });
 });

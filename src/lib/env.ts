@@ -87,6 +87,20 @@ export function googlePickerApiKey(): string | null {
 }
 
 /**
+ * The Cloud project number, which the picker needs in order to record a
+ * `drive.file` grant for this app against the folder somebody picks. Without
+ * it Google hands back an id the app has no permission to open, and the very
+ * next request for that folder is a 404.
+ *
+ * Read off the OAuth client id rather than set by hand: the id always begins
+ * with the project number — `123456789012-abc….apps.googleusercontent.com` —
+ * so there is nothing here that can drift out of step with the client.
+ */
+export function googlePickerAppId(): string | null {
+  return /^(\d+)-/.exec(process.env.GOOGLE_CLIENT_ID ?? "")?.[1] ?? null;
+}
+
+/**
  * Shared secret the scheduler proves itself with. Vercel sends it as
  * `Authorization: Bearer …` on every cron invocation.
  *

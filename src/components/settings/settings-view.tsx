@@ -63,6 +63,7 @@ export function SettingsView({
   schedule,
   connection,
   pickerApiKey,
+  pickerAppId,
   members,
   selfEmail,
   audit,
@@ -76,6 +77,7 @@ export function SettingsView({
   schedule: PeriodSchedule;
   connection: ConnectionSummary | null;
   pickerApiKey: string | null;
+  pickerAppId: string | null;
   members: Member[];
   selfEmail: string;
   audit: AuditRow[];
@@ -189,7 +191,14 @@ export function SettingsView({
         {
           key: "drive",
           label: "Google Drive",
-          children: <DriveCard connection={connection} apiKey={pickerApiKey} canEdit={canEdit} />,
+          children: (
+            <DriveCard
+              connection={connection}
+              apiKey={pickerApiKey}
+              appId={pickerAppId}
+              canEdit={canEdit}
+            />
+          ),
         },
         {
           key: "team",

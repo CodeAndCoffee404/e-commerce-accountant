@@ -1,3 +1,5 @@
+import { log } from "@/lib/log";
+
 const UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
 const FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 
@@ -132,7 +134,17 @@ export async function folderName(
     { headers: { authorization: `Bearer ${accessToken}` } },
   );
 
-  if (!response.ok) return null;
+  // The one failure worth naming: a `drive.file` app that was never granted
+  // the folder gets a 404 here, which is indistinguishable from a typo unless
+  // the status is written down.
+  if (!response.ok) {
+    log.warn("drive.folder_unreadable", {
+      folderId,
+      status: response.status,
+    });
+
+    return null;
+  }
 
   const body = (await response.json()) as { name?: string; mimeType?: string };
 

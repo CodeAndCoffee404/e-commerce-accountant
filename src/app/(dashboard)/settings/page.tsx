@@ -1,7 +1,7 @@
 import { SettingsView } from "@/components/settings/settings-view";
 import { listAudit } from "@/lib/audit/record";
 import { requireUser } from "@/lib/auth/session";
-import { googlePickerApiKey } from "@/lib/env";
+import { googlePickerApiKey, googlePickerAppId } from "@/lib/env";
 import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
 import { loadPeriodConfiguration } from "@/lib/periods/ensure";
@@ -34,6 +34,7 @@ export default async function SettingsPage() {
         schedule={periods.schedule}
         connection={connection}
         pickerApiKey={googlePickerApiKey()}
+        pickerAppId={googlePickerAppId()}
         members={members}
         selfEmail={user.email}
         audit={audit}
