@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
@@ -45,9 +45,9 @@ export type SaveReportSettingsInput = z.input<typeof inputSchema>;
 export async function saveReportSettings(
   raw: SaveReportSettingsInput,
 ): Promise<SettingsActionResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner") {
+  if (!can(user, "settings_company", "edit")) {
     return { ok: false, message: "Only the owner can change report settings." };
   }
 
@@ -156,9 +156,9 @@ export type SaveReportStartDateInput = z.input<typeof startDateSchema>;
 export async function saveReportStartDate(
   raw: SaveReportStartDateInput,
 ): Promise<SettingsActionResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner") {
+  if (!can(user, "settings_company", "edit")) {
     return { ok: false, message: "Only the owner can change report settings." };
   }
 

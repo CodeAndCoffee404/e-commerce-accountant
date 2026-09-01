@@ -120,6 +120,13 @@
       "when": 1787850260534,
       "tag": "0016_shopify_zoho_invoice_report_type",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788283781441,
+      "tag": "0017_role_permissions",
+      "breakpoints": true
     }
   ]
 }

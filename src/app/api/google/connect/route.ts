@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { loadAccessFor } from "@/lib/access/queries";
+import { allows } from "@/lib/access/sections";
 import { connectUrl } from "@/lib/google/oauth";
 
 export const STATE_COOKIE = "ea-google-state";
@@ -30,7 +32,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  if (session.role !== "owner") {
+  const access = await loadAccessFor(session.tenantId, session.role);
+
+  if (!allows(access, "settings_company", "edit")) {
     return NextResponse.redirect(new URL("/settings?drive=forbidden", request.url));
   }
 

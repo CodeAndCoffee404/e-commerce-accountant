@@ -1,14 +1,14 @@
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
 import { one } from "@/lib/params";
-import { requireUser } from "@/lib/auth/session";
+import { can, requireSection } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
 export const metadata = { title: "Source files" };
 
 export default async function SourceFilesPage({ searchParams }: PageProps<"/source-files">) {
-  const user = await requireUser();
+  const user = await requireSection("source_files");
   const params = await searchParams;
 
   const filters: UploadFilters = {
@@ -37,8 +37,10 @@ export default async function SourceFilesPage({ searchParams }: PageProps<"/sour
       rows={rows}
       options={options}
       reconciliation={reconciliation}
-      canDelete={user.role !== "viewer"}
-      uploadAction={user.role !== "viewer" ? <UploadDialog tenantId={user.tenantId} /> : null}
+      canDelete={can(user, "source_files", "edit")}
+      uploadAction={
+        can(user, "source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
+      }
     />
   );
 }

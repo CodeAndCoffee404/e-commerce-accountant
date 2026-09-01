@@ -1,5 +1,5 @@
 import { ReportsView } from "@/components/reports/reports-view";
-import { requireUser } from "@/lib/auth/session";
+import { can, requireSection } from "@/lib/auth/session";
 import {
   allReportPeriodRows,
   availablePeriods,
@@ -11,7 +11,7 @@ import {
 export const metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
-  const user = await requireUser();
+  const user = await requireSection("reports");
   const settings = await loadReportSettings(user.tenantId);
   const [periods, missingRules, runs] = await Promise.all([
     availablePeriods(user.tenantId, settings),
@@ -29,10 +29,10 @@ export default async function ReportsPage() {
         periodRows={periodRows}
         runs={runs}
         missingRules={missingRules}
-        canBuild={user.role !== "viewer"}
-        canRestore={user.role === "owner"}
-        canEditSkuMappings={user.role === "owner"}
-        canEditCurrencyMappings={user.role === "owner"}
+        canBuild={can(user, "reports", "edit")}
+        canRestore={can(user, "settings_company", "edit")}
+        canEditSkuMappings={can(user, "settings_company", "edit")}
+        canEditCurrencyMappings={can(user, "settings_company", "edit")}
       />
     </>
   );

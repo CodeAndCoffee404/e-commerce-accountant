@@ -3,7 +3,7 @@
 import { get } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 
-import { requireUser } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
@@ -22,7 +22,13 @@ const PREVIEW_COLUMNS = 12;
  * and to erase on request.
  */
 export async function previewUpload(fileId: string): Promise<Preview> {
-  const user = await requireUser();
+  const user = await requireAccess();
+
+  // These are the rows themselves, buyer data and all. A Server Action is a
+  // public endpoint whatever the table above it renders.
+  if (!can(user, "source_files", "view")) {
+    return { ok: false, message: "Not allowed." };
+  }
 
   const [file] = await getDb()
     .select({

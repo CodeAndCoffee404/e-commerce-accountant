@@ -5,7 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 import { reportDefinition } from "@/lib/reports/definitions";
@@ -27,9 +27,9 @@ export type DeleteUploadResult = { ok: boolean; message: string };
  * goes first, deliberately, by hand.
  */
 export async function deleteUpload(fileId: string): Promise<DeleteUploadResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+  if (!can(user, "source_files", "edit")) return { ok: false, message: "Not allowed." };
 
   const db = getDb();
 

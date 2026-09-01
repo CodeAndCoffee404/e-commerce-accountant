@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { loadAccessFor } from "@/lib/access/queries";
+import { allows } from "@/lib/access/sections";
 import { getDb, schema } from "@/lib/db";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -26,6 +28,12 @@ export async function GET(
 
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  const access = await loadAccessFor(session.tenantId, session.role);
+
+  if (!allows(access, "reports", "view")) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
   const { artifactId } = await params;

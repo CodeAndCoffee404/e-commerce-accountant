@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { loadAccessFor } from "@/lib/access/queries";
+import { allows } from "@/lib/access/sections";
 import { saveConnection } from "@/lib/google/connection";
 import { accountEmail, exchangeCode } from "@/lib/google/oauth";
 
@@ -14,9 +16,16 @@ function back(request: Request, outcome: string): NextResponse {
 export async function GET(request: Request): Promise<NextResponse> {
   const session = await auth();
 
-  if (!session?.user?.id || !session.tenantId || session.role !== "owner") {
+  if (!session?.user?.id || !session.tenantId) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
+
+  // The connection is a company setting, so it is the same permission that
+  // started the flow — checked again on return, because the redirect back is
+  // itself a request anyone can make.
+  const access = await loadAccessFor(session.tenantId, session.role);
+
+  if (!allows(access, "settings_company", "edit")) return back(request, "forbidden");
 
   const url = new URL(request.url);
   const store = await cookies();

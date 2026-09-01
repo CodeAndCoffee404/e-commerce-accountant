@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 
@@ -40,9 +40,9 @@ const buildSchema = z.object({
 });
 
 export async function buildReport(input: unknown): Promise<BuildResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const parsed = buildSchema.safeParse(input);
 
@@ -99,9 +99,9 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
 
 /** Retry delivery for a run whose upload failed, without rebuilding it. */
 export async function republish(runId: string): Promise<BuildResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const result = await publishRun(user.tenantId, runId);
 
@@ -132,9 +132,9 @@ export async function republish(runId: string): Promise<BuildResult> {
  * take it back is not this application's business.
  */
 export async function deleteRun(runId: string): Promise<BuildResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role === "viewer") return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const db = getDb();
 

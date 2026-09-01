@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { loadAccessFor } from "@/lib/access/queries";
+import { allows } from "@/lib/access/sections";
 import { getDb, schema } from "@/lib/db";
 
 const DEFAULT_MIME = "application/octet-stream";
@@ -21,6 +23,12 @@ export async function GET(
 
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  const access = await loadAccessFor(session.tenantId, session.role);
+
+  if (!allows(access, "source_files", "view")) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
   const { fileId } = await params;
