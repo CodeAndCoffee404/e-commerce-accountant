@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 
@@ -42,7 +42,7 @@ const buildSchema = z.object({
 export async function buildReport(input: unknown): Promise<BuildResult> {
   const user = await requireAccess();
 
-  if (!user.can("reports", "edit")) return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const parsed = buildSchema.safeParse(input);
 
@@ -101,7 +101,7 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
 export async function republish(runId: string): Promise<BuildResult> {
   const user = await requireAccess();
 
-  if (!user.can("reports", "edit")) return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const result = await publishRun(user.tenantId, runId);
 
@@ -134,7 +134,7 @@ export async function republish(runId: string): Promise<BuildResult> {
 export async function deleteRun(runId: string): Promise<BuildResult> {
   const user = await requireAccess();
 
-  if (!user.can("reports", "edit")) return { ok: false, message: "Not allowed." };
+  if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
 
   const db = getDb();
 

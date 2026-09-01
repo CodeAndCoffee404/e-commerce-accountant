@@ -46,12 +46,14 @@ export async function saveRoleAccess(raw: SaveRoleAccessInput): Promise<AccessRe
 
   const section = sectionDefinition(parsed.data.section as (typeof SECTION_IDS)[number]);
 
-  if (section.ownerOnly) {
-    return { ok: false, message: `${section.label} stays with the owner.` };
+  // Two checks, not one: the levels a section offers, and the rule that
+  // handing out access stays with the owner however those levels are read.
+  if (!levelsFor(section).includes(parsed.data.access as AccessLevel)) {
+    return { ok: false, message: `${section.label} does not offer that level.` };
   }
 
-  if (!levelsFor(section).includes(parsed.data.access as AccessLevel)) {
-    return { ok: false, message: `${section.label} has nothing to edit.` };
+  if (section.editIsOwnerOnly && parsed.data.access === "edit") {
+    return { ok: false, message: `Changing ${section.label} stays with the owner.` };
   }
 
   const db = getDb();

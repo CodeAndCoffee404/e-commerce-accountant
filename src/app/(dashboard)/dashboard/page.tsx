@@ -2,7 +2,7 @@ import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
-import { requireSection } from "@/lib/auth/session";
+import { can, requireSection } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
 import { loadConnection } from "@/lib/google/connection";
 import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
@@ -20,8 +20,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   const [activity, flaggedRows, deadlines, connection] = await Promise.all([
     // Ten so the Activity card has something to expand into: it shows six
-    // and offers the rest in place.
-    listAudit(user.tenantId, 10),
+    // and offers the rest in place. Empty for a role the log is closed to —
+    // the card renders nothing at all rather than a locked panel.
+    can(user, "activity", "view") ? listAudit(user.tenantId, 10) : Promise.resolve([]),
     countNeedsAttention(user.tenantId),
     data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
     // Whether a built report that is not in Drive is *waiting* to go or was
@@ -39,11 +40,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       flaggedRows={flaggedRows}
       deadlines={deadlines}
       driveConnected={Boolean(connection?.folderId)}
-      canBuild={user.can("reports", "edit")}
-      canEditSkuMappings={user.can("settings_company", "edit")}
-      canEditCurrencyMappings={user.can("settings_company", "edit")}
+      canBuild={can(user, "reports", "edit")}
+      canEditSkuMappings={can(user, "settings_company", "edit")}
+      canEditCurrencyMappings={can(user, "settings_company", "edit")}
       uploadAction={
-        user.can("source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
+        can(user, "source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
       }
     />
   );

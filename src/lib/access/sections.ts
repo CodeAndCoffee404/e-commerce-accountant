@@ -28,17 +28,26 @@ export type SectionDefinition = {
   /** What the section is, in the owner's words, on the access screen. */
   description: string;
   /**
-   * What "edit" buys on this section. Absent means the section has nothing to
-   * change — "view" is as far as it goes, and the matrix offers no third
-   * option rather than an edit level that governs nothing.
+   * The levels this section can be set to, and the only ones the matrix
+   * offers. A section with nothing to change stops at "view"; one that is a
+   * capability inside another section skips "view", because seeing it is the
+   * other section's business.
    */
+  levels: readonly AccessLevel[];
+  /** What "edit" buys here. Absent on sections that only ever read. */
   editMeans?: string;
   /**
-   * Deciding who gets in is the owner's alone, so this row is shown but not
-   * editable — an owner who could hand the access screen to someone else could
-   * be locked out of their own account by them.
+   * A capability that lives on another section's screen. Granting it without
+   * a view of that section leaves it unreachable, which the access screen
+   * says out loud rather than leaving to be discovered.
    */
-  ownerOnly?: true;
+  nestedIn?: SectionId;
+  /**
+   * Editing stays with the owner whatever the table says. An owner who could
+   * hand the access screen to someone else could be locked out of their own
+   * account by them.
+   */
+  editIsOwnerOnly?: true;
   defaults: Record<MembershipRole, AccessLevel>;
 };
 
@@ -53,12 +62,14 @@ export const SECTIONS: readonly SectionDefinition[] = [
     id: "dashboard",
     label: "Dashboard",
     description: "Where the month stands, what needs attention, recent activity.",
+    levels: ["none", "view"],
     defaults: { owner: "view", accountant: "view", viewer: "view" },
   },
   {
     id: "source_files",
     label: "Source files",
     description: "The uploaded exports and what was parsed out of them.",
+    levels: ["none", "view", "edit"],
     editMeans: "Upload and delete files",
     defaults: { owner: "edit", accountant: "edit", viewer: "view" },
   },
@@ -66,12 +77,14 @@ export const SECTIONS: readonly SectionDefinition[] = [
     id: "transactions",
     label: "Transactions",
     description: "Every parsed row, as one ledger.",
+    levels: ["none", "view"],
     defaults: { owner: "view", accountant: "view", viewer: "view" },
   },
   {
     id: "reports",
     label: "Reports",
     description: "Prepared reports and the runs that produced them.",
+    levels: ["none", "view", "edit"],
     editMeans: "Build and re-build reports",
     defaults: { owner: "edit", accountant: "edit", viewer: "view" },
   },
@@ -80,28 +93,38 @@ export const SECTIONS: readonly SectionDefinition[] = [
     label: "Company settings",
     description:
       "VAT rates, SKU mapping, seller VAT numbers, exchange rates, channel rules, report configuration, periods and Google Drive.",
+    levels: ["none", "view", "edit"],
     editMeans: "Change company settings",
     defaults: { owner: "edit", accountant: "view", viewer: "view" },
   },
   {
+    // Two levels, not three: the deadline rules are edited on the report cards
+    // under Company settings, so whether they can be *seen* is that section's
+    // answer, and only whether they can be changed is this one's.
     id: "settings_deadlines",
     label: "Filing deadlines",
-    description: "The rule that turns a closed period into a due date.",
+    description: "The rule that turns a closed period into a due date, on the report cards.",
+    levels: ["none", "edit"],
     editMeans: "Change deadline rules",
-    defaults: { owner: "edit", accountant: "edit", viewer: "view" },
+    nestedIn: "settings_company",
+    defaults: { owner: "edit", accountant: "edit", viewer: "none" },
   },
   {
     id: "team",
     label: "Team and access",
     description: "Who may sign in, their role, and this access table itself.",
+    // Readable by anyone the owner lets read it; changeable by the owner only,
+    // so "edit" is not on offer for the other roles at all.
+    levels: ["none", "view"],
     editMeans: "Invite people and set access",
-    ownerOnly: true,
+    editIsOwnerOnly: true,
     defaults: { owner: "edit", accountant: "none", viewer: "none" },
   },
   {
     id: "activity",
     label: "Activity log",
     description: "The trail of what was changed, by whom.",
+    levels: ["none", "view"],
     defaults: { owner: "view", accountant: "view", viewer: "view" },
   },
 ] as const;
@@ -127,8 +150,8 @@ export function sectionDefinition(id: SectionId): SectionDefinition {
 }
 
 /** The levels this section can actually be set to. */
-export function levelsFor(section: SectionDefinition): AccessLevel[] {
-  return section.editMeans ? ["none", "view", "edit"] : ["none", "view"];
+export function levelsFor(section: SectionDefinition): readonly AccessLevel[] {
+  return section.levels;
 }
 
 export function defaultAccess(role: MembershipRole): AccessMap {
@@ -157,7 +180,12 @@ export function resolveAccess(
 
     // The owner's own access is never stored and never read: an owner locked
     // out of Team could not undo it from inside the app.
-    if (role === "owner" || section.ownerOnly) continue;
+    if (role === "owner") continue;
+
+    // A level this section does not offer — left behind by an older release,
+    // or written by something other than the access screen — is not a
+    // decision the screen could have made, so the default stands.
+    if (!section.levels.includes(override)) continue;
 
     resolved[section.id] = override;
   }

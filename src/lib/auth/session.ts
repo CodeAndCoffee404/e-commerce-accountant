@@ -36,11 +36,22 @@ export async function requireUser(): Promise<CurrentUser> {
   };
 }
 
-export type UserWithAccess = CurrentUser & {
-  access: AccessMap;
-  /** Sugar for the pages: `can("reports", "edit")`. */
-  can: (section: SectionId, level: AccessLevel) => boolean;
-};
+export type UserWithAccess = CurrentUser & { access: AccessMap };
+
+/**
+ * Reads one permission off a user.
+ *
+ * A free function rather than a method on the user, deliberately: the user
+ * object is handed to Client Components, and a closure hanging off it cannot
+ * cross that boundary — it would throw at render, on every page at once.
+ */
+export function can(
+  user: { access: AccessMap },
+  section: SectionId,
+  level: AccessLevel,
+): boolean {
+  return allows(user.access, section, level);
+}
 
 /**
  * The signed-in person plus what their role may do, as the owner set it.
@@ -50,13 +61,8 @@ export type UserWithAccess = CurrentUser & {
  */
 export async function requireAccess(): Promise<UserWithAccess> {
   const user = await requireUser();
-  const access = await loadAccessFor(user.tenantId, user.role);
 
-  return {
-    ...user,
-    access,
-    can: (section, level) => allows(access, section, level),
-  };
+  return { ...user, access: await loadAccessFor(user.tenantId, user.role) };
 }
 
 /**
@@ -70,7 +76,7 @@ export async function requireSection(
   const user = await requireAccess();
   const wanted = Array.isArray(sections) ? sections : [sections];
 
-  if (!wanted.some((section) => user.can(section, level))) redirect(landingRoute(user.access));
+  if (!wanted.some((section) => can(user, section, level))) redirect(landingRoute(user.access));
 
   return user;
 }

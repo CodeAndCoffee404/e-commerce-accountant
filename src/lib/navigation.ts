@@ -63,7 +63,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     key: "settings",
-    sections: ["settings_company", "settings_deadlines", "team", "activity"],
+    // Not settings_deadlines: it is a capability on the report cards, which
+    // are Company settings' own tab, so it opens no screen by itself.
+    sections: ["settings_company", "team", "activity"],
     href: "/settings",
     label: "Settings",
     icon: "SettingOutlined",

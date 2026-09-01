@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 
 import { accessTokenFor, disconnect, setFolder } from "./connection";
 import { folderName } from "./drive";
@@ -14,7 +14,7 @@ export type DriveResult = { ok: true; message: string } | { ok: false; message: 
 async function requireEditor() {
   const user = await requireAccess();
 
-  if (!user.can("settings_company", "edit")) {
+  if (!can(user, "settings_company", "edit")) {
     throw new Error("Your role cannot manage the Drive connection.");
   }
 

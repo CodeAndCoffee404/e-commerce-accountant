@@ -1,5 +1,5 @@
 import { ReportsView } from "@/components/reports/reports-view";
-import { requireSection } from "@/lib/auth/session";
+import { can, requireSection } from "@/lib/auth/session";
 import {
   allReportPeriodRows,
   availablePeriods,
@@ -29,10 +29,10 @@ export default async function ReportsPage() {
         periodRows={periodRows}
         runs={runs}
         missingRules={missingRules}
-        canBuild={user.can("reports", "edit")}
-        canRestore={user.can("settings_company", "edit")}
-        canEditSkuMappings={user.can("settings_company", "edit")}
-        canEditCurrencyMappings={user.can("settings_company", "edit")}
+        canBuild={can(user, "reports", "edit")}
+        canRestore={can(user, "settings_company", "edit")}
+        canEditSkuMappings={can(user, "settings_company", "edit")}
+        canEditCurrencyMappings={can(user, "settings_company", "edit")}
       />
     </>
   );

@@ -9,6 +9,7 @@ import {
   ACCESS_LABELS,
   levelsFor,
   SECTIONS,
+  sectionDefinition,
   type AccessLevel,
   type SectionDefinition,
 } from "@/lib/access/sections";
@@ -19,6 +20,23 @@ const EDITABLE_ROLES = [
   { role: "accountant" as const, label: "Accountant" },
   { role: "viewer" as const, label: "Viewer" },
 ];
+
+/**
+ * "No access" on a capability would read as "cannot see it", which is not what
+ * it means — seeing it is the surrounding section's answer.
+ */
+function levelLabel(section: SectionDefinition, level: AccessLevel): string {
+  if (!section.nestedIn) return ACCESS_LABELS[level];
+
+  return level === "none" ? "Cannot change" : "Can change";
+}
+
+/** A capability whose own screen this role cannot open. */
+function unreachable(section: SectionDefinition, access: Record<string, AccessLevel>): boolean {
+  return Boolean(
+    section.nestedIn && access[section.id] !== "none" && access[section.nestedIn] === "none",
+  );
+}
 
 export function AccessCard({
   matrix,
@@ -93,11 +111,9 @@ export function AccessCard({
           ...EDITABLE_ROLES.map(({ role, label }) => ({
             title: label,
             key: role,
-            width: 180,
-            render: (_: unknown, section: SectionDefinition) =>
-              section.ownerOnly ? (
-                <Tag>Owner only</Tag>
-              ) : (
+            width: 190,
+            render: (_: unknown, section: SectionDefinition) => (
+              <Space direction="vertical" size={2}>
                 <Select<AccessLevel>
                   size="small"
                   style={{ width: 150 }}
@@ -108,17 +124,31 @@ export function AccessCard({
                   }
                   options={levelsFor(section).map((level) => ({
                     value: level,
-                    label: ACCESS_LABELS[level],
+                    label: levelLabel(section, level),
                   }))}
                 />
-              ),
+
+                {/* A capability granted on a screen the role cannot open does
+                    nothing at all, so the table says so where it happens
+                    rather than leaving it to be discovered. */}
+                {unreachable(section, matrix[role]) ? (
+                  <Typography.Text type="warning" style={{ fontSize: 11 }}>
+                    Needs {sectionDefinition(section.nestedIn!).label} at view or above
+                  </Typography.Text>
+                ) : null}
+              </Space>
+            ),
           })),
           {
-            title: "Full access means",
+            title: "What the top level means",
             key: "edit",
             render: (_: unknown, section: SectionDefinition) => (
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {section.editMeans ?? "Nothing to change here — this section is read-only."}
+                {section.editMeans
+                  ? section.editIsOwnerOnly
+                    ? `${section.editMeans} — the owner's alone, whoever else may read it.`
+                    : section.editMeans
+                  : "Nothing to change here — this section is read-only."}
               </Typography.Text>
             ),
           },

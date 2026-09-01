@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
 import { normaliseEmail } from "@/lib/auth/allowlist";
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 export type MemberResult = { ok: true; message: string } | { ok: false; message: string };
@@ -18,7 +18,7 @@ export type MemberResult = { ok: true; message: string } | { ok: false; message:
 async function requireOwner() {
   const user = await requireAccess();
 
-  if (!user.can("team", "edit")) throw new Error("Only an owner can manage access.");
+  if (!can(user, "team", "edit")) throw new Error("Only an owner can manage access.");
 
   return user;
 }

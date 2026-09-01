@@ -30,17 +30,36 @@ describe("the defaults", () => {
     expect(accountant.settings_company).toBe("view");
     expect(accountant.team).toBe("none");
 
-    // The viewer: looks, changes nothing.
+    // The viewer: looks, changes nothing — including the deadline rules, which
+    // are a capability rather than a screen and so read "none".
     for (const section of SECTIONS) {
-      expect(viewer[section.id]).toBe(section.id === "team" ? "none" : "view");
+      const expected =
+        section.id === "team" || section.id === "settings_deadlines" ? "none" : "view";
+
+      expect(viewer[section.id]).toBe(expected);
     }
   });
 
-  it("offer an edit level only where there is something to edit", () => {
+  it("offer only the levels a section can actually be set to", () => {
+    // Read-only screens stop at view; a capability that lives on another
+    // section's screen skips view, because being able to see it is that
+    // section's answer; handing out access is never anyone else's to edit.
+    expect(levelsFor(sectionDefinition("dashboard"))).toEqual(["none", "view"]);
+    expect(levelsFor(sectionDefinition("reports"))).toEqual(["none", "view", "edit"]);
+    expect(levelsFor(sectionDefinition("settings_deadlines"))).toEqual(["none", "edit"]);
+    expect(levelsFor(sectionDefinition("team"))).toEqual(["none", "view"]);
+
     for (const section of SECTIONS) {
-      expect(levelsFor(section)).toEqual(
-        section.editMeans ? ["none", "view", "edit"] : ["none", "view"],
-      );
+      expect(section.levels.length).toBeGreaterThan(1);
+      expect(section.levels[0]).toBe("none");
+
+      // Every default has to be a level the section offers, or the screen
+      // would open on a value it cannot show.
+      for (const role of ["owner", "accountant", "viewer"] as const) {
+        if (role === "owner") continue;
+
+        expect(section.levels).toContain(section.defaults[role]);
+      }
     }
   });
 });
@@ -61,10 +80,20 @@ describe("stored overrides", () => {
     expect(access.team).toBe("edit");
   });
 
-  it("cannot hand the team section to anyone else", () => {
-    const access = resolveAccess("accountant", { team: "edit" });
+  it("can open the team section to another role but never let it edit", () => {
+    expect(resolveAccess("accountant", { team: "view" }).team).toBe("view");
 
-    expect(access.team).toBe("none");
+    // "edit" is not a level this section offers, so it is not a decision the
+    // screen could have made and the default stands.
+    expect(resolveAccess("accountant", { team: "edit" }).team).toBe("none");
+  });
+
+  it("ignore a level the section does not offer", () => {
+    // Deadlines are none-or-edit: a stored "view" is from an older release.
+    expect(resolveAccess("viewer", { settings_deadlines: "view" }).settings_deadlines).toBe(
+      "none",
+    );
+    expect(resolveAccess("viewer", { dashboard: "edit" }).dashboard).toBe("view");
   });
 
   it("start a section nobody has ruled on at its default", () => {
@@ -81,6 +110,7 @@ describe("allows", () => {
     expect(allows(access, "settings_company", "view")).toBe(true);
     expect(allows(access, "settings_company", "edit")).toBe(false);
     expect(allows(access, "team", "view")).toBe(false);
+    expect(allows(access, "settings_deadlines", "edit")).toBe(true);
   });
 });
 
@@ -89,7 +119,6 @@ describe("the menu", () => {
     const access = resolveAccess("viewer", {
       dashboard: "none",
       settings_company: "none",
-      settings_deadlines: "none",
       activity: "none",
     });
 
@@ -113,19 +142,20 @@ describe("the menu", () => {
           transactions: "none",
           reports: "none",
           settings_company: "none",
-          settings_deadlines: "none",
           activity: "none",
         }),
       ),
     ).toBe("/no-access");
   });
 
-  it("gates every menu row on a section that exists", () => {
+  it("gates every menu row on a section that opens a screen of its own", () => {
     for (const item of NAV_ITEMS) {
       expect(item.sections.length).toBeGreaterThan(0);
 
       for (const section of item.sections) {
-        expect(() => sectionDefinition(section)).not.toThrow();
+        // A capability nested in another section opens nothing by itself, so
+        // it can never be the only reason a menu row is shown.
+        expect(sectionDefinition(section).nestedIn).toBeUndefined();
       }
     }
   });

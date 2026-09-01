@@ -1,7 +1,7 @@
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
 import { one } from "@/lib/params";
-import { requireSection } from "@/lib/auth/session";
+import { can, requireSection } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
@@ -37,9 +37,9 @@ export default async function SourceFilesPage({ searchParams }: PageProps<"/sour
       rows={rows}
       options={options}
       reconciliation={reconciliation}
-      canDelete={user.can("source_files", "edit")}
+      canDelete={can(user, "source_files", "edit")}
       uploadAction={
-        user.can("source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
+        can(user, "source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
       }
     />
   );

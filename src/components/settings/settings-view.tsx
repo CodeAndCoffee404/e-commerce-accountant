@@ -59,44 +59,32 @@ type VatRate = ReferenceData["vatRates"][number];
 type SkuMapping = ReferenceData["skuMappings"][number];
 type SellerVatNumber = ReferenceData["sellerVatNumbers"][number];
 
-export function SettingsView({
-  data,
-  reports,
-  deadlineRules,
-  schedule,
-  connection,
-  pickerApiKey,
-  pickerAppId,
-  members,
-  selfEmail,
-  audit,
-  roleAccess,
-  canEdit,
-  canViewCompany,
-  canEditDeadlines,
-  canViewDeadlines,
-  canViewTeam,
-  canViewActivity,
-  isOwner,
-}: {
+/** The company tabs and their data, or null when the role may not see them. */
+export type CompanySettings = {
   data: ReferenceData;
   reports: AllReportSettings;
-  deadlineRules: DeadlineRuleRow[];
   schedule: PeriodSchedule;
   connection: ConnectionSummary | null;
   pickerApiKey: string | null;
   pickerAppId: string | null;
-  members: Member[];
-  selfEmail: string;
-  audit: AuditRow[];
-  roleAccess: RoleAccessMatrix;
-  canEdit: boolean;
-  canViewCompany: boolean;
-  /** Deadlines are a filing detail, so they carry their own access. */
+  deadlineRules: DeadlineRuleRow[];
+  /** Deadlines sit on the report cards but carry their own permission. */
   canEditDeadlines: boolean;
-  canViewDeadlines: boolean;
-  canViewTeam: boolean;
-  canViewActivity: boolean;
+};
+
+export function SettingsView({
+  company,
+  team,
+  audit,
+  selfEmail,
+  canEdit,
+  isOwner,
+}: {
+  company: CompanySettings | null;
+  team: { members: Member[]; roleAccess: RoleAccessMatrix } | null;
+  audit: AuditRow[] | null;
+  selfEmail: string;
+  canEdit: boolean;
   isOwner: boolean;
 }) {
   const router = useRouter();
@@ -125,120 +113,132 @@ export function SettingsView({
   const requested = params.get("tab") ?? (params.get("drive") ? "drive" : "reports");
   const requestedTab = requested === "deadlines" ? "reports" : requested;
 
-  // A tab whose section is closed to this role is not rendered at all: a
-  // greyed-out tab that still shows the figures behind it is not access
-  // control, it is decoration.
+  // A tab whose section is closed to this role is not rendered at all, and
+  // its data never reached this component: a greyed-out tab that still holds
+  // the figures behind it is not access control, it is decoration.
   const tabs = [
-    {
-      when: canViewCompany || canViewDeadlines,
-      key: "reports",
-      label: "Reports",
-      children: (
-        <ReportSettingsTab
-          settings={reports}
-          schedule={schedule}
-          deadlineRules={deadlineRules}
-          canEdit={canEdit}
-          canEditDeadlines={canEditDeadlines}
-          run={run}
-          pending={pending}
-        />
-      ),
-    },
-    {
-      when: canViewCompany,
-      key: "periods",
-      label: "Periods",
-      children: (
-        <PeriodSettingsTab schedule={schedule} canEdit={canEdit} run={run} pending={pending} />
-      ),
-    },
-    {
-      when: canViewCompany,
-      key: "vat",
-      label: "VAT rates",
-      children: <VatRates data={data.vatRates} canEdit={canEdit} run={run} pending={pending} />,
-    },
-    {
-      when: canViewCompany,
-      key: "sku",
-      label: "SKU mapping",
-      children: <Skus data={data.skuMappings} canEdit={canEdit} run={run} pending={pending} />,
-    },
-    {
-      when: canViewCompany,
-      key: "seller",
-      label: "Seller VAT",
-      children: (
-        <SellerVat data={data.sellerVatNumbers} canEdit={canEdit} run={run} pending={pending} />
-      ),
-    },
-    {
-      when: canViewCompany,
-      key: "fx",
-      label: "Exchange rates",
-      children: <Fx data={data.fx} canEdit={canEdit} run={run} pending={pending} />,
-    },
-    {
-      when: canViewCompany,
-      key: "rules",
-      label: "Channel rules",
-      children: (
-        <Rules
-          // The "reports" channel is configuration with its own tab above,
-          // and allegro/currency_map gets its own table below — offering
-          // either as raw JSON here would create two editors for one
-          // thing.
-          data={data.channelRules.filter(
-            (rule) =>
-              rule.channel !== "reports" &&
-              !(rule.channel === "allegro" && rule.key === "currency_map"),
-          )}
-          allegroCurrencyRule={data.channelRules.find(
-            (rule) => rule.channel === "allegro" && rule.key === "currency_map",
-          )}
-          canEdit={canEdit}
-          run={run}
-          pending={pending}
-        />
-      ),
-    },
-    {
-      when: canViewCompany,
-      key: "drive",
-      label: "Google Drive",
-      children: (
-        <DriveCard
-          connection={connection}
-          apiKey={pickerApiKey}
-          appId={pickerAppId}
-          canEdit={canEdit}
-        />
-      ),
-    },
-    {
-      when: canViewTeam,
-      key: "team",
-      label: "Team",
-      children: <MembersCard members={members} isOwner={isOwner} selfEmail={selfEmail} />,
-    },
-    {
-      // Access sits next to Team on purpose: a role is handed out on one tab
-      // and defined on the other.
-      when: canViewTeam,
-      key: "access",
-      label: "Access",
-      children: <AccessCard matrix={roleAccess} isOwner={isOwner} />,
-    },
-    {
-      when: canViewActivity,
-      key: "activity",
-      label: "Activity",
-      children: <AuditCard rows={audit} />,
-    },
-  ]
-    .filter((tab) => tab.when)
-    .map((tab) => ({ key: tab.key, label: tab.label, children: tab.children }));
+    ...(company
+      ? [
+          {
+            key: "reports",
+            label: "Reports",
+            children: (
+              <ReportSettingsTab
+                settings={company.reports}
+                schedule={company.schedule}
+                deadlineRules={company.deadlineRules}
+                canEdit={canEdit}
+                canEditDeadlines={company.canEditDeadlines}
+                run={run}
+                pending={pending}
+              />
+            ),
+          },
+          {
+            key: "periods",
+            label: "Periods",
+            children: (
+              <PeriodSettingsTab
+                schedule={company.schedule}
+                canEdit={canEdit}
+                run={run}
+                pending={pending}
+              />
+            ),
+          },
+          {
+            key: "vat",
+            label: "VAT rates",
+            children: (
+              <VatRates data={company.data.vatRates} canEdit={canEdit} run={run} pending={pending} />
+            ),
+          },
+          {
+            key: "sku",
+            label: "SKU mapping",
+            children: (
+              <Skus
+                data={company.data.skuMappings}
+                canEdit={canEdit}
+                run={run}
+                pending={pending}
+              />
+            ),
+          },
+          {
+            key: "seller",
+            label: "Seller VAT",
+            children: (
+              <SellerVat
+                data={company.data.sellerVatNumbers}
+                canEdit={canEdit}
+                run={run}
+                pending={pending}
+              />
+            ),
+          },
+          {
+            key: "fx",
+            label: "Exchange rates",
+            children: <Fx data={company.data.fx} canEdit={canEdit} run={run} pending={pending} />,
+          },
+          {
+            key: "rules",
+            label: "Channel rules",
+            children: (
+              <Rules
+                // The "reports" channel is configuration with its own tab
+                // above, and allegro/currency_map gets its own table below —
+                // offering either as raw JSON here would create two editors
+                // for one thing.
+                data={company.data.channelRules.filter(
+                  (rule) =>
+                    rule.channel !== "reports" &&
+                    !(rule.channel === "allegro" && rule.key === "currency_map"),
+                )}
+                allegroCurrencyRule={company.data.channelRules.find(
+                  (rule) => rule.channel === "allegro" && rule.key === "currency_map",
+                )}
+                canEdit={canEdit}
+                run={run}
+                pending={pending}
+              />
+            ),
+          },
+          {
+            key: "drive",
+            label: "Google Drive",
+            children: (
+              <DriveCard
+                connection={company.connection}
+                apiKey={company.pickerApiKey}
+                appId={company.pickerAppId}
+                canEdit={canEdit}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(team
+      ? [
+          {
+            key: "team",
+            label: "Team",
+            children: (
+              <MembersCard members={team.members} isOwner={isOwner} selfEmail={selfEmail} />
+            ),
+          },
+          {
+            // Access sits next to Team on purpose: a role is handed out on one
+            // tab and defined on the other.
+            key: "access",
+            label: "Access",
+            children: <AccessCard matrix={team.roleAccess} isOwner={isOwner} />,
+          },
+        ]
+      : []),
+    ...(audit ? [{ key: "activity", label: "Activity", children: <AuditCard rows={audit} /> }] : []),
+  ];
 
   // A bookmark to a tab this role no longer holds opens on the first one it does.
   const activeKey = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : tabs[0]?.key;

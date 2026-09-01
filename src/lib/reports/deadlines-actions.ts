@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
@@ -43,7 +43,7 @@ export async function saveDeadlineRule(
 ): Promise<DeadlineActionResult> {
   const user = await requireAccess();
 
-  if (!user.can("settings_deadlines", "edit")) {
+  if (!can(user, "settings_deadlines", "edit")) {
     return { ok: false, message: "Your role cannot change report deadlines." };
   }
 

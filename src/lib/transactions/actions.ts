@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 
 import { transactionSource } from "./queries";
 
@@ -20,7 +20,7 @@ export async function loadSourceRow(transactionId: string): Promise<SourceRow> {
 
   // The same rows back both the ledger and the expander under a source file,
   // so either section being open is reason enough to hand one over.
-  if (!user.can("transactions", "view") && !user.can("source_files", "view")) return null;
+  if (!can(user, "transactions", "view") && !can(user, "source_files", "view")) return null;
 
   return transactionSource(user.tenantId, transactionId);
 }

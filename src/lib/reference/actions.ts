@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireAccess } from "@/lib/auth/session";
+import { can, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { refreshFxRates } from "./fx";
@@ -23,7 +23,7 @@ export type ActionResult = { ok: true; message: string } | { ok: false; message:
 async function requireEditor() {
   const user = await requireAccess();
 
-  if (!user.can("settings_company", "edit")) {
+  if (!can(user, "settings_company", "edit")) {
     throw new Error("Your role cannot change company settings.");
   }
 
