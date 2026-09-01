@@ -2,7 +2,7 @@ import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireSection } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
 import { loadConnection } from "@/lib/google/connection";
 import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
@@ -11,7 +11,7 @@ import { countNeedsAttention } from "@/lib/transactions/queries";
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
-  const user = await requireUser();
+  const user = await requireSection("dashboard");
   const params = await searchParams;
 
   // Deadlines are about the month shown on the dashboard, so they wait on it
@@ -39,10 +39,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       flaggedRows={flaggedRows}
       deadlines={deadlines}
       driveConnected={Boolean(connection?.folderId)}
-      canBuild={user.role !== "viewer"}
-      canEditSkuMappings={user.role === "owner"}
-      canEditCurrencyMappings={user.role === "owner"}
-      uploadAction={user.role === "viewer" ? null : <UploadDialog tenantId={user.tenantId} />}
+      canBuild={user.can("reports", "edit")}
+      canEditSkuMappings={user.can("settings_company", "edit")}
+      canEditCurrencyMappings={user.can("settings_company", "edit")}
+      uploadAction={
+        user.can("source_files", "edit") ? <UploadDialog tenantId={user.tenantId} /> : null
+      }
     />
   );
 }

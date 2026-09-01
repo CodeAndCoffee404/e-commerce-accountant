@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
 import { normaliseEmail } from "@/lib/auth/allowlist";
-import { requireUser } from "@/lib/auth/session";
+import { requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 export type MemberResult = { ok: true; message: string } | { ok: false; message: string };
@@ -16,9 +16,9 @@ export type MemberResult = { ok: true; message: string } | { ok: false; message:
  * reports; deciding who else gets in is a different kind of decision.
  */
 async function requireOwner() {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner") throw new Error("Only an owner can manage access.");
+  if (!user.can("team", "edit")) throw new Error("Only an owner can manage access.");
 
   return user;
 }

@@ -46,6 +46,9 @@ import type { AllReportSettings } from "@/lib/reports/settings";
 
 import type { DeadlineRuleRow } from "@/lib/reports/deadlines-queries";
 
+import type { RoleAccessMatrix } from "@/lib/access/queries";
+
+import { AccessCard } from "./access-card";
 import { AuditCard } from "./audit-card";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
@@ -67,8 +70,13 @@ export function SettingsView({
   members,
   selfEmail,
   audit,
+  roleAccess,
   canEdit,
+  canViewCompany,
   canEditDeadlines,
+  canViewDeadlines,
+  canViewTeam,
+  canViewActivity,
   isOwner,
 }: {
   data: ReferenceData;
@@ -81,9 +89,14 @@ export function SettingsView({
   members: Member[];
   selfEmail: string;
   audit: AuditRow[];
+  roleAccess: RoleAccessMatrix;
   canEdit: boolean;
-  /** Owner or accountant — deadlines are a filing detail, not a company setting. */
+  canViewCompany: boolean;
+  /** Deadlines are a filing detail, so they carry their own access. */
   canEditDeadlines: boolean;
+  canViewDeadlines: boolean;
+  canViewTeam: boolean;
+  canViewActivity: boolean;
   isOwner: boolean;
 }) {
   const router = useRouter();
@@ -112,107 +125,125 @@ export function SettingsView({
   const requested = params.get("tab") ?? (params.get("drive") ? "drive" : "reports");
   const requestedTab = requested === "deadlines" ? "reports" : requested;
 
-  return (
-    <Tabs
-      defaultActiveKey={requestedTab}
-      items={[
-        {
-          key: "reports",
-          label: "Reports",
-          children: (
-            <ReportSettingsTab
-              settings={reports}
-              schedule={schedule}
-              deadlineRules={deadlineRules}
-              canEdit={canEdit}
-              canEditDeadlines={canEditDeadlines}
-              run={run}
-              pending={pending}
-            />
-          ),
-        },
-        {
-          key: "periods",
-          label: "Periods",
-          children: (
-            <PeriodSettingsTab
-              schedule={schedule}
-              canEdit={canEdit}
-              run={run}
-              pending={pending}
-            />
-          ),
-        },
-        {
-          key: "vat",
-          label: "VAT rates",
-          children: <VatRates data={data.vatRates} canEdit={canEdit} run={run} pending={pending} />,
-        },
-        {
-          key: "sku",
-          label: "SKU mapping",
-          children: <Skus data={data.skuMappings} canEdit={canEdit} run={run} pending={pending} />,
-        },
-        {
-          key: "seller",
-          label: "Seller VAT",
-          children: (
-            <SellerVat data={data.sellerVatNumbers} canEdit={canEdit} run={run} pending={pending} />
-          ),
-        },
-        {
-          key: "fx",
-          label: "Exchange rates",
-          children: <Fx data={data.fx} canEdit={canEdit} run={run} pending={pending} />,
-        },
-        {
-          key: "rules",
-          label: "Channel rules",
-          children: (
-            <Rules
-              // The "reports" channel is configuration with its own tab above,
-              // and allegro/currency_map gets its own table below — offering
-              // either as raw JSON here would create two editors for one
-              // thing.
-              data={data.channelRules.filter(
-                (rule) =>
-                  rule.channel !== "reports" &&
-                  !(rule.channel === "allegro" && rule.key === "currency_map"),
-              )}
-              allegroCurrencyRule={data.channelRules.find(
-                (rule) => rule.channel === "allegro" && rule.key === "currency_map",
-              )}
-              canEdit={canEdit}
-              run={run}
-              pending={pending}
-            />
-          ),
-        },
-        {
-          key: "drive",
-          label: "Google Drive",
-          children: (
-            <DriveCard
-              connection={connection}
-              apiKey={pickerApiKey}
-              appId={pickerAppId}
-              canEdit={canEdit}
-            />
-          ),
-        },
-        {
-          key: "team",
-          label: "Team",
-          children: <MembersCard members={members} isOwner={isOwner} selfEmail={selfEmail} />,
-        },
-        {
-          key: "activity",
-          label: "Activity",
-          children: <AuditCard rows={audit} />,
-        },
-      ]}
-    />
-  );
+  // A tab whose section is closed to this role is not rendered at all: a
+  // greyed-out tab that still shows the figures behind it is not access
+  // control, it is decoration.
+  const tabs = [
+    {
+      when: canViewCompany || canViewDeadlines,
+      key: "reports",
+      label: "Reports",
+      children: (
+        <ReportSettingsTab
+          settings={reports}
+          schedule={schedule}
+          deadlineRules={deadlineRules}
+          canEdit={canEdit}
+          canEditDeadlines={canEditDeadlines}
+          run={run}
+          pending={pending}
+        />
+      ),
+    },
+    {
+      when: canViewCompany,
+      key: "periods",
+      label: "Periods",
+      children: (
+        <PeriodSettingsTab schedule={schedule} canEdit={canEdit} run={run} pending={pending} />
+      ),
+    },
+    {
+      when: canViewCompany,
+      key: "vat",
+      label: "VAT rates",
+      children: <VatRates data={data.vatRates} canEdit={canEdit} run={run} pending={pending} />,
+    },
+    {
+      when: canViewCompany,
+      key: "sku",
+      label: "SKU mapping",
+      children: <Skus data={data.skuMappings} canEdit={canEdit} run={run} pending={pending} />,
+    },
+    {
+      when: canViewCompany,
+      key: "seller",
+      label: "Seller VAT",
+      children: (
+        <SellerVat data={data.sellerVatNumbers} canEdit={canEdit} run={run} pending={pending} />
+      ),
+    },
+    {
+      when: canViewCompany,
+      key: "fx",
+      label: "Exchange rates",
+      children: <Fx data={data.fx} canEdit={canEdit} run={run} pending={pending} />,
+    },
+    {
+      when: canViewCompany,
+      key: "rules",
+      label: "Channel rules",
+      children: (
+        <Rules
+          // The "reports" channel is configuration with its own tab above,
+          // and allegro/currency_map gets its own table below — offering
+          // either as raw JSON here would create two editors for one
+          // thing.
+          data={data.channelRules.filter(
+            (rule) =>
+              rule.channel !== "reports" &&
+              !(rule.channel === "allegro" && rule.key === "currency_map"),
+          )}
+          allegroCurrencyRule={data.channelRules.find(
+            (rule) => rule.channel === "allegro" && rule.key === "currency_map",
+          )}
+          canEdit={canEdit}
+          run={run}
+          pending={pending}
+        />
+      ),
+    },
+    {
+      when: canViewCompany,
+      key: "drive",
+      label: "Google Drive",
+      children: (
+        <DriveCard
+          connection={connection}
+          apiKey={pickerApiKey}
+          appId={pickerAppId}
+          canEdit={canEdit}
+        />
+      ),
+    },
+    {
+      when: canViewTeam,
+      key: "team",
+      label: "Team",
+      children: <MembersCard members={members} isOwner={isOwner} selfEmail={selfEmail} />,
+    },
+    {
+      // Access sits next to Team on purpose: a role is handed out on one tab
+      // and defined on the other.
+      when: canViewTeam,
+      key: "access",
+      label: "Access",
+      children: <AccessCard matrix={roleAccess} isOwner={isOwner} />,
+    },
+    {
+      when: canViewActivity,
+      key: "activity",
+      label: "Activity",
+      children: <AuditCard rows={audit} />,
+    },
+  ]
+    .filter((tab) => tab.when)
+    .map((tab) => ({ key: tab.key, label: tab.label, children: tab.children }));
+
+  // A bookmark to a tab this role no longer holds opens on the first one it does.
+  const activeKey = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : tabs[0]?.key;
+
+  return <Tabs defaultActiveKey={activeKey} items={tabs} />;
 }
 
 type Runner = (action: () => Promise<ActionResult>) => void;

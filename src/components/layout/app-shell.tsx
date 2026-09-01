@@ -20,7 +20,13 @@ import type { ComponentType, ReactNode } from "react";
 import { HelpModal } from "@/components/layout/help-modal";
 import { UserMenu } from "@/components/layout/user-menu";
 import type { CurrentUser } from "@/lib/auth/session";
-import { DEFAULT_ROUTE, NAV_ITEMS, type NavItem } from "@/lib/navigation";
+import type { AccessMap } from "@/lib/access/sections";
+import {
+  NAV_ITEMS,
+  landingRoute,
+  visibleNavItems,
+  type NavItem,
+} from "@/lib/navigation";
 import { useUiStore } from "@/stores/ui-store-provider";
 
 const { Header, Sider, Content } = Layout;
@@ -49,10 +55,13 @@ const ICONS: Record<NavItem["icon"], ComponentType> = {
 export function AppShell({
   children,
   user,
+  access,
   needsAttention,
 }: {
   children: ReactNode;
   user: CurrentUser;
+  /** What this person's role may see. Sections closed to it are not in the menu. */
+  access: AccessMap;
   /** Rows a person has to look at. Zero hides the badge entirely. */
   needsAttention: number;
 }) {
@@ -65,15 +74,19 @@ export function AppShell({
   const themeMode = useUiStore((store) => store.themeMode);
   const toggleTheme = useUiStore((store) => store.toggleTheme);
 
+  // The whole list is still searched for the header title — a page reached by
+  // its address should name itself even while its row is not in the menu.
   const activeItem = NAV_ITEMS.find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
+  const items = visibleNavItems(access);
+  const home = landingRoute(access);
 
   // A disabled page is still reachable by typing its address, and highlighting
   // a row nobody can click would only puzzle whoever got there.
   const selectedKeys = activeItem && !activeItem.disabled ? [activeItem.key] : [];
 
-  const menuItems = NAV_ITEMS.map((item) => {
+  const menuItems = items.map((item) => {
     const Icon = ICONS[item.icon];
 
     // The count sits on Source files, which is where a flagged row can now be
@@ -120,7 +133,7 @@ export function AppShell({
         style={{ borderInlineEnd: `1px solid ${token.colorSplit}` }}
       >
         <Link
-          href={DEFAULT_ROUTE}
+          href={home}
           aria-label="Halum — go to the dashboard"
           style={{
             height: 56,

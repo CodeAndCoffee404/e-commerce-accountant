@@ -140,6 +140,8 @@ Legacy оперирует файлами: загрузили → положил�
 tenant            id, name, created_at
 user              id, email, name
 membership        tenant_id, user_id, role (owner|accountant|viewer)
+role_permissions  tenant_id, role, section, access (none|view|edit)
+                  — только отклонения от умолчаний; настраивает владелец
 google_connection tenant_id, google_account_email, refresh_token(enc),
                   root_folder_id, connected_at, status
 

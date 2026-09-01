@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireAccess } from "@/lib/auth/session";
 import { log } from "@/lib/log";
 import { getDb, schema } from "@/lib/db";
 import { classify } from "@/lib/ingest/classify";
@@ -48,11 +48,12 @@ export type RegisterResult =
  * that nothing references and nothing cleans up.
  */
 export async function registerUpload(raw: RegisterInput): Promise<RegisterResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  // Mirrors the check at the token route: a viewer reads and nothing else.
-  if (user.role === "viewer") {
-    return { ok: false, message: "A viewer cannot upload files." };
+  // Mirrors the check at the token route: without edit on Source files a
+  // person reads and nothing else.
+  if (!user.can("source_files", "edit")) {
+    return { ok: false, message: "Your role cannot upload files." };
   }
 
   const input = inputSchema.parse(raw);

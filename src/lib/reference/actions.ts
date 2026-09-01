@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { refreshFxRates } from "./fx";
@@ -21,9 +21,11 @@ export type ActionResult = { ok: true; message: string } | { ok: false; message:
  * interface chooses to render.
  */
 async function requireEditor() {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner") throw new Error("Only the owner can change company settings.");
+  if (!user.can("settings_company", "edit")) {
+    throw new Error("Your role cannot change company settings.");
+  }
 
   return user;
 }

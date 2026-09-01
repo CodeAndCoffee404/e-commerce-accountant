@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
@@ -41,10 +41,10 @@ export type SaveDeadlineRuleInput = z.input<typeof inputSchema>;
 export async function saveDeadlineRule(
   raw: SaveDeadlineRuleInput,
 ): Promise<DeadlineActionResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner" && user.role !== "accountant") {
-    return { ok: false, message: "Only the owner or an accountant can change report deadlines." };
+  if (!user.can("settings_deadlines", "edit")) {
+    return { ok: false, message: "Your role cannot change report deadlines." };
   }
 
   const input = inputSchema.parse(raw);

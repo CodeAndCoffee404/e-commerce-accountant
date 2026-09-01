@@ -108,6 +108,35 @@ export const memberships = pgTable(
   ],
 );
 
+export const sectionAccess = pgEnum("section_access", ["none", "view", "edit"]);
+
+/**
+ * What each role may do with each section of the app, set by the owner.
+ *
+ * Only deviations from the built-in defaults are stored — see
+ * `lib/access/sections.ts` — so a section added to the app later starts at its
+ * default rather than at "no access", and the table stays readable: a row here
+ * is a decision somebody made.
+ *
+ * The section is text rather than an enum because the list of sections belongs
+ * to the application, and adding a screen should not need a migration.
+ */
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    role: membershipRole("role").notNull(),
+    section: text("section").notNull(),
+    access: sectionAccess("access").notNull(),
+
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.role, table.section] })],
+);
+
 /**
  * Sign-in allowlist. Google authenticates the person; this table decides
  * whether that person may enter, and which tenant they land in.
@@ -715,3 +744,4 @@ export type SourceFile = typeof sourceFiles.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type MembershipRole = (typeof membershipRole.enumValues)[number];
+export type RolePermission = typeof rolePermissions.$inferSelect;

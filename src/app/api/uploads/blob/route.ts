@@ -3,6 +3,8 @@ import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/b
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { loadAccessFor } from "@/lib/access/queries";
+import { allows } from "@/lib/access/sections";
 import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants";
 import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
 
@@ -28,10 +30,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  // A viewer reads; only an owner or accountant may add data. Checked at the
-  // token as well as at registration, because a signed token IS the write.
-  if (session.role === "viewer") {
-    return NextResponse.json({ error: "A viewer cannot upload files" }, { status: 403 });
+  // Reading a section is not writing to it. Checked at the token as well as at
+  // registration, because a signed token IS the write.
+  const access = await loadAccessFor(session.tenantId, session.role);
+
+  if (!allows(access, "source_files", "edit")) {
+    return NextResponse.json({ error: "Your role cannot upload files" }, { status: 403 });
   }
 
   const body = (await request.json()) as HandleUploadPresignedBody;

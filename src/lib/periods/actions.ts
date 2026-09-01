@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { ensurePeriods } from "./ensure";
@@ -37,10 +37,10 @@ export type SavePeriodScheduleInput = z.input<typeof inputSchema>;
 export async function savePeriodSchedule(
   raw: SavePeriodScheduleInput,
 ): Promise<PeriodActionResult> {
-  const user = await requireUser();
+  const user = await requireAccess();
 
-  if (user.role !== "owner") {
-    return { ok: false, message: "Only the owner can change the period schedule." };
+  if (!user.can("settings_company", "edit")) {
+    return { ok: false, message: "Your role cannot change the period schedule." };
   }
 
   const parsed = inputSchema.safeParse(raw);

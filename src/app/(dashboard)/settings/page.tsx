@@ -1,6 +1,7 @@
 import { SettingsView } from "@/components/settings/settings-view";
+import { loadRoleAccess } from "@/lib/access/queries";
 import { listAudit } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { requireSection } from "@/lib/auth/session";
 import { googlePickerApiKey, googlePickerAppId } from "@/lib/env";
 import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
@@ -12,14 +13,22 @@ import { loadReportSettings } from "@/lib/reports/queries";
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const user = await requireUser();
-  const [data, reports, periods, connection, members, audit] = await Promise.all([
+  // Settings is one screen over several sections; any of them is a reason to
+  // let someone in, and each tab checks its own below.
+  const user = await requireSection([
+    "settings_company",
+    "settings_deadlines",
+    "team",
+    "activity",
+  ]);
+  const [data, reports, periods, connection, members, audit, roleAccess] = await Promise.all([
     loadReferenceData(user.tenantId),
     loadReportSettings(user.tenantId),
     loadPeriodConfiguration(user.tenantId),
     loadConnection(user.tenantId),
     listMembers(user.tenantId),
     listAudit(user.tenantId),
+    loadRoleAccess(user.tenantId),
   ]);
   const deadlineRules = await loadDeadlineRules(user.tenantId, reports);
 
@@ -38,12 +47,15 @@ export default async function SettingsPage() {
         members={members}
         selfEmail={user.email}
         audit={audit}
-        // The client's rule: company settings are the owner's alone. An
-        // accountant still sees everything — read-only.
-        canEdit={user.role === "owner"}
-        // Deadlines are a filing detail an accountant lives with day to day,
-        // so both roles that can build reports may set them.
-        canEditDeadlines={user.role === "owner" || user.role === "accountant"}
+        roleAccess={roleAccess}
+        // What each tab may do is the owner's decision now, held in
+        // role_permissions rather than in a role name written into the page.
+        canEdit={user.can("settings_company", "edit")}
+        canViewCompany={user.can("settings_company", "view")}
+        canEditDeadlines={user.can("settings_deadlines", "edit")}
+        canViewDeadlines={user.can("settings_deadlines", "view")}
+        canViewTeam={user.can("team", "view")}
+        canViewActivity={user.can("activity", "view")}
         isOwner={user.role === "owner"}
       />
     </>
