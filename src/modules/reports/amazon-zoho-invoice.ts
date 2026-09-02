@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
+import { exactLines } from "@/lib/reports/invoice-lines";
 import { decideSku } from "@/lib/reports/rules";
 import type {
   GeneratorResult,
@@ -239,6 +240,12 @@ type Group = {
   sku: string;
   unitPrice: Decimal;
   quantity: Decimal;
+  /**
+   * What the ledger says these rows came to, kept alongside the price rather
+   * than recomputed from it: the invoice has to add back up to this, and a
+   * price rounded to the cent cannot always express it.
+   */
+  total: Decimal;
 };
 
 /**
@@ -316,8 +323,10 @@ export function generateZohoInvoice(
     const key = `${country}|${sku}|${unitPrice.toFixed(10)}`;
     const existing = groups.get(key);
 
-    if (existing) existing.quantity = existing.quantity.plus(quantity);
-    else groups.set(key, { country, sku, unitPrice, quantity });
+    if (existing) {
+      existing.quantity = existing.quantity.plus(quantity);
+      existing.total = existing.total.plus(sales);
+    } else groups.set(key, { country, sku, unitPrice, quantity, total: sales });
   }
 
   const output: (string | number | null)[][] = [];
@@ -361,20 +370,25 @@ export function generateZohoInvoice(
     const rate = rateFor(group.country);
     const decision = decideSku(context.rules, "amazon", group.sku);
 
-    output.push([
-      // Invoiced on the last day of the month, whatever day the sale fell on.
-      `${context.period.end} 00:00:00`,
-      invoiceNumber(group.country, context.period.end),
-      `Amazon ${group.country}`,
-      currency,
-      rate,
-      decision.kind === "map" ? decision.itemName : "",
-      decision.kind === "map" ? decision.targetSku : group.sku,
-      "",
-      group.quantity.toFixed(),
-      group.unitPrice.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
-      `Amazon Sales ${group.country}`,
-    ]);
+    // One line where the cent price lands exactly, two a cent apart where it
+    // cannot — 351 units of a 41.3138 product are billed as 35 at 41.32 and
+    // 316 at 41.31, and the invoice comes to what the ledger says.
+    for (const line of exactLines(group.total, group.quantity)) {
+      output.push([
+        // Invoiced on the last day of the month, whatever day the sale fell on.
+        `${context.period.end} 00:00:00`,
+        invoiceNumber(group.country, context.period.end),
+        `Amazon ${group.country}`,
+        currency,
+        rate,
+        decision.kind === "map" ? decision.itemName : "",
+        decision.kind === "map" ? decision.targetSku : group.sku,
+        "",
+        line.quantity.toFixed(),
+        line.price.toFixed(2),
+        `Amazon Sales ${group.country}`,
+      ]);
+    }
   }
 
   // VAT is not one line per scheme per marketplace: REGULAR is owed where the

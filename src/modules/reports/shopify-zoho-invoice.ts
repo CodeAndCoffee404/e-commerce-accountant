@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
+import { exactLines } from "@/lib/reports/invoice-lines";
 import { channelRule, decideSku, splitGross, vatRateOn } from "@/lib/reports/rules";
 import type {
   GeneratorResult,
@@ -131,7 +132,14 @@ function invoiceNumber(periodEnd: string): string {
   return `INV-GeyserWebsite-${month}.${year.slice(2)}`;
 }
 
-type ProductLine = { itemName: string; sku: string; qty: Decimal; unitPrice: Decimal };
+type ProductLine = {
+  itemName: string;
+  sku: string;
+  qty: Decimal;
+  unitPrice: Decimal;
+  /** What these rows came to in the ledger — see `exactLines`. */
+  total: Decimal;
+};
 
 export function generateShopifyZohoInvoice(
   rows: readonly LedgerRow[],
@@ -208,8 +216,10 @@ export function generateShopifyZohoInvoice(
     const key = `${sku}|${unitPrice.toFixed(10)}`;
     const existing = productAgg.get(key);
 
-    if (existing) existing.qty = existing.qty.plus(quantity);
-    else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice });
+    if (existing) {
+      existing.qty = existing.qty.plus(quantity);
+      existing.total = existing.total.plus(row.gross);
+    } else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice, total: row.gross });
   }
 
   /* ------------------------------------------------------------------ *
@@ -305,19 +315,23 @@ export function generateShopifyZohoInvoice(
   });
 
   for (const product of productRows) {
-    output.push([
-      invoiceDate,
-      invoiceNo,
-      "Geyser Website",
-      "EUR",
-      "1",
-      product.itemName,
-      product.sku,
-      "",
-      product.qty.toFixed(),
-      product.unitPrice.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
-      "Shopify Sales",
-    ]);
+    // One line, or two a cent apart where no single cent price multiplies back
+    // to what the item actually came to. See `exactLines`.
+    for (const line of exactLines(product.total, product.qty)) {
+      output.push([
+        invoiceDate,
+        invoiceNo,
+        "Geyser Website",
+        "EUR",
+        "1",
+        product.itemName,
+        product.sku,
+        "",
+        line.quantity.toFixed(),
+        line.price.toFixed(2),
+        "Shopify Sales",
+      ]);
+    }
   }
 
   for (const bucket of VAT_BUCKET_ORDER) {
