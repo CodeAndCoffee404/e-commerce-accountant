@@ -144,14 +144,14 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
 
       const state = await availablePeriods(tenantId);
 
-      // One marketplace of ten. Legacy refuses this build, so the period must
-      // not be offered — and the card has to say which nine are absent rather
-      // than greying out unexplained.
+      // One marketplace of ten, and no VAT report. Legacy refuses this build,
+      // so the period must not be offered — and the card has to say which
+      // uploads are absent rather than greying out unexplained.
       expect(state.amazon_zoho_invoice.ready).toEqual([]);
       expect(state.amazon_zoho_invoice.blocked).toEqual([
         {
           period: PERIOD,
-          missing: ["ES", "IT", "FR", "UK", "SE", "PL", "NL", "IE", "BE"],
+          missing: ["Amazon VAT", "ES", "IT", "FR", "UK", "SE", "PL", "NL", "IE", "BE"],
           endsOn: null,
         },
       ]);

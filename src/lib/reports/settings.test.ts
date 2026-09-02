@@ -24,6 +24,10 @@ describe("report settings", () => {
       "shopify",
     ]);
     expect(requiredCountries(settings.amazon_zoho_invoice)).toEqual([...ZOHO_COUNTRIES]);
+    expect(requiredDatasets(zoho, settings.amazon_zoho_invoice)).toEqual([
+      "amazon_monthly",
+      "amazon_vat",
+    ]);
     expect(describeNeeds(offAmazon, settings.off_amazon_sales)).toBe(offAmazon.needs);
   });
 
@@ -61,6 +65,20 @@ describe("report settings", () => {
       ZOHO_COUNTRIES.filter((country) => country !== "UK"),
     );
     expect(describeNeeds(zoho, settings)).toContain("Optional and invoiced when present: UK");
+    // The VAT report is still demanded, so the card has to keep saying so.
+    expect(describeNeeds(zoho, settings)).toContain("Amazon VAT transaction report");
+  });
+
+  it("says when the VAT report has been made optional", () => {
+    const settings = normaliseSettings(zoho, {
+      enabled: true,
+      datasets: { amazon_vat: "optional" },
+    });
+
+    expect(requiredDatasets(zoho, settings)).toEqual(["amazon_monthly"]);
+    expect(describeNeeds(zoho, settings)).toContain(
+      "The Amazon VAT transaction report is optional",
+    );
   });
 
   it("only the invoice carries country settings", () => {

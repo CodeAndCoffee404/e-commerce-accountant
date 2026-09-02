@@ -9,6 +9,7 @@ import type { Period } from "@/lib/ingest/period";
 import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
 import { euroRateOn } from "@/lib/reference/fx";
 
+import { DATASET_NAMES } from "@/modules/channels/registry";
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
@@ -283,7 +284,8 @@ export async function runReport(input: {
 
       if (missing.length > 0) {
         throw new Error(
-          `Missing uploads for ${input.periodLabel}: ${missing.join(", ")}. ` +
+          `Missing uploads for ${input.periodLabel}: ` +
+            `${missing.map((dataset) => DATASET_NAMES[dataset]).join(", ")}. ` +
             "A report built from the channels that happen to be there understates the rest.",
         );
       }

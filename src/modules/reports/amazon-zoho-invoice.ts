@@ -254,17 +254,25 @@ export const amazonZohoInvoiceModule: ReportModule = {
   definition: {
     id: "amazon_zoho_invoice",
     label: "Amazon invoice for Zoho",
-    datasets: ["amazon_monthly"],
+    // The VAT transaction report joins the ten marketplace files: it is where
+    // the tax on these sales is stated, so an invoice issued for a month whose
+    // VAT report has not arrived is issued before its own VAT is known.
+    datasets: ["amazon_monthly", "amazon_vat"],
     // A quarter is refused: the invoice is dated the last day of the month and
     // numbered by month, so a quarter has no meaning here.
     granularity: ["month"],
-    // One dataset, but ten countries — the module checks them itself below.
-    requiresEveryDataset: false,
+    // Both files, every month. The ten marketplaces inside Amazon Monthly are
+    // a second question the module answers itself, below.
+    requiresEveryDataset: true,
     description: "Ten marketplaces aggregated into invoice lines for Zoho.",
-    needs: "Amazon Monthly for all ten marketplaces: ES, IT, FR, DE, UK, SE, PL, NL, IE, BE.",
+    needs:
+      "Amazon Monthly for all ten marketplaces — ES, IT, FR, DE, UK, SE, PL, NL, IE, BE — " +
+      "and the Amazon VAT transaction report for the same month.",
     why:
       "A missing marketplace does not make a smaller invoice. It makes one that leaves a " +
-      "country's sales out in silence, and nothing downstream would show it.",
+      "country's sales out in silence, and nothing downstream would show it. The VAT " +
+      "transaction report is where the tax on these sales is stated: without it the month " +
+      "is invoiced before its VAT is known.",
     // Driven by VAT rates and SKU mapping, both checked as reference data
     // rather than as channel rules.
     requiredRules: [],
