@@ -61,6 +61,18 @@ function vatRow(overrides: Partial<LedgerRow> = {}): LedgerRow {
   };
 }
 
+function oss(marketplace: string, arrival: string, amount: string): LedgerRow {
+  return vatRow({
+    raw: {
+      MARKETPLACE: marketplace,
+      TAX_REPORTING_SCHEME: "UNION-OSS",
+      SALE_ARRIVAL_COUNTRY: arrival,
+      TRANSACTION_CURRENCY_CODE: "EUR",
+      TOTAL_ACTIVITY_VALUE_VAT_AMT: amount,
+    },
+  });
+}
+
 function generate(rows: LedgerRow[]) {
   return generateZohoInvoice(rows, { period: PERIOD, rules: RULES, fx: {} });
 }
@@ -77,73 +89,168 @@ const HEADER = {
   rate: ZOHO_HEADERS.indexOf("Exchange Rate"),
 };
 
+function vatLinesOf(result: ReturnType<typeof generate>, country: string) {
+  const number = invoiceNumber(country, PERIOD.end);
+
+  return result.sheets[0].rows.filter(
+    (row) => row[HEADER.invoiceNumber] === number && row[HEADER.account] !== `Amazon Sales ${country}`,
+  );
+}
+
 describe("VAT lines on the Amazon invoice for Zoho", () => {
-  it("adds a VAT Regular and VAT OSS line for the marketplace, summed and priced from the VAT report", () => {
+  it("bills REGULAR on the invoice of the country the goods arrived in", () => {
     const rows = [
-      saleRow(),
-      vatRow({ raw: { MARKETPLACE: "amazon.de", TAX_REPORTING_SCHEME: "REGULAR", TOTAL_ACTIVITY_VALUE_VAT_AMT: "1.90" } }),
-      vatRow({ raw: { MARKETPLACE: "amazon.de", TAX_REPORTING_SCHEME: "REGULAR", TOTAL_ACTIVITY_VALUE_VAT_AMT: "0.10" } }),
-      vatRow({ raw: { MARKETPLACE: "amazon.de", TAX_REPORTING_SCHEME: "UNION-OSS", TOTAL_ACTIVITY_VALUE_VAT_AMT: "3.33" } }),
-      // A different marketplace and a non-matching scheme must not leak in.
-      vatRow({ raw: { MARKETPLACE: "amazon.fr", TAX_REPORTING_SCHEME: "REGULAR", TOTAL_ACTIVITY_VALUE_VAT_AMT: "99" } }),
-      vatRow({ raw: { MARKETPLACE: "amazon.de", TAX_REPORTING_SCHEME: "UK_VOEC-IMPORT", TOTAL_ACTIVITY_VALUE_VAT_AMT: "50" } }),
+      saleRow({ countryCode: "DE" }),
+      saleRow({ countryCode: "IT", transactionType: "Ordine", sku: "SKU-2" }),
+      // Sold on amazon.de, delivered to Italy: the tax is Italy's, and it is
+      // the Italian invoice that has to carry it.
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.de",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "IT",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "9.83",
+        },
+      }),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.de",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "DE",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "1.90",
+        },
+      }),
     ];
 
     const result = generate(rows);
-    const number = invoiceNumber("DE", PERIOD.end);
-    const vatLines = result.sheets[0].rows.filter(
-      (row) => row[HEADER.invoiceNumber] === number && row[HEADER.account] !== "Amazon Sales DE",
-    );
 
-    expect(vatLines).toHaveLength(2);
-
-    const regular = vatLines.find((row) => row[HEADER.itemDesc] === "VAT Regular")!;
-    const oss = vatLines.find((row) => row[HEADER.itemDesc] === "VAT OSS")!;
-
-    expect(regular[HEADER.itemPrice]).toBe("2.00");
-    expect(regular[HEADER.account]).toBe("VAT DE Regular");
-    expect(regular[HEADER.quantity]).toBe("1");
-
-    expect(oss[HEADER.itemPrice]).toBe("3.33");
-    expect(oss[HEADER.account]).toBe("VAT DE OSS");
-
-    // Duplicated verbatim from the invoice they belong to.
-    const invoiceLine = result.sheets[0].rows.find((row) => row[HEADER.account] === "Amazon Sales DE")!;
-
-    for (const field of [HEADER.invoiceDate, HEADER.customerName, HEADER.currency, HEADER.rate] as const) {
-      expect(regular[field]).toBe(invoiceLine[field]);
-      expect(oss[field]).toBe(invoiceLine[field]);
-    }
+    expect(vatLinesOf(result, "IT").map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]])).toEqual([
+      ["VAT IT Regular", "9.83"],
+    ]);
+    expect(vatLinesOf(result, "DE").map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]])).toEqual([
+      ["VAT DE Regular", "1.90"],
+    ]);
   });
 
-  it("still writes both VAT lines, priced at zero, when the VAT report has nothing for that marketplace", () => {
-    const result = generate([saleRow()]);
-    const number = invoiceNumber("DE", PERIOD.end);
+  it("splits OSS by arrival country, on the marketplace's own invoice", () => {
+    const rows = [
+      saleRow({ countryCode: "FR", transactionType: "Commande" }),
+      oss("amazon.fr", "FR", "4488.71"),
+      // Spain is broken out by name; Belgium and Malta are not, so they pool.
+      oss("amazon.fr", "ES", "12.00"),
+      oss("amazon.fr", "BE", "55.67"),
+      oss("amazon.fr", "MT", "8.73"),
+    ];
 
-    const vatLines = result.sheets[0].rows.filter(
-      (row) => row[HEADER.invoiceNumber] === number && row[HEADER.account] !== "Amazon Sales DE",
-    );
+    const lines = vatLinesOf(generate(rows), "FR");
 
-    expect(vatLines.map((row) => row[HEADER.itemDesc])).toEqual(["VAT Regular", "VAT OSS"]);
-    expect(vatLines.every((row) => row[HEADER.itemPrice] === "0.00")).toBe(true);
-  });
-
-  it("gives every invoiced marketplace exactly two VAT lines", () => {
-    const result = generate([
-      saleRow({ countryCode: "DE" }),
-      saleRow({ countryCode: "FR", transactionType: "Commande", sku: "SKU-2" }),
+    expect(lines.map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]])).toEqual([
+      ["VAT OSS ES", "12.00"],
+      ["VAT OSS FR", "4488.71"],
+      ["VAT OSS Other countries", "64.40"],
     ]);
 
-    const byInvoice = new Map<string, number>();
+    // The account carries the tax's own country, not the invoice's, so one
+    // country's OSS lands on one Zoho account across every marketplace.
+    expect(lines[0][HEADER.account]).toBe("VAT OSS ES");
+  });
 
-    for (const row of result.sheets[0].rows) {
-      if (row[HEADER.account] === "Amazon Sales DE" || row[HEADER.account] === "Amazon Sales FR") continue;
+  it("counts Monaco as France, under either scheme", () => {
+    const rows = [
+      saleRow({ countryCode: "FR", transactionType: "Commande" }),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.fr",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "MC",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "9.97",
+        },
+      }),
+      oss("amazon.fr", "MC", "4.98"),
+      oss("amazon.fr", "FR", "1.00"),
+    ];
 
-      const key = String(row[HEADER.invoiceNumber]);
+    expect(
+      vatLinesOf(generate(rows), "FR").map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]]),
+    ).toEqual([
+      ["VAT FR Regular", "9.97"],
+      ["VAT OSS FR", "5.98"],
+    ]);
+  });
 
-      byInvoice.set(key, (byInvoice.get(key) ?? 0) + 1);
-    }
+  it("prints no VAT line at all where there is no VAT", () => {
+    const result = generate([saleRow()]);
 
-    expect([...byInvoice.values()]).toEqual([2, 2]);
+    expect(vatLinesOf(result, "DE")).toHaveLength(0);
+  });
+
+  it("leaves out the schemes that are not invoiced here", () => {
+    const rows = [
+      saleRow(),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.de",
+          TAX_REPORTING_SCHEME: "UK_VOEC-IMPORT",
+          SALE_ARRIVAL_COUNTRY: "GB",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "50",
+        },
+      }),
+    ];
+
+    expect(vatLinesOf(generate(rows), "DE")).toHaveLength(0);
+  });
+
+  it("converts a foreign currency at the invoice's own ECB rate, and says so", () => {
+    const rows = [
+      saleRow({ countryCode: "FR", transactionType: "Commande" }),
+      // Sold on amazon.se in kronor, delivered to France: the French invoice
+      // is in euro, and adding kronor to it unconverted would be wrong by an
+      // order of magnitude.
+      vatRow({
+        currency: "SEK",
+        raw: {
+          MARKETPLACE: "amazon.se",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "FR",
+          TRANSACTION_CURRENCY_CODE: "SEK",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "100",
+        },
+      }),
+    ];
+
+    const result = generateZohoInvoice(rows, {
+      period: PERIOD,
+      rules: RULES,
+      fx: { SEK: { rate: "0.0894", rateDate: PERIOD.end, source: "ecb" } },
+    });
+
+    expect(vatLinesOf(result, "FR").map((row) => row[HEADER.itemPrice])).toEqual(["8.94"]);
+    expect(result.warnings.some((warning) => warning.includes("converted to EUR"))).toBe(true);
+  });
+
+  it("keeps VAT owed to a country with no invoice, on the invoice that sold it", () => {
+    const rows = [
+      saleRow({ countryCode: "DE" }),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.de",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "AT",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "87.36",
+        },
+      }),
+    ];
+
+    const result = generate(rows);
+
+    expect(vatLinesOf(result, "DE").map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]])).toEqual([
+      ["VAT AT Regular", "87.36"],
+    ]);
+    expect(result.warnings.some((warning) => warning.includes("no invoice of its own"))).toBe(true);
   });
 });
