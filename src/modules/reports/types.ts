@@ -51,6 +51,14 @@ export type ReportDefinition = {
    */
   requiredRules: readonly { channel: string; key: string }[];
   /**
+   * Months of this report's own datasets to load from before the period, and
+   * hand to the generator as `context.history`. Absent means a report sees its
+   * own period and nothing else, which is the normal case: a report that reads
+   * further back has to say so, because it stops being a pure function of the
+   * month it names.
+   */
+  historyMonths?: number;
+  /**
    * True for reports that never go into a filing. They are built on demand
    * from Reports but stay out of the month-close checklist: closing the month
    * means the official reports are built, not these.

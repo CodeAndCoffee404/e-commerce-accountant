@@ -1,6 +1,6 @@
 import { put } from "@vercel/blob";
 import Decimal from "decimal.js";
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
@@ -13,10 +13,17 @@ import { DATASET_NAMES } from "@/modules/channels/registry";
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
+import type { ReportDefinition } from "@/modules/reports/types";
 import { loadReportSettings } from "./queries";
 import { channelRule } from "./rules";
 import { preparedGranularities, requiredDatasets } from "./settings";
-import type { FxSnapshot, GeneratorResult, LedgerRow, RulesSnapshot } from "./types";
+import type {
+  FxSnapshot,
+  GeneratorResult,
+  LedgerRow,
+  ReportContext,
+  RulesSnapshot,
+} from "./types";
 import { summariseWarnings } from "./warnings";
 import { buildWorkbook, reportFilename } from "./workbook";
 
@@ -352,6 +359,9 @@ export async function runReport(input: {
       rules,
       fx,
       variant: variant ? { key: variant.key, value: variant.value } : undefined,
+      history: definition.historyMonths
+        ? await loadHistory(input.tenantId, definition.datasets, period, definition.historyMonths)
+        : undefined,
     });
 
     await storeArtifacts(run.id, input.tenantId, label, period.label, result);
@@ -476,12 +486,7 @@ async function storeArtifacts(
 function build(
   reportType: ReportTypeId,
   rows: LedgerRow[],
-  context: {
-    period: Period;
-    rules: RulesSnapshot;
-    fx: FxSnapshot;
-    variant?: { key: string; value: unknown };
-  },
+  context: ReportContext,
 ): GeneratorResult {
   // The registry, not a switch: the core does not know the modules' names.
   return reportModule(reportType).generate(rows, context);
@@ -510,7 +515,13 @@ async function loadLedger(tenantId: string, fileIds: string[]): Promise<LedgerRo
     )
     .orderBy(schema.transactions.sourceRowNumber);
 
-  return rows.map((row) => ({
+  return rows.map(toLedgerRow);
+}
+
+type TransactionRow = typeof schema.transactions.$inferSelect;
+
+function toLedgerRow(row: TransactionRow): LedgerRow {
+  return {
     id: row.id,
     dataset: row.dataset,
     channel: row.channel,
@@ -526,7 +537,47 @@ async function loadLedger(tenantId: string, fileIds: string[]): Promise<LedgerRo
     sourceFileId: row.sourceFileId,
     sourceRowNumber: row.sourceRowNumber,
     raw: (row.raw ?? {}) as Record<string, string>,
-  }));
+  };
+}
+
+/** The first day of the month `months` before `date`, as `YYYY-MM-DD`. */
+function monthsBefore(date: string, months: number): string {
+  const [year, month] = date.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 - months, 1));
+
+  return shifted.toISOString().slice(0, 10);
+}
+
+/**
+ * Rows of this report's datasets from before the period, for a module that
+ * asked for them.
+ *
+ * Selected by the date on the row rather than by file, unlike the ledger
+ * itself: the question these answer is "what did this SKU sell for back then",
+ * and a file's period label has no bearing on it. Superseded rows stay out,
+ * same as the ledger.
+ */
+async function loadHistory(
+  tenantId: string,
+  datasets: ReportDefinition["datasets"],
+  period: Period,
+  months: number,
+): Promise<LedgerRow[]> {
+  const rows = await getDb()
+    .select()
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.tenantId, tenantId),
+        inArray(schema.transactions.dataset, [...datasets]),
+        eq(schema.transactions.isCurrent, true),
+        gte(schema.transactions.occurredOn, monthsBefore(period.start, months)),
+        lt(schema.transactions.occurredOn, period.start),
+      ),
+    )
+    .orderBy(schema.transactions.occurredOn);
+
+  return rows.map(toLedgerRow);
 }
 
 async function loadRules(tenantId: string): Promise<RulesSnapshot> {

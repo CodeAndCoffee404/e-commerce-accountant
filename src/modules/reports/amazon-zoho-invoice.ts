@@ -203,10 +203,11 @@ function inInvoiceCurrency(
     const to = target === "EUR" ? new Decimal(1) : rateOf(context, target);
 
     if (!from || !to) {
-      warnings.push(
-        `${note}: ${amount.toFixed(2)} ${currency} left out — no rate as at ${context.period.end}`,
+      throw new Error(
+        `${note}: ${amount.toFixed(2)} ${currency} cannot be converted to ${target} — no rate ` +
+          `as at ${context.period.end}. Leaving it out would understate the invoice's VAT ` +
+          `silently, so the build is refused. Add the rate under Settings -> Exchange rates.`,
       );
-      continue;
     }
 
     warnings.push(
@@ -322,6 +323,33 @@ export function generateZohoInvoice(
   const output: (string | number | null)[][] = [];
   const order = new Map<string, number>(ZOHO_COUNTRIES.map((country, index) => [country, index]));
 
+  /**
+   * The rate to stamp on an invoice, or a refusal.
+   *
+   * A blank exchange rate used to leave the sheet as a warning and go to Zoho
+   * anyway, where a Swedish invoice priced in kronor at no rate is not a
+   * smaller error than a missing one — it is a wrong figure that looks like a
+   * right one. The Allegro invoice has always refused on this; so does this
+   * one now.
+   */
+  const rateFor = (country: string): string => {
+    const currency = currencyOf(country);
+
+    if (currency === "EUR") return "1";
+
+    const rate = context.fx[currency];
+
+    if (!rate) {
+      throw new Error(
+        `No ${currency} rate as at ${context.period.end}, and the ${country} invoice is ` +
+          `priced in it. The invoice would carry an amount with no rate to read it by, so it ` +
+          `is refused instead. Add the rate under Settings -> Exchange rates and build again.`,
+      );
+    }
+
+    return rate.rate;
+  };
+
   const sorted = [...groups.values()].sort((a, b) => {
     const byCountry = (order.get(a.country) ?? 99) - (order.get(b.country) ?? 99);
 
@@ -330,12 +358,7 @@ export function generateZohoInvoice(
 
   for (const group of sorted) {
     const currency = currencyOf(group.country);
-    const rate = context.fx[currency];
-
-    if (!rate && currency !== "EUR") {
-      warnings.push(`No ${currency} rate as at ${context.period.end} — invoice ${group.country}`);
-    }
-
+    const rate = rateFor(group.country);
     const decision = decideSku(context.rules, "amazon", group.sku);
 
     output.push([
@@ -344,7 +367,7 @@ export function generateZohoInvoice(
       invoiceNumber(group.country, context.period.end),
       `Amazon ${group.country}`,
       currency,
-      currency === "EUR" ? "1" : (rate?.rate ?? ""),
+      rate,
       decision.kind === "map" ? decision.itemName : "",
       decision.kind === "map" ? decision.targetSku : group.sku,
       "",
@@ -365,15 +388,12 @@ export function generateZohoInvoice(
   const placed = new Set<string>();
 
   const vatLine = (country: string, label: string, amount: Decimal) => {
-    const currency = currencyOf(country);
-    const rate = context.fx[currency];
-
     output.push([
       `${context.period.end} 00:00:00`,
       invoiceNumber(country, context.period.end),
       `Amazon ${country}`,
-      currency,
-      currency === "EUR" ? "1" : (rate?.rate ?? ""),
+      currencyOf(country),
+      rateFor(country),
       "",
       "",
       label,
