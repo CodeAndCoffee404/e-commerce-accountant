@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 
 import { parseAllegroMoney } from "@/modules/channels/allegro";
 
+import { exactLines } from "@/lib/reports/invoice-lines";
 import { allegroCurrencyRule, decideSku, splitGross, vatRateOn } from "@/lib/reports/rules";
 import type {
   GeneratorResult,
@@ -473,25 +474,29 @@ export function generateAllegroZohoInvoice(
         sku: decision.kind === "map" ? decision.targetSku : rawSku,
         itemName: decision.kind === "map" ? decision.itemName : "",
         qty: agg.qty,
-        unitPrice: agg.netEur.dividedBy(agg.qty).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+        netEur: agg.netEur,
       };
     })
     .sort((a, b) => a.sku.localeCompare(b.sku));
 
   for (const product of productRows) {
-    output.push([
-      invoiceDate,
-      invoiceNo,
-      "Allegro",
-      "EUR",
-      "1",
-      product.itemName,
-      product.sku,
-      "",
-      product.qty.toFixed(),
-      product.unitPrice.toFixed(2),
-      "Allegro Sales",
-    ]);
+    // One line, or two a cent apart where no single cent price multiplies back
+    // to what the SKU actually came to. See `exactLines`.
+    for (const line of exactLines(product.netEur, product.qty)) {
+      output.push([
+        invoiceDate,
+        invoiceNo,
+        "Allegro",
+        "EUR",
+        "1",
+        product.itemName,
+        product.sku,
+        "",
+        line.quantity.toFixed(),
+        line.price.toFixed(2),
+        "Allegro Sales",
+      ]);
+    }
   }
 
   for (const scheme of VAT_SCHEME_ORDER) {

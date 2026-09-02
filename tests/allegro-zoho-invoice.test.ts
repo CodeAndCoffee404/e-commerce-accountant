@@ -200,13 +200,18 @@ describe("generateAllegroZohoInvoice", () => {
       fx: { PLN: { rate: "1", rateDate: "2026-01-31", source: "ecb" } },
     });
 
-    const sku = new Map(result.sheets[0].rows.map((r) => [r[6], r]));
+    const products = result.sheets[0].rows.filter((r) => !String(r[7]).startsWith("VAT"));
 
-    // A: (100.00 + 25.67) gross across two lines, each split at 23% VAT and summed net; same for B.
-    expect(sku.get("ZOHO-A")?.[8]).toBe("2");
-    expect(sku.get("ZOHO-A")?.[9]).toBe("51.09");
-    expect(sku.get("ZOHO-B")?.[8]).toBe("2");
-    expect(sku.get("ZOHO-B")?.[9]).toBe("102.17");
+    // A: (100.00 + 25.67) gross, net of 23% VAT, is 102.17 — and no cent price
+    // times two units is 102.17, so A comes as 51.08 + 51.09. Same for B, whose
+    // 251.33 gross nets to 204.33: 102.16 + 102.17. Two lines a cent apart is
+    // what it costs for the invoice to add up to the ledger exactly.
+    expect(products.map((r) => [r[6], r[8], r[9]])).toEqual([
+      ["ZOHO-A", "1", "51.08"],
+      ["ZOHO-A", "1", "51.09"],
+      ["ZOHO-B", "1", "102.16"],
+      ["ZOHO-B", "1", "102.17"],
+    ]);
 
     const vatRow = result.sheets[0].rows.find((r) => r[7] === "VAT PL Regular");
 
@@ -274,15 +279,20 @@ describe("allegroZohoInvoiceModule.unmappedCurrencies", () => {
     ];
 
     const result = generateAllegroZohoInvoice(rows, { ...context, history });
-    const bySku = new Map(
-      result.sheets[0].rows.filter((r) => !String(r[7]).startsWith("VAT")).map((r) => [r[6], r]),
-    );
+    const products = result.sheets[0].rows.filter((r) => !String(r[7]).startsWith("VAT"));
 
     // The 500 order splits 400:100 on December's price, so the filter carries
     // 400 zł gross and the cartridge 200 across its two units — net of 23% VAT
     // and at 0.25 EUR/PLN, 81.30 for one and 20.33 each for two.
-    expect(bySku.get("ZOHO-A")?.slice(8, 10)).toEqual(["1", "81.30"]);
-    expect(bySku.get("ZOHO-B")?.slice(8, 10)).toEqual(["2", "20.33"]);
+    // The 500 order splits 400:100 on December's price, so the filter carries
+    // 400 zł gross and the cartridge 200 across its two units — net of 23% VAT
+    // and at 0.25 EUR/PLN, 81.30 for the one and 40.65 for the two. No cent
+    // price states 40.65 over two units, so the cartridge comes as a pair.
+    expect(products.map((r) => [r[6], r[8], r[9]])).toEqual([
+      ["ZOHO-A", "1", "81.30"],
+      ["ZOHO-B", "1", "20.32"],
+      ["ZOHO-B", "1", "20.33"],
+    ]);
     expect(result.warnings.some((w) => w.includes("111") && w.includes("2025-12"))).toBe(true);
   });
 
