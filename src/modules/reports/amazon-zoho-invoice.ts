@@ -80,9 +80,20 @@ const VAT_LINES = [
  * Read from `raw`, not from normalised ledger fields — the report's own
  * MARKETPLACE and TAX_REPORTING_SCHEME columns are what the spec filters by,
  * and the amount column is theirs too, so nothing here has to be re-derived.
+ *
+ * The currencies the sum was made of come back with it. Every marketplace
+ * states its VAT in its own currency today, which is what makes summing the
+ * column and stamping the invoice's currency on the total correct; if that
+ * ever stops being true, the caller says so rather than quietly adding
+ * pounds to euros.
  */
-function vatAmount(rows: readonly LedgerRow[], marketplace: string, scheme: string): Decimal {
+function vatAmount(
+  rows: readonly LedgerRow[],
+  marketplace: string,
+  scheme: string,
+): { total: Decimal; currencies: Set<string> } {
   let total = new Decimal(0);
+  const currencies = new Set<string>();
 
   for (const row of rows) {
     if (row.dataset !== "amazon_vat") continue;
@@ -94,10 +105,16 @@ function vatAmount(rows: readonly LedgerRow[], marketplace: string, scheme: stri
       column: "TOTAL_ACTIVITY_VALUE_VAT_AMT",
     });
 
-    if (value) total = total.plus(value);
+    if (!value) continue;
+
+    total = total.plus(value);
+
+    const currency = row.raw.TRANSACTION_CURRENCY_CODE?.trim();
+
+    if (currency) currencies.add(currency);
   }
 
-  return total;
+  return { total, currencies };
 }
 
 /** `INV-Amz DE-07.26` — the number the client's accounting expects. */
@@ -246,7 +263,17 @@ export function generateZohoInvoice(
     const marketplace = marketplaceOf.get(country);
 
     for (const vatLine of VAT_LINES) {
-      const amount = marketplace ? vatAmount(rows, marketplace, vatLine.scheme) : new Decimal(0);
+      const { total: amount, currencies } = marketplace
+        ? vatAmount(rows, marketplace, vatLine.scheme)
+        : { total: new Decimal(0), currencies: new Set<string>() };
+
+      for (const found of currencies) {
+        if (found !== currency) {
+          warnings.push(
+            `Amazon VAT ${country} ${vatLine.desc}: rows stated in ${found}, invoiced in ${currency}`,
+          );
+        }
+      }
 
       output.push([
         `${context.period.end} 00:00:00`,
