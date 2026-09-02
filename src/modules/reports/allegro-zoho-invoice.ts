@@ -431,9 +431,14 @@ export function generateAllegroZohoInvoice(
       "Allegro",
       "EUR",
       "1",
+      // Item Name and SKU stay empty, and the name goes in Item Desc: Zoho
+      // reads Item Name as a lookup into the item list, and there is no
+      // product called "VAT PL Regular" — the import fails on the whole file
+      // rather than on the line. The Amazon invoice has always written its
+      // VAT lines this way.
+      "",
+      "",
       label,
-      "",
-      "",
       "1",
       amount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
       label,

@@ -265,23 +265,23 @@ describe("generateShopifyZohoInvoice", () => {
 
   it("buckets VAT by market: Spain domestic, DE/FR/IT/PL each their own OSS line, the rest pooled", () => {
     const result = generateShopifyZohoInvoice(januaryRows(), context);
-    const vatLines = result.sheets[0].rows.filter((r) => String(r[5]).startsWith("VAT"));
+    const vatLines = result.sheets[0].rows.filter((r) => String(r[7]).startsWith("VAT"));
 
     expect(vatLines).toEqual([
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-        "VAT ES Regular", "", "", "1", "12.65", "VAT ES Regular",
+        "", "", "VAT ES Regular", "1", "12.65", "VAT ES Regular",
       ],
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-        "VAT OSS FR", "", "", "1", "53.23", "VAT OSS FR",
+        "", "", "VAT OSS FR", "1", "53.23", "VAT OSS FR",
       ],
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
         // Austria (32.80) and Slovenia (13.15) are neither Spain nor a
         // breakout market — both pool here, not into FR/DE as the legacy
         // manual invoice once did.
-        "VAT OSS Other countries", "", "", "1", "45.95", "VAT OSS Other countries",
+        "", "", "VAT OSS Other countries", "1", "45.95", "VAT OSS Other countries",
       ],
     ]);
 
@@ -304,12 +304,12 @@ describe("generateShopifyZohoInvoice", () => {
       }),
     ];
     const result = generateShopifyZohoInvoice(rows, context);
-    const vatLines = result.sheets[0].rows.filter((r) => String(r[5]).startsWith("VAT"));
+    const vatLines = result.sheets[0].rows.filter((r) => String(r[7]).startsWith("VAT"));
 
     expect(vatLines).toEqual([
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-        "VAT ES Regular", "", "", "1", "17.36", "VAT ES Regular",
+        "", "", "VAT ES Regular", "1", "17.36", "VAT ES Regular",
       ],
     ]);
   });
@@ -382,7 +382,7 @@ describe("generateShopifyZohoInvoice", () => {
     const result = generateShopifyZohoInvoice(rows, { ...context, rules: ignoredRules });
 
     expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales")).toEqual([]);
-    const vatLine = result.sheets[0].rows.find((r) => r[5] === "VAT OSS FR");
+    const vatLine = result.sheets[0].rows.find((r) => r[7] === "VAT OSS FR");
     expect(vatLine?.[9]).toBe("16.67");
   });
 

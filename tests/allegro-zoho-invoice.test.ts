@@ -113,9 +113,9 @@ describe("generateAllegroZohoInvoice", () => {
         "Allegro",
         "EUR",
         "1",
+        "",
+        "",
         "VAT PL Regular",
-        "",
-        "",
         "1",
         "40.25",
         "VAT PL Regular",
@@ -126,9 +126,9 @@ describe("generateAllegroZohoInvoice", () => {
         "Allegro",
         "EUR",
         "1",
+        "",
+        "",
         "VAT OSS Other countries",
-        "",
-        "",
         "1",
         "2.52",
         "VAT OSS Other countries",
@@ -143,10 +143,10 @@ describe("generateAllegroZohoInvoice", () => {
     ];
 
     const result = generateAllegroZohoInvoice(rows, context);
-    const vatLines = result.sheets[0].rows.filter((r) => String(r[5]).startsWith("VAT"));
+    const vatLines = result.sheets[0].rows.filter((r) => String(r[7]).startsWith("VAT"));
 
     expect(vatLines).toEqual([
-      ["2026-01-31 00:00:00", "INV-Allegro-01.26", "Allegro", "EUR", "1", "VAT PL Regular", "", "", "1", "5.75", "VAT PL Regular"],
+      ["2026-01-31 00:00:00", "INV-Allegro-01.26", "Allegro", "EUR", "1", "", "", "VAT PL Regular", "1", "5.75", "VAT PL Regular"],
     ]);
   });
 
@@ -208,7 +208,7 @@ describe("generateAllegroZohoInvoice", () => {
     expect(sku.get("ZOHO-B")?.[8]).toBe("2");
     expect(sku.get("ZOHO-B")?.[9]).toBe("102.17");
 
-    const vatRow = result.sheets[0].rows.find((r) => r[5] === "VAT PL Regular");
+    const vatRow = result.sheets[0].rows.find((r) => r[7] === "VAT PL Regular");
 
     expect(vatRow?.[9]).toBe("70.50");
   });
