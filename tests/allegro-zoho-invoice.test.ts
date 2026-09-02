@@ -255,4 +255,50 @@ describe("allegroZohoInvoiceModule.unmappedCurrencies", () => {
 
     expect(allegroZohoInvoiceModule.unmappedCurrencies!(rows, rules)).toEqual([]);
   });
+
+  it("prices a SKU from an earlier month when this month never sold it alone", () => {
+    // Ivan buys a filter and a cartridge together, and the filter never sold on
+    // its own in January. It used to go to Zoho at 0.00 while its money was
+    // billed under the cartridge; December's price answers instead.
+    const history: LedgerRow[] = [
+      row({
+        occurredOn: "2025-12-10",
+        gross: new Decimal("400.00"),
+        raw: { oferta: "111;Filter;1 szt.", dostawa: "0.00 zł", kwota: "400.00 zł" },
+      }),
+    ];
+
+    const rows: LedgerRow[] = [
+      row({ gross: new Decimal("100.00"), raw: { oferta: "222;Cartridge;1 szt.", dostawa: "0.00 zł", kwota: "100.00 zł" } }),
+      row({ gross: new Decimal("500.00"), raw: { oferta: "111;Filter;1 szt.|222;Cartridge;1 szt.", dostawa: "0.00 zł", kwota: "500.00 zł" } }),
+    ];
+
+    const result = generateAllegroZohoInvoice(rows, { ...context, history });
+    const bySku = new Map(
+      result.sheets[0].rows.filter((r) => !String(r[7]).startsWith("VAT")).map((r) => [r[6], r]),
+    );
+
+    // The 500 order splits 400:100 on December's price, so the filter carries
+    // 400 zł gross and the cartridge 200 across its two units — net of 23% VAT
+    // and at 0.25 EUR/PLN, 81.30 for one and 20.33 each for two.
+    expect(bySku.get("ZOHO-A")?.slice(8, 10)).toEqual(["1", "81.30"]);
+    expect(bySku.get("ZOHO-B")?.slice(8, 10)).toEqual(["2", "20.33"]);
+    expect(result.warnings.some((w) => w.includes("111") && w.includes("2025-12"))).toBe(true);
+  });
+
+  it("splits by quantity, never by zero, when no month knows a price for one of the SKUs", () => {
+    const rows: LedgerRow[] = [
+      row({ gross: new Decimal("100.00"), raw: { oferta: "222;Cartridge;1 szt.", dostawa: "0.00 zł", kwota: "100.00 zł" } }),
+      row({ gross: new Decimal("500.00"), raw: { oferta: "111;Filter;1 szt.|222;Cartridge;1 szt.", dostawa: "0.00 zł", kwota: "500.00 zł" } }),
+    ];
+
+    const result = generateAllegroZohoInvoice(rows, context);
+    const products = result.sheets[0].rows.filter((r) => !String(r[7]).startsWith("VAT"));
+
+    // Whatever the split, no line may be priced at nothing: a zero line in Zoho
+    // is a product billed for free and its money charged to another SKU.
+    expect(products.length).toBeGreaterThan(1);
+    for (const line of products) expect(Number(line[9])).toBeGreaterThan(0);
+  });
+
 });

@@ -58,6 +58,13 @@ export type ReportContext = {
   fx: FxSnapshot;
   /** For reports built per tenant-defined variant: the stored definition. */
   variant?: { key: string; value: unknown };
+  /**
+   * Rows of this report's own datasets from before the period, when the module
+   * asked for them (`historyMonths`). Never invoiced — they are there to answer
+   * a question this period cannot, such as what a SKU normally sells for when
+   * this month never sold one on its own.
+   */
+  history?: readonly LedgerRow[];
 };
 
 export type ReportSheet = {

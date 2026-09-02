@@ -207,6 +207,44 @@ describe("VAT lines on the Amazon invoice for Zoho", () => {
     ]);
   });
 
+  it("refuses the build when the invoice's own currency has no rate", () => {
+    // A Swedish invoice priced in kronor with a blank Exchange Rate is not a
+    // smaller error than a missing one: it is a wrong figure that reads as a
+    // right one, and Zoho would take it. The Allegro invoice has always
+    // refused on this, and so does this one.
+    const rows = [
+      saleRow({ countryCode: "SE", transactionType: "Order", currency: "SEK" }),
+    ];
+
+    expect(() => generate(rows)).toThrow(/No SEK rate as at 2026-06-30/);
+  });
+
+  it("refuses rather than drop VAT it cannot convert into the invoice's currency", () => {
+    const rows = [
+      saleRow({ countryCode: "PL", transactionType: "Zamówienie", currency: "PLN" }),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.pl",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "PL",
+          // Stated in kronor on a złoty invoice — the one case that needs a
+          // rate the invoice itself does not.
+          TRANSACTION_CURRENCY_CODE: "SEK",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "5.00",
+        },
+      }),
+    ];
+
+    expect(() =>
+      generateZohoInvoice(rows, {
+        period: PERIOD,
+        rules: RULES,
+        // A rate for the invoice itself, none for the kronor inside it.
+        fx: { PLN: { rate: "0.23", rateDate: PERIOD.end, source: "ecb" } },
+      }),
+    ).toThrow(/cannot be converted/);
+  });
+
   it("prints no VAT line at all where there is no VAT", () => {
     const result = generate([saleRow()]);
 

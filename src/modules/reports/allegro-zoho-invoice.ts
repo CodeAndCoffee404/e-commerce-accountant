@@ -182,8 +182,10 @@ function parseOrders(
   return orders;
 }
 
-/** Splits every order into one line per item, in its own native currency. */
-function buildOrderLines(orders: readonly Order[]): OrderLine[] {
+/** Single-item orders, as `(sku|currency) -> the prices they were sold at`. */
+function singleItemPrices(
+  orders: readonly Order[],
+): Map<string, { price: Decimal; date: string }[]> {
   const candidates = new Map<string, { price: Decimal; date: string }[]>();
 
   for (const order of orders) {
@@ -202,12 +204,76 @@ function buildOrderLines(orders: readonly Order[]): OrderLine[] {
     else candidates.set(key, [{ price, date: order.occurredOn }]);
   }
 
+  return candidates;
+}
+
+/**
+ * Splits every order into one line per item, in its own native currency.
+ *
+ * A SKU this month never sold on its own has no reference price of its own,
+ * and that used to put it on the invoice at zero while its money went to
+ * whatever else was in the order. Earlier months answer the question instead:
+ * the nearest one that sold it alone lends its price, and the invoice says
+ * which month it borrowed from.
+ */
+function buildOrderLines(
+  orders: readonly Order[],
+  history: readonly Order[] = [],
+  warn?: (message: string) => void,
+): OrderLine[] {
   const listPrice = new Map<string, Decimal>();
 
-  for (const [key, group] of candidates) {
+  for (const [key, group] of singleItemPrices(orders)) {
     const picked = pickListPrice(group);
 
     if (picked) listPrice.set(key, picked);
+  }
+
+  // Earlier months, newest first, each month judged on its own: a price is the
+  // mode of that month, not of everything before this one, so a long-ago
+  // repricing cannot outvote what the SKU last actually sold for.
+  const byMonth = new Map<string, Order[]>();
+
+  for (const order of history) {
+    const month = order.occurredOn.slice(0, 7);
+    const list = byMonth.get(month);
+
+    if (list) list.push(order);
+    else byMonth.set(month, [order]);
+  }
+
+  const months = [...byMonth.keys()].sort().reverse();
+
+  const borrow = (key: string): Decimal | null => {
+    for (const month of months) {
+      const group = singleItemPrices(byMonth.get(month) ?? []).get(key);
+      const picked = group ? pickListPrice(group) : null;
+
+      if (picked) {
+        warn?.(
+          `Allegro invoice: ${key.split("|")[0]} never sold on its own this month — ` +
+            `priced from ${month}, where it did`,
+        );
+
+        return picked;
+      }
+    }
+
+    return null;
+  };
+
+  for (const order of orders) {
+    if (order.items.length < 2) continue;
+
+    for (const item of order.items) {
+      const key = `${item.sku}|${order.currency}`;
+
+      if (listPrice.has(key)) continue;
+
+      const borrowed = borrow(key);
+
+      if (borrowed) listPrice.set(key, borrowed);
+    }
   }
 
   const lines: OrderLine[] = [];
@@ -232,6 +298,15 @@ function buildOrderLines(orders: readonly Order[]): OrderLine[] {
     const totalBase = bases.reduce((sum, base) => sum.plus(base), new Decimal(0));
     const totalQty = order.items.reduce((sum, item) => sum + item.qty, 0);
 
+    // One item without a price would otherwise be allocated nothing while the
+    // rest of the order absorbed its money — a zero-priced line in Zoho and a
+    // neighbouring SKU billed for goods that are not its own. With any price
+    // missing, the whole order splits by quantity instead: an assumption, but
+    // one that never invents a zero.
+    const byQuantity =
+      totalBase.isZero() ||
+      order.items.some((item) => !listPrice.has(`${item.sku}|${order.currency}`));
+
     let allocated = new Decimal(0);
 
     order.items.forEach((item, index) => {
@@ -241,7 +316,7 @@ function buildOrderLines(orders: readonly Order[]): OrderLine[] {
       // — never off by the rounding on every share before it.
       const share = isLast
         ? order.amount.minus(allocated)
-        : totalBase.isZero()
+        : byQuantity
           ? order.amount
               .times(item.qty)
               .dividedBy(totalQty)
@@ -281,7 +356,10 @@ export function generateAllegroZohoInvoice(
 
   const skip = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
   const orders = parseOrders(rows, skip, (message) => warnings.push(message));
-  const lines = buildOrderLines(orders);
+  // Earlier months are read for prices only, so their unreadable rows are not
+  // this month's problem: nothing is skipped or warned about on their behalf.
+  const history = parseOrders(context.history ?? [], () => {});
+  const lines = buildOrderLines(orders, history, (message) => warnings.push(message));
 
   const productAgg = new Map<string, { qty: Decimal; netEur: Decimal }>();
   const vatAgg = new Map<string, Decimal>();
@@ -517,6 +595,10 @@ export const allegroZohoInvoiceModule: ReportModule = {
       "Built without it, that month's Allegro revenue and VAT are simply missing from what Zoho " +
       "sees — not understated, absent.",
     requiredRules: [{ channel: "allegro", key: "currency_map" }],
+    // A year back, for reference prices only. A SKU that sells solo at least
+    // once a year keeps its own price in a mixed order; one that never does
+    // was never priced by this report to begin with.
+    historyMonths: 12,
   },
   unmappedSkus,
   unmappedCurrencies,
