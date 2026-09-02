@@ -421,7 +421,10 @@ export function generateZohoInvoice(
 
       if (!money) continue;
 
-      const label = bucket === OSS_OTHER ? "VAT OSS Other countries" : `VAT OSS ${bucket}`;
+      // `VAT FR OSS`, not `VAT OSS FR`: the country sits in the middle and the
+      // scheme comes last, because that is the name of the account in Zoho and
+      // a line whose name does not match one lands nowhere.
+      const label = bucket === OSS_OTHER ? "VAT OSS Other countries" : `VAT ${bucket} OSS`;
       const amount = inInvoiceCurrency(money, currency, context, `${label} on ${country}`, warnings);
 
       if (!amount.toDecimalPlaces(2).isZero()) vatLine(country, label, amount);

@@ -147,14 +147,40 @@ describe("VAT lines on the Amazon invoice for Zoho", () => {
     const lines = vatLinesOf(generate(rows), "FR");
 
     expect(lines.map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]])).toEqual([
-      ["VAT OSS ES", "12.00"],
-      ["VAT OSS FR", "4488.71"],
+      ["VAT ES OSS", "12.00"],
+      ["VAT FR OSS", "4488.71"],
       ["VAT OSS Other countries", "64.40"],
     ]);
 
     // The account carries the tax's own country, not the invoice's, so one
     // country's OSS lands on one Zoho account across every marketplace.
-    expect(lines[0][HEADER.account]).toBe("VAT OSS ES");
+    expect(lines[0][HEADER.account]).toBe("VAT ES OSS");
+  });
+
+  it("names both schemes the way the Zoho accounts are named", () => {
+    // `VAT FR Regular` and `VAT FR OSS` — country in the middle, scheme last,
+    // that capitalisation. These strings are account names in Zoho, not
+    // labels: a line that does not match one lands nowhere, so they are
+    // asserted character for character, in the description and the account
+    // alike.
+    const rows = [
+      saleRow({ countryCode: "FR", transactionType: "Commande" }),
+      vatRow({
+        raw: {
+          MARKETPLACE: "amazon.fr",
+          TAX_REPORTING_SCHEME: "REGULAR",
+          SALE_ARRIVAL_COUNTRY: "FR",
+          TRANSACTION_CURRENCY_CODE: "EUR",
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: "10.00",
+        },
+      }),
+      oss("amazon.fr", "FR", "20.00"),
+    ];
+
+    const lines = vatLinesOf(generate(rows), "FR");
+
+    expect(lines.map((row) => row[HEADER.itemDesc])).toEqual(["VAT FR Regular", "VAT FR OSS"]);
+    expect(lines.map((row) => row[HEADER.account])).toEqual(["VAT FR Regular", "VAT FR OSS"]);
   });
 
   it("counts Monaco as France, under either scheme", () => {
@@ -177,7 +203,7 @@ describe("VAT lines on the Amazon invoice for Zoho", () => {
       vatLinesOf(generate(rows), "FR").map((row) => [row[HEADER.itemDesc], row[HEADER.itemPrice]]),
     ).toEqual([
       ["VAT FR Regular", "9.97"],
-      ["VAT OSS FR", "5.98"],
+      ["VAT FR OSS", "5.98"],
     ]);
   });
 
