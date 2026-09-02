@@ -162,17 +162,27 @@ export function describeNeeds(definition: ReportDefinition, settings: ReportSett
   if (definition.id === "amazon_zoho_invoice") {
     const required = requiredCountries(settings);
     const optional = ZOHO_COUNTRIES.filter((c) => settings.countries[c] === "optional");
+    const vatOptional = settings.datasets.amazon_vat === "optional";
 
-    if (optional.length === 0) return definition.needs;
+    if (optional.length === 0 && !vatOptional) return definition.needs;
 
-    if (required.length === 0) {
-      return "Amazon Monthly for any marketplace — all ten are optional, so whatever is uploaded is invoiced.";
+    // Two demands, said in two sentences: the marketplaces, and the VAT report
+    // the tax comes from. Neither may be left out of the text while the build
+    // still asks for it.
+    const sentences = [
+      required.length === 0
+        ? "Amazon Monthly for any marketplace — all ten are optional, so whatever is uploaded is invoiced."
+        : `Amazon Monthly for ${required.join(", ")}.`,
+      vatOptional
+        ? "The Amazon VAT transaction report is optional and read when present."
+        : "The Amazon VAT transaction report for the same month.",
+    ];
+
+    if (optional.length > 0) {
+      sentences.push(`Optional and invoiced when present: ${optional.join(", ")}.`);
     }
 
-    return (
-      `Amazon Monthly for ${required.join(", ")}. ` +
-      `Optional and invoiced when present: ${optional.join(", ")}.`
-    );
+    return sentences.join(" ");
   }
 
   return definition.needs;

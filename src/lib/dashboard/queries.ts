@@ -187,25 +187,31 @@ export async function loadDashboard(
     // its datasets are not "required" here until its start date arrives.
     if (configured.startsFrom && monthStart && monthStart < configured.startsFrom) continue;
 
-    if (definition.id === "amazon_zoho_invoice") {
-      const required = new Set(requiredCountries(configured));
+    // Amazon Monthly arrives as ten files, one per marketplace, so it is
+    // listed as ten lines rather than one. Everything else this report needs —
+    // the VAT transaction report — is listed by the loop below, same as any
+    // other report's.
+    const byCountry = definition.id === "amazon_zoho_invoice";
+
+    if (byCountry) {
+      const marketplaces = new Set(requiredCountries(configured));
 
       for (const country of ZOHO_COUNTRIES) {
         items.push({
           key: `amazon_monthly:${country}`,
           label: amazonMonthlyLabel(country as AmazonCountry),
-          requirement: required.has(country) ? "required" : "optional",
+          requirement: marketplaces.has(country) ? "required" : "optional",
           uploaded: false,
           filename: null,
           rows: null,
         });
       }
-      continue;
     }
 
     const required = new Set(requiredDatasets(definition, configured));
 
     for (const dataset of definition.datasets) {
+      if (byCountry && dataset === "amazon_monthly") continue;
       if (items.some((item) => item.key === dataset)) continue;
 
       items.push({
@@ -426,12 +432,18 @@ async function loadReports(
 
     // With nothing uploaded at all, availability has no entry for the month —
     // but "missing: everything" is useless. Name the pieces.
+    const requiredNames = (definition.requiresEveryDataset
+      ? requiredDatasets(definition, configured)
+      : definition.datasets
+    )
+      // Amazon Monthly is named ten times over by the countries beside it.
+      .filter((dataset) => !(definition.id === "amazon_zoho_invoice" && dataset === "amazon_monthly"))
+      .map((dataset) => DATASET_NAMES[dataset]);
+
     const wholeList =
       definition.id === "amazon_zoho_invoice"
-        ? requiredCountries(configured)
-        : definition.requiresEveryDataset
-          ? requiredDatasets(definition, configured).map((dataset) => DATASET_NAMES[dataset])
-          : definition.datasets.map((dataset) => DATASET_NAMES[dataset]);
+        ? [...requiredCountries(configured), ...requiredNames]
+        : requiredNames;
 
     const stats = (latest?.stats ?? {}) as { warnings?: string[] };
 

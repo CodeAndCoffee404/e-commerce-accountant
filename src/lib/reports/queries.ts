@@ -331,11 +331,17 @@ export async function availablePeriods(
         }
       }
 
-      // One dataset, ten marketplaces. Checked here as well as at build time,
-      // so an incomplete month is never offered in the first place.
+      // Ten marketplaces inside one dataset. Checked here as well as at build
+      // time, so an incomplete month is never offered in the first place.
+      //
+      // Narrowed to Amazon Monthly on purpose: the VAT report carries the
+      // country on the row rather than on the file, and matching on country
+      // alone would let it stand in for a marketplace that never arrived.
       if (definition.id === "amazon_zoho_invoice") {
         for (const country of requiredCountries(configured)) {
-          const held = covered.filter((file) => file.countryCode === country);
+          const held = covered.filter(
+            (file) => file.dataset === "amazon_monthly" && file.countryCode === country,
+          );
 
           if (uncoveredMonths(period, held).length > 0) missing.push(country);
         }

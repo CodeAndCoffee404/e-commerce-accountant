@@ -13,10 +13,20 @@ describe("report definitions", () => {
   });
 
   it("does not demand every dataset where one file covers everything", () => {
-    // The VAT report is a single file spanning every marketplace, and the Zoho
-    // invoice checks its ten countries separately.
+    // The VAT report is a single file spanning every marketplace, and it is
+    // all this one reads.
     expect(reportDefinition("sales_by_currency").requiresEveryDataset).toBe(false);
-    expect(reportDefinition("amazon_zoho_invoice").requiresEveryDataset).toBe(false);
+  });
+
+  it("refuses the Zoho invoice without the VAT transaction report", () => {
+    const definition = reportDefinition("amazon_zoho_invoice");
+
+    // The tax on these sales is stated in the VAT report. An invoice issued
+    // for a month whose VAT report has not arrived is issued before its own
+    // VAT is known, so the month is not offered at all.
+    expect([...definition.datasets].sort()).toEqual(["amazon_monthly", "amazon_vat"]);
+    expect(definition.requiresEveryDataset).toBe(true);
+    expect(definition.needs).toContain("VAT");
   });
 
   it("allows a quarter only where legacy allowed one", () => {
