@@ -54,12 +54,19 @@ const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
 
 const VAT_BUCKET_ORDER = ["ES", "DE", "FR", "IT", "PL", "OTHER"] as const;
 
+/**
+ * The names of the Zoho accounts these lines post to, not labels: country in
+ * the middle, scheme last, that capitalisation — the same shape the Amazon and
+ * Allegro invoices use, so one country's tax lands on one account whichever
+ * channel sold it. The pooled line has no country to place and keeps the name
+ * all three share.
+ */
 const VAT_BUCKET_LABELS: Record<string, string> = {
   ES: "VAT ES Regular",
-  DE: "VAT OSS DE",
-  FR: "VAT OSS FR",
-  IT: "VAT OSS IT",
-  PL: "VAT OSS PL",
+  DE: "VAT DE OSS",
+  FR: "VAT FR OSS",
+  IT: "VAT IT OSS",
+  PL: "VAT PL OSS",
   OTHER: "VAT OSS Other countries",
 };
 

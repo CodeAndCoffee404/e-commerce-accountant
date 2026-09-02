@@ -274,7 +274,7 @@ describe("generateShopifyZohoInvoice", () => {
       ],
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-        "", "", "VAT OSS FR", "1", "53.23", "VAT OSS FR",
+        "", "", "VAT FR OSS", "1", "53.23", "VAT FR OSS",
       ],
       [
         "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
@@ -382,7 +382,7 @@ describe("generateShopifyZohoInvoice", () => {
     const result = generateShopifyZohoInvoice(rows, { ...context, rules: ignoredRules });
 
     expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales")).toEqual([]);
-    const vatLine = result.sheets[0].rows.find((r) => r[7] === "VAT OSS FR");
+    const vatLine = result.sheets[0].rows.find((r) => r[7] === "VAT FR OSS");
     expect(vatLine?.[9]).toBe("16.67");
   });
 
