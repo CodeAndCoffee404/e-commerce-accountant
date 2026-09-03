@@ -1,5 +1,5 @@
 import type { Classification, Grid, RejectCode } from "@/lib/ingest/classify";
-import type { DatasetId, SimpleDataset } from "@/lib/ingest/datasets";
+import type { DatasetId, DatasetVariants, SimpleDataset } from "@/lib/ingest/datasets";
 import {
   buildPeriod,
   collectPeriods,
@@ -102,6 +102,8 @@ function readPeriodFromColumn(
   grid: Grid,
   dataset: SimpleDataset,
   headerRowIndex: number,
+  /** What the file turned out to be, when that is not the profile itself. */
+  identity: { id: DatasetId; label: string } = dataset,
 ): Classification | { period: Period } {
   const headerRow = grid[headerRowIndex] ?? [];
   const columnIndex = headerIndex(headerRow, dataset.periodColumn, normaliseHeader);
@@ -110,7 +112,7 @@ function readPeriodFromColumn(
     return reject(
       "PERIOD_COLUMN_NOT_FOUND",
       `Column "${dataset.periodColumn}" not found.`,
-      dataset,
+      identity,
       headerRowIndex,
     );
   }
@@ -123,7 +125,7 @@ function readPeriodFromColumn(
     return reject(
       "PERIOD_COLUMN_NOT_FOUND",
       `Column "${dataset.periodFilterColumn}" not found.`,
-      dataset,
+      identity,
       headerRowIndex,
     );
   }
@@ -150,7 +152,7 @@ function readPeriodFromColumn(
       return reject(
         "PERIOD_INVALID",
         `Value "${raw}" in column "${dataset.periodColumn}" is not a date this channel writes.`,
-        dataset,
+        identity,
         headerRowIndex,
       );
     }
@@ -159,13 +161,13 @@ function readPeriodFromColumn(
   }
 
   if (!sawUsableRow) {
-    return reject("PERIOD_INVALID", "The file has no dated rows.", dataset, headerRowIndex);
+    return reject("PERIOD_INVALID", "The file has no dated rows.", identity, headerRowIndex);
   }
 
   const period = buildPeriod(collectPeriods(found));
 
   if (!period.ok) {
-    return reject("PERIOD_INVALID", periodFailureMessage(period.reason), dataset, headerRowIndex);
+    return reject("PERIOD_INVALID", periodFailureMessage(period.reason), identity, headerRowIndex);
   }
 
   return { period: period.period };
@@ -175,26 +177,129 @@ function readPeriodFromColumn(
  * The whole classification of a fixed-header channel: match the header row,
  * read the period out of the data. Null when the headers are not this
  * channel's — the caller tries the next module.
+ *
+ * `variants` is for a layout more than one dataset shares — two shops of the
+ * same platform, say. The headers cannot separate them, so the contents do,
+ * and a file that does not clearly belong to one of them is refused.
  */
-export function classifySimpleChannel(profile: SimpleDataset, grid: Grid): Classification | null {
+export function classifySimpleChannel(
+  profile: SimpleDataset,
+  grid: Grid,
+  variants?: DatasetVariants,
+): Classification | null {
   const headerRow = grid[profile.headerRowIndex];
 
   if (!headerRow || !rowHasHeaders(headerRow, profile.requiredHeaders, normaliseHeader)) {
     return null;
   }
 
-  const result = readPeriodFromColumn(grid, profile, profile.headerRowIndex);
+  let dataset = profile.id as DatasetId;
+  let label = profile.label;
+
+  if (variants) {
+    const chosen = chooseVariant(grid, profile.headerRowIndex, variants);
+
+    if ("ok" in chosen) return chosen;
+
+    dataset = chosen.member.id;
+    label = chosen.member.label;
+  }
+
+  const result = readPeriodFromColumn(grid, profile, profile.headerRowIndex, { id: dataset, label });
 
   if ("ok" in result) return result;
 
   return {
     ok: true,
-    dataset: profile.id,
-    label: profile.label,
+    dataset,
+    label,
     country: null,
     marketplace: null,
     headerRowIndex: profile.headerRowIndex,
     period: result.period,
     periodSource: "data",
   };
+}
+
+/**
+ * Counts the votes the signals cast over every data row and returns the
+ * winner — or a refusal.
+ *
+ * Guessing here is the expensive mistake: a file filed under the wrong shop
+ * is invoiced under the wrong company, in the wrong currency, under the wrong
+ * VAT scheme, and nothing downstream can notice. So the bar is a clear
+ * majority of a decent number of votes, and everything else is handed back to
+ * the person who uploaded the file, who knows which shop it came from.
+ */
+function chooseVariant(
+  grid: Grid,
+  headerRowIndex: number,
+  variants: DatasetVariants,
+): Classification | { member: DatasetVariants["members"][number] } {
+  const headerRow = grid[headerRowIndex] ?? [];
+  const tally = new Map<DatasetId, number>();
+  let cast = 0;
+
+  const columns = variants.signals.map((signal) => ({
+    signal,
+    index: headerIndex(headerRow, signal.column, normaliseHeader),
+  }));
+
+  for (let rowIndex = headerRowIndex + 1; rowIndex < grid.length; rowIndex += 1) {
+    for (const { signal, index } of columns) {
+      if (index === -1) continue;
+
+      const value = cell(grid, rowIndex, index).toUpperCase();
+
+      if (value === "") continue;
+
+      const voted = signal.votes[value];
+
+      if (!voted) continue;
+
+      tally.set(voted, (tally.get(voted) ?? 0) + 1);
+      cast += 1;
+    }
+  }
+
+  const names = variants.members.map((member) => member.label).join(", ");
+
+  if (cast < variants.minimumVotes) {
+    return reject(
+      "VARIANT_NOT_DETECTED",
+      `The layout matches ${names}, but the file says too little about which one it is. ` +
+        "Check that it is a full export and not a filtered extract.",
+      null,
+      headerRowIndex,
+    );
+  }
+
+  const [leader, votes] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  if (votes / cast < variants.majority) {
+    const shares = [...tally.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, count]) => {
+        const member = variants.members.find((candidate) => candidate.id === id);
+
+        return `${member?.label ?? id} ${Math.round((count / cast) * 100)}%`;
+      })
+      .join(", ");
+
+    return reject(
+      "VARIANT_NOT_DETECTED",
+      `The file looks like more than one report at once (${shares}). ` +
+        "Split it so each upload covers a single one.",
+      null,
+      headerRowIndex,
+    );
+  }
+
+  const member = variants.members.find((candidate) => candidate.id === leader);
+
+  if (!member) {
+    return reject("VARIANT_NOT_DETECTED", `Unknown variant: ${leader}.`, null, headerRowIndex);
+  }
+
+  return { member };
 }

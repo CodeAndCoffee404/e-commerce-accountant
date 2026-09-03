@@ -15,7 +15,8 @@ const DATASET_LABELS: Record<string, string> = {
   allegro: "Allegro",
   cdiscount: "Cdiscount",
   cdiscount_orders: "Cdiscount Orders",
-  shopify: "Shopify",
+  shopify_geyser: "Shopify Geyser",
+  shopify_waterlift: "Shopify Waterlift",
 };
 
 export function TransactionsView({

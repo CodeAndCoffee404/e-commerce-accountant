@@ -21,7 +21,7 @@ describe("report settings", () => {
     expect(requiredDatasets(offAmazon, settings.off_amazon_sales)).toEqual([
       "allegro",
       "cdiscount",
-      "shopify",
+      "shopify_geyser",
     ]);
     expect(requiredCountries(settings.amazon_zoho_invoice)).toEqual([...ZOHO_COUNTRIES]);
     expect(requiredDatasets(zoho, settings.amazon_zoho_invoice)).toEqual([
@@ -48,10 +48,10 @@ describe("report settings", () => {
       datasets: { cdiscount: "optional" },
     });
 
-    expect(requiredDatasets(offAmazon, settings)).toEqual(["allegro", "shopify"]);
+    expect(requiredDatasets(offAmazon, settings)).toEqual(["allegro", "shopify_geyser"]);
     // The needs text follows the configuration, so the card can never promise
     // one thing while the build demands another.
-    expect(describeNeeds(offAmazon, settings)).toContain("Allegro and Shopify");
+    expect(describeNeeds(offAmazon, settings)).toContain("Allegro and Shopify Geyser");
     expect(describeNeeds(offAmazon, settings)).toContain("Optional and included when present: Cdiscount");
   });
 

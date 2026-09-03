@@ -89,7 +89,7 @@ describe.skipIf(!corpusAvailable)("Off-Amazon Sales against the reference", () =
 
     expect(golden.headers).toEqual([...OFF_AMAZON_HEADERS]);
 
-    const ledger = await ledgerForPeriod(label, ["allegro", "cdiscount", "shopify"]);
+    const ledger = await ledgerForPeriod(label, ["allegro", "cdiscount", "shopify_geyser"]);
     const result = generateOffAmazonSales(ledger, {
       period: periodOf(label),
       rules: seededRules(),

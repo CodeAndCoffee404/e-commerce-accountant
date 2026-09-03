@@ -100,7 +100,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
     expect(outcome.message).toContain("allegro / operation_types");
     expect(outcome.message).toContain("cdiscount / defaults");
-    expect(outcome.message).toContain("shopify / defaults");
+    expect(outcome.message).toContain("shopify_geyser / defaults");
     // Says where to go, not only what is wrong.
     expect(outcome.message).toContain("Restore missing");
 

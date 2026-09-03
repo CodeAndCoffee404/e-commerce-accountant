@@ -9,7 +9,7 @@ describe("report definitions", () => {
     // The whole point: built from whichever channels happen to be uploaded, the
     // sheet looks complete and under-reports by the rest.
     expect(definition.requiresEveryDataset).toBe(true);
-    expect([...definition.datasets].sort()).toEqual(["allegro", "cdiscount", "shopify"]);
+    expect([...definition.datasets].sort()).toEqual(["allegro", "cdiscount", "shopify_geyser"]);
   });
 
   it("does not demand every dataset where one file covers everything", () => {

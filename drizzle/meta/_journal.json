@@ -127,6 +127,13 @@
       "when": 1788283781441,
       "tag": "0017_role_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788461759464,
+      "tag": "0018_shopify_stores",
+      "breakpoints": true
     }
   ]
 }

@@ -17,13 +17,13 @@ import type { ReportTypeId } from "@/lib/reports/definitions";
 export const SKU_MAPPING_CHANNEL: Partial<Record<ReportTypeId, string>> = {
   amazon_zoho_invoice: "amazon",
   allegro_zoho_invoice: "allegro",
-  shopify_zoho_invoice: "shopify",
+  shopify_zoho_invoice: "shopify_geyser",
 };
 
 export const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = {
   amazon_zoho_invoice: "Amazon",
   allegro_zoho_invoice: "Allegro",
-  shopify_zoho_invoice: "Shopify",
+  shopify_zoho_invoice: "Shopify Geyser",
 };
 
 /** One (report, period) a build is requested for — the unit the build queue moves in. */
