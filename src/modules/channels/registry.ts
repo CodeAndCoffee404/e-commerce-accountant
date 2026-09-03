@@ -5,7 +5,7 @@ import { amazonMonthlyModule } from "./amazon-monthly/module";
 import { amazonVatModule } from "./amazon-vat";
 import { cdiscountModule } from "./cdiscount";
 import { cdiscountOrdersModule } from "./cdiscount-orders";
-import { shopifyModule } from "./shopify";
+import { shopifyGeyserModule, shopifyWaterliftModule } from "./shopify";
 import type { ChannelModule, ChannelRuleSeed } from "./types";
 
 /**
@@ -23,7 +23,8 @@ export const CHANNEL_MODULES: readonly ChannelModule[] = [
   allegroModule,
   cdiscountModule,
   cdiscountOrdersModule,
-  shopifyModule,
+  shopifyGeyserModule,
+  shopifyWaterliftModule,
 ];
 
 export function channelModule(id: DatasetId): ChannelModule {

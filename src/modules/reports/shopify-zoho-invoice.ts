@@ -72,7 +72,7 @@ const VAT_BUCKET_LABELS: Record<string, string> = {
 };
 
 function arrivalCountryOf(row: LedgerRow, rules: RulesSnapshot): string {
-  const aliases = channelRule<Record<string, string>>(rules, "shopify", "country_aliases") ?? {};
+  const aliases = channelRule<Record<string, string>>(rules, "shopify_geyser", "country_aliases") ?? {};
   const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
 
   return aliases[raw] ?? raw;
@@ -96,7 +96,7 @@ function orderSourceMap(rows: readonly LedgerRow[]): Map<string, string> {
   const map = new Map<string, string>();
 
   for (const row of rows) {
-    if (row.dataset !== "shopify") continue;
+    if (row.dataset !== "shopify_geyser") continue;
 
     const name = row.raw["Name"];
     const source = row.raw["Source"];
@@ -113,12 +113,12 @@ function isExcludedRow(
   sources: ReadonlyMap<string, string>,
   arrival: string,
 ): string | null {
-  const excludedSources = channelRule<string[]>(rules, "shopify", "excluded_sources") ?? [];
+  const excludedSources = channelRule<string[]>(rules, "shopify_geyser", "excluded_sources") ?? [];
   const source = sources.get(row.raw["Name"] ?? "") ?? "";
 
   if (excludedSources.includes(source)) return "Shopify invoice: draft order";
 
-  const skippedCountries = channelRule<string[]>(rules, "shopify", "skipped_arrival_countries") ?? [];
+  const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
 
   if (skippedCountries.includes(arrival)) return `Shopify invoice: delivered to ${arrival}`;
 
@@ -150,7 +150,7 @@ export function generateShopifyZohoInvoice(
 
   const skip = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
-  const defaults = channelRule<ShopifyDefaults>(context.rules, "shopify", "defaults");
+  const defaults = channelRule<ShopifyDefaults>(context.rules, "shopify_geyser", "defaults");
 
   if (!defaults) {
     // Every figure below depends on it — departure country decides the whole
@@ -171,7 +171,7 @@ export function generateShopifyZohoInvoice(
   const productAgg = new Map<string, ProductLine>();
 
   for (const row of rows) {
-    if (row.dataset !== "shopify") continue;
+    if (row.dataset !== "shopify_geyser") continue;
 
     const arrival = arrivalCountryOf(row, context.rules);
     const excludeReason = isExcludedRow(row, context.rules, sources, arrival);
@@ -200,7 +200,7 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const decision = decideSku(context.rules, "shopify", name);
+    const decision = decideSku(context.rules, "shopify_geyser", name);
 
     if (decision.kind === "ignore") {
       skip("Shopify invoice: item is on the ignore list");
@@ -228,10 +228,10 @@ export function generateShopifyZohoInvoice(
 
   const vatAgg = new Map<string, Decimal>();
   const recompute =
-    channelRule<string[]>(context.rules, "shopify", "recompute_zero_tax_countries") ?? [];
+    channelRule<string[]>(context.rules, "shopify_geyser", "recompute_zero_tax_countries") ?? [];
 
   for (const row of rows) {
-    if (row.dataset !== "shopify") continue;
+    if (row.dataset !== "shopify_geyser") continue;
 
     const orderTotal = row.raw["Total"];
 
@@ -389,7 +389,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[
   const sources = orderSourceMap(rows);
 
   for (const row of rows) {
-    if (row.dataset !== "shopify") continue;
+    if (row.dataset !== "shopify_geyser") continue;
 
     const arrival = arrivalCountryOf(row, rules);
 
@@ -401,7 +401,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[
     if (row.gross === null) continue;
     if (row.quantity === null || row.quantity.isZero()) continue;
 
-    if (decideSku(rules, "shopify", name).kind === "passthrough") found.add(name);
+    if (decideSku(rules, "shopify_geyser", name).kind === "passthrough") found.add(name);
   }
 
   return [...found].sort();
@@ -411,17 +411,18 @@ export const shopifyZohoInvoiceModule: ReportModule = {
   definition: {
     id: "shopify_zoho_invoice",
     label: "Shopify invoice for Zoho",
-    datasets: ["shopify"],
+    datasets: ["shopify_geyser"],
     // Dated and numbered by month, like the Amazon and Allegro invoices — a
     // quarter has no meaning for either.
     granularity: ["month"],
     requiresEveryDataset: true,
-    description: "Shopify orders aggregated by item into invoice lines for Zoho, VAT split by market.",
-    needs: "One Shopify sales report for the month.",
+    description:
+      "Geyser's Shopify orders aggregated by item into invoice lines for Zoho, VAT split by market.",
+    needs: "One Geyser Shopify sales report for the month.",
     why:
       "Built without it, that month's Shopify revenue and VAT are simply missing from what Zoho " +
       "sees — not understated, absent.",
-    requiredRules: [{ channel: "shopify", key: "defaults" }],
+    requiredRules: [{ channel: "shopify_geyser", key: "defaults" }],
   },
   unmappedSkus,
   generate: generateShopifyZohoInvoice,

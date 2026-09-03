@@ -42,6 +42,7 @@ describe("the anonymised fixtures", () => {
       "Cdiscount orders report",
       "Cdiscount sales report",
       "Geyser shopify sales report",
+      "Waterlift shopify sales report",
       ...["BE", "DE", "ES", "FR", "IE", "IT", "NL", "PL", "SE", "UK"].map(
         (country) => `Amazon Monthly Transaction report ${country}`,
       ),

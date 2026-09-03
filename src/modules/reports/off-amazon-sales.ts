@@ -68,7 +68,7 @@ export function generateOffAmazonSales(
         ? allegroRow(row, context, skipped, warnings)
         : row.dataset === "cdiscount"
           ? cdiscountRow(row, context, skipped, warnings)
-          : row.dataset === "shopify"
+          : row.dataset === "shopify_geyser"
             ? shopifyRow(row, context, skipped, warnings)
             : skip(skipped, `Channel ${row.dataset} is not part of this report`);
 
@@ -283,7 +283,7 @@ function shopifyRow(
 
   if (!orderTotal) return skip(skipped, "Shopify: a line item; the order total comes from the first row");
 
-  const excluded = channelRule<string[]>(context.rules, "shopify", "excluded_sources") ?? [];
+  const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
 
   if (excluded.includes(row.raw["Source"] ?? "")) {
     return skip(skipped, "Shopify: draft order");
@@ -295,7 +295,7 @@ function shopifyRow(
     domesticSellerVat: string;
     exportScheme: string;
     exportSellerVat: string;
-  }>(context.rules, "shopify", "defaults");
+  }>(context.rules, "shopify_geyser", "defaults");
 
   if (!defaults) {
     warnings.push("Shopify: the defaults rule is missing");
@@ -303,12 +303,12 @@ function shopifyRow(
     return skip(skipped, "Shopify: the defaults rule is missing");
   }
 
-  const aliases = channelRule<Record<string, string>>(context.rules, "shopify", "country_aliases") ?? {};
+  const aliases = channelRule<Record<string, string>>(context.rules, "shopify_geyser", "country_aliases") ?? {};
   const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
   const arrival = aliases[raw] ?? raw;
 
   const skippedCountries =
-    channelRule<string[]>(context.rules, "shopify", "skipped_arrival_countries") ?? [];
+    channelRule<string[]>(context.rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
 
   // Swiss orders are out of scope by agreement, and silently — no marker in
   // the report, see the rules table in PLAN §1.
@@ -356,7 +356,7 @@ function shopifyRow(
   // the label, and the VAT is real. Which countries that applies to is a rule,
   // not a constant, because zero elsewhere means zero.
   const recompute =
-    channelRule<string[]>(context.rules, "shopify", "recompute_zero_tax_countries") ?? [];
+    channelRule<string[]>(context.rules, "shopify_geyser", "recompute_zero_tax_countries") ?? [];
   const reported = row.raw["Taxes"];
   let reportedVat: Decimal | null = null;
 
@@ -394,11 +394,11 @@ export const offAmazonSalesModule: ReportModule = {
   definition: {
     id: "off_amazon_sales",
     label: "Off-Amazon Sales",
-    datasets: ["allegro", "cdiscount", "shopify"],
+    datasets: ["allegro", "cdiscount", "shopify_geyser"],
     granularity: ["month"],
     requiresEveryDataset: true,
     description: "Allegro, Cdiscount and Shopify normalised into one sheet.",
-    needs: "Allegro, Cdiscount and Shopify, all three for the same month.",
+    needs: "Allegro, Cdiscount and Shopify Geyser, all three for the same month.",
     why:
       "Built from whichever channels happen to be uploaded, the sheet looks complete and " +
       "understates revenue by exactly the ones nobody noticed were absent.",
@@ -407,7 +407,7 @@ export const offAmazonSalesModule: ReportModule = {
       { channel: "allegro", key: "currency_map" },
       { channel: "cdiscount", key: "invoice_types" },
       { channel: "cdiscount", key: "defaults" },
-      { channel: "shopify", key: "defaults" },
+      { channel: "shopify_geyser", key: "defaults" },
     ],
   },
   unmappedCurrencies,

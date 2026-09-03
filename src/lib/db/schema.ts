@@ -235,7 +235,8 @@ export const datasetId = pgEnum("dataset_id", [
   "allegro",
   "cdiscount",
   "cdiscount_orders",
-  "shopify",
+  "shopify_geyser",
+  "shopify_waterlift",
 ]);
 
 export const sourceFileStatus = pgEnum("source_file_status", [

@@ -26,8 +26,8 @@ function row(overrides: Partial<LedgerRow> & { raw: Record<string, string> }): L
 
   return {
     id: `row-${nextId}`,
-    dataset: "shopify",
-    channel: "shopify",
+    dataset: "shopify_geyser",
+    channel: "shopify_geyser",
     countryCode: null,
     occurredOn: "2026-01-15",
     transactionType: "paid",
@@ -105,15 +105,15 @@ const rules: RulesSnapshot = {
   ],
   sellerVatNumbers: [],
   skuMappings: [
-    { channel: "shopify", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
-    { channel: "shopify", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
-    { channel: "shopify", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
-    { channel: "shopify", sourceSku: "Geyser EURO Kit - +1 Cartridge", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
-    { channel: "shopify", sourceSku: "Geyser EURO Filter", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Kit - +1 Cartridge", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Filter", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
   ],
   channelRules: [
     {
-      channel: "shopify",
+      channel: "shopify_geyser",
       key: "defaults",
       value: {
         departureCountry: "ES",
@@ -123,10 +123,10 @@ const rules: RulesSnapshot = {
         exportSellerVat: "EE102013089",
       },
     },
-    { channel: "shopify", key: "skipped_arrival_countries", value: ["CH"] },
-    { channel: "shopify", key: "country_aliases", value: { UK: "GB" } },
-    { channel: "shopify", key: "recompute_zero_tax_countries", value: ["GB"] },
-    { channel: "shopify", key: "excluded_sources", value: ["shopify_draft_order"] },
+    { channel: "shopify_geyser", key: "skipped_arrival_countries", value: ["CH"] },
+    { channel: "shopify_geyser", key: "country_aliases", value: { UK: "GB" } },
+    { channel: "shopify_geyser", key: "recompute_zero_tax_countries", value: ["GB"] },
+    { channel: "shopify_geyser", key: "excluded_sources", value: ["shopify_draft_order"] },
   ],
 };
 
@@ -363,7 +363,7 @@ describe("generateShopifyZohoInvoice", () => {
       ...rules,
       skuMappings: [
         ...rules.skuMappings.filter((m) => m.sourceSku !== "Geyser EURO Cartridge - 4 Cartridges"),
-        { channel: "shopify", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: null, itemName: null, isIgnored: true },
+        { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: null, itemName: null, isIgnored: true },
       ],
     };
     const rows = [
@@ -386,7 +386,7 @@ describe("generateShopifyZohoInvoice", () => {
     expect(vatLine?.[9]).toBe("16.67");
   });
 
-  it("refuses to build when the shopify/defaults channel rule is missing", () => {
+  it("refuses to build when the shopify_geyser/defaults channel rule is missing", () => {
     const noDefaultsContext: ReportContext = {
       ...context,
       rules: { ...rules, channelRules: rules.channelRules.filter((r) => r.key !== "defaults") },

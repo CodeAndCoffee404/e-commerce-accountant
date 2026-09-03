@@ -32,7 +32,8 @@ export type RejectCode =
   | "TYPE_NOT_DETECTED"
   | "PERIOD_COLUMN_NOT_FOUND"
   | "PERIOD_INVALID"
-  | "COUNTRY_NOT_DETECTED";
+  | "COUNTRY_NOT_DETECTED"
+  | "VARIANT_NOT_DETECTED";
 
 /**
  * Works out what a spreadsheet is by asking each channel module in turn.
