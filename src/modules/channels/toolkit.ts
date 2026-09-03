@@ -253,9 +253,7 @@ function chooseVariant(
 
       if (value === "") continue;
 
-      const voted = signal.contains
-        ? Object.entries(signal.votes).find(([needle]) => value.includes(needle))?.[1]
-        : signal.votes[value];
+      const voted = signal.votes[value];
 
       if (!voted) continue;
 

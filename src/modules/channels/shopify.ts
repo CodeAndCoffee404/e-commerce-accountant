@@ -156,20 +156,21 @@ const PROFILE: SimpleDataset = {
 /**
  * Which shop an export came from.
  *
- * Nothing in the file names the shop, so this reads the three things that
- * differ by construction rather than by chance: the shop's currency, the
- * vendor stamped on its products, and where its customers are billed. Each
- * row votes with each of the three, values nobody recognises abstain, and a
- * clear majority wins.
+ * Nothing in the file names the shop, so this reads the two things that
+ * differ by construction rather than by chance: the shop's currency and
+ * where its customers are billed. Each row votes with both, values nobody
+ * recognises abstain, and a clear majority wins.
  *
  * What is deliberately *not* used: the order number (Geyser's counter is six
- * digits and Waterlift's seven — until Geyser's rolls over) and the file name
- * (renamed by hand as often as not). Both would work today and fail quietly
- * later, and the failure would be an invoice issued by the wrong company.
+ * digits and Waterlift's seven — until Geyser's rolls over), the file name
+ * (renamed by hand as often as not), and the vendor stamped on the product
+ * (free text, edited in the shop's admin, and already wrong on the products
+ * the two shops share). All three would work today and fail quietly later,
+ * and the failure would be an invoice issued by the wrong company.
  *
- * The threshold is a real check, not a formality: the shops share products —
- * the adapter `0T-WMJ6-ZHLF` is sold by both — so a handful of rows can look
- * like either shop, and only the file as a whole is conclusive.
+ * The threshold is a real check, not a formality: an order billed abroad is
+ * ordinary in either shop, so a handful of rows can look like either one and
+ * only the file as a whole is conclusive.
  */
 const EUROPE = [
   "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB", "GR", "HR",
@@ -186,11 +187,6 @@ const VARIANTS: DatasetVariants = {
     {
       column: "Currency",
       votes: { EUR: GEYSER.dataset, USD: WATERLIFT.dataset },
-    },
-    {
-      column: "Vendor",
-      contains: true,
-      votes: { GEYSER: GEYSER.dataset, WATERLIFT: WATERLIFT.dataset },
     },
     {
       column: "Billing Country",

@@ -69,21 +69,20 @@ describe("telling the two Shopify shops apart", () => {
   });
 
   it("is not thrown by the few rows that honestly look like the other shop", async () => {
-    // The shops share products — the adapter 0T-WMJ6-ZHLF is sold by both — so
-    // some rows carry the other shop's vendor and nothing is wrong with them.
+    // A European order billed to an American address is an ordinary sale, not
+    // a Waterlift one. Some rows will always look like the other shop.
     const grid = rows(await gridOf(GEYSER));
-    const sku = columnIndex(grid, "Lineitem sku");
-    const vendor = columnIndex(grid, "Vendor");
+    const country = columnIndex(grid, "Billing Country");
     let stamped = 0;
 
     for (const row of grid.slice(1)) {
-      if (row[sku] !== "0T-WMJ6-ZHLF") continue;
+      if (row[country] === "" || stamped >= 4) continue;
 
-      row[vendor] = "WATERLIFT LLC";
+      row[country] = "US";
       stamped += 1;
     }
 
-    expect(stamped).toBeGreaterThan(0);
+    expect(stamped).toBe(4);
 
     const result = classify(grid, "whatever.csv");
 
@@ -112,7 +111,7 @@ describe("telling the two Shopify shops apart", () => {
   it("refuses a file that says nothing about which shop it is", async () => {
     let grid = rows(await gridOf(WATERLIFT));
 
-    for (const header of ["Currency", "Vendor", "Billing Country"]) {
+    for (const header of ["Currency", "Billing Country"]) {
       grid = setColumn(grid, header, () => "");
     }
 

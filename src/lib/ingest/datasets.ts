@@ -45,8 +45,6 @@ export type VariantSignal = {
   column: string;
   /** Uppercased cell value → the dataset it votes for. */
   votes: Readonly<Record<string, DatasetId>>;
-  /** Match the cell by substring rather than equality, for free-text columns. */
-  contains?: boolean;
 };
 
 /**
