@@ -4,6 +4,7 @@ import postgres from "postgres";
 import { databaseUrl } from "@/lib/env";
 
 import * as schema from "./schema";
+import { currentExecutor } from "./tenant";
 
 declare global {
   var __eaSql: ReturnType<typeof postgres> | undefined;
@@ -49,6 +50,17 @@ let instance: Database | undefined;
  * database with an `instanceof` check, and a proxy fails it.
  */
 export function getDb(): Database {
+  // A scope may say where its queries run — a transaction that has already
+  // named the company to Postgres. Preferring it here is what keeps that
+  // change out of the thirty other files that call this function.
+  //
+  // The cast is the one place this module is less than honest: a transaction
+  // handle carries every query method a `Database` does and differs only by
+  // `$client`, which nothing in this application reads.
+  const scoped = currentExecutor();
+
+  if (scoped) return scoped as Database;
+
   if (instance) return instance;
 
   // Reuse across hot reloads in development so we do not exhaust connections.

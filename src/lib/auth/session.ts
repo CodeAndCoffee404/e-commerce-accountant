@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
+import { enterTenant } from "@/lib/db/tenant";
 import { landingRoute } from "@/lib/navigation";
 
 export type CurrentUser = {
@@ -25,6 +26,11 @@ export async function requireUser(): Promise<CurrentUser> {
   if (!session?.user?.id || !session.user.email || !session.tenantId) {
     redirect("/signin");
   }
+
+  // Every page and every Server Action comes through here, so this is where
+  // the company gets named for the rest of the request. Doing it once, at the
+  // check nobody can skip, beats asking two dozen call sites to remember.
+  enterTenant(session.tenantId);
 
   return {
     id: session.user.id,

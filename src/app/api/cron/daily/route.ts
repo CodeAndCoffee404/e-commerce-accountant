@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { getDb, schema } from "@/lib/db";
+import { acrossTenants, withTenant } from "@/lib/db/tenant";
 import { cronSecret } from "@/lib/env";
 import { log } from "@/lib/log";
 import { ensurePeriods } from "@/lib/periods/ensure";
@@ -56,16 +57,21 @@ export async function GET(request: Request): Promise<NextResponse> {
   // date is never in question wherever the client is.
   const today = new Date().toISOString().slice(0, 10);
 
-  const tenants = await getDb()
-    .select({ id: schema.tenants.id, name: schema.tenants.name })
-    .from(schema.tenants);
+  // The one job that legitimately spans companies: it opens the month for
+  // every one of them. Said out loud rather than implied, because when the
+  // database starts enforcing the company itself this is a door around it.
+  const tenants = await acrossTenants(() =>
+    getDb().select({ id: schema.tenants.id, name: schema.tenants.name }).from(schema.tenants),
+  );
 
   const opened: { tenant: string; periods: string[] }[] = [];
   const failed: { tenant: string; error: string }[] = [];
 
   for (const tenant of tenants) {
     try {
-      const periods = await ensurePeriods(tenant.id, today);
+      // Each company's turn is its own unit of work, so a query inside it
+      // cannot reach the company whose turn came before.
+      const periods = await withTenant(tenant.id, () => ensurePeriods(tenant.id, today));
 
       if (periods.length > 0) {
         opened.push({ tenant: tenant.name, periods: periods.map((period) => period.label) });

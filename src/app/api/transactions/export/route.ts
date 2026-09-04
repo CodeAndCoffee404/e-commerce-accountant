@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { enterTenant } from "@/lib/db/tenant";
 import { log } from "@/lib/log";
 import { listTransactions, type TransactionFilters } from "@/lib/transactions/queries";
 
@@ -45,6 +46,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
+
+  // Named here rather than by requireUser: a route handler answers the
+  // browser directly and never passes through it.
+  enterTenant(session.tenantId);
 
   const access = await loadAccessFor(session.tenantId, session.role);
 

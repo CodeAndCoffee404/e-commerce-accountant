@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { enterTenant } from "@/lib/db/tenant";
 import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants";
 import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
 
@@ -29,6 +30,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
+
+  // Named here rather than by requireUser: a route handler answers the
+  // browser directly and never passes through it.
+  enterTenant(session.tenantId);
 
   // Reading a section is not writing to it. Checked at the token as well as at
   // registration, because a signed token IS the write.

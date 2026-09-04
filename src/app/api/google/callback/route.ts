@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { enterTenant } from "@/lib/db/tenant";
 import { saveConnection } from "@/lib/google/connection";
 import { accountEmail, exchangeCode } from "@/lib/google/oauth";
 
@@ -19,6 +20,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
+
+  // Named here rather than by requireUser: a route handler answers the
+  // browser directly and never passes through it.
+  enterTenant(session.tenantId);
 
   // The connection is a company setting, so it is the same permission that
   // started the flow — checked again on return, because the redirect back is
