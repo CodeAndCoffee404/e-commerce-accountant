@@ -673,10 +673,21 @@ export const reportRuns = pgTable(
   ],
 );
 
-/** Which uploads fed a run — the "sources" line of the report card. */
+/**
+ * Which uploads fed a run — the "sources" line of the report card.
+ *
+ * The tenant is repeated here although both ends of the row already carry it.
+ * It is not for the queries, which reach these rows through their run: it is so
+ * that the row can be checked on its own. A rule that says "this row belongs to
+ * that company" cannot be written against a column the table does not have, and
+ * a join is a place the check can be forgotten.
+ */
 export const reportRunSources = pgTable(
   "report_run_sources",
   {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     reportRunId: uuid("report_run_id")
       .notNull()
       .references(() => reportRuns.id, { onDelete: "cascade" }),
@@ -684,16 +695,27 @@ export const reportRunSources = pgTable(
       .notNull()
       .references(() => sourceFiles.id, { onDelete: "cascade" }),
   },
-  (table) => [primaryKey({ columns: [table.reportRunId, table.sourceFileId] })],
+  (table) => [
+    primaryKey({ columns: [table.reportRunId, table.sourceFileId] }),
+    index("report_run_sources_tenant_idx").on(table.tenantId, table.sourceFileId),
+  ],
 );
 
 export const artifactKind = pgEnum("artifact_kind", ["xlsx", "gsheet"]);
 export const driveStatus = pgEnum("drive_status", ["pending", "synced", "failed"]);
 
+/**
+ * A file a run produced. The tenant is carried here for the same reason as on
+ * `report_run_sources`: an artifact is fetched by its own id, and the check
+ * that it is this company's should not depend on remembering to join.
+ */
 export const reportArtifacts = pgTable(
   "report_artifacts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     reportRunId: uuid("report_run_id")
       .notNull()
       .references(() => reportRuns.id, { onDelete: "cascade" }),
@@ -710,7 +732,10 @@ export const reportArtifacts = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("report_artifacts_run_idx").on(table.reportRunId)],
+  (table) => [
+    index("report_artifacts_run_idx").on(table.reportRunId),
+    index("report_artifacts_tenant_idx").on(table.tenantId),
+  ],
 );
 
 /**

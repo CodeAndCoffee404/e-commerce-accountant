@@ -205,7 +205,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
 
     await db
       .insert(schema.reportRunSources)
-      .values({ reportRunId: run.id, sourceFileId: file.id });
+      .values({ tenantId: session.tenantId, reportRunId: run.id, sourceFileId: file.id });
 
     const refused = await deleteUpload(file.id);
 
