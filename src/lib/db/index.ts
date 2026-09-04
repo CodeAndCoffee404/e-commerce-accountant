@@ -68,8 +68,9 @@ export function getDb(): Database {
  * The connection itself, ignoring whatever scope is in force.
  *
  * Two callers only: whoever is about to open the transaction a scope runs in,
- * and the Auth.js adapter, which is handed the database once at start-up and
- * must not be given a transaction that ends.
+ * and the Auth.js adapter, which keeps whatever it is handed and so must not
+ * be given a transaction that ends. Auth.js rebuilds its config on every call,
+ * so the adapter would otherwise pick up whichever scope happened to be open.
  */
 export function rootDb(): Database {
   if (instance) return instance;

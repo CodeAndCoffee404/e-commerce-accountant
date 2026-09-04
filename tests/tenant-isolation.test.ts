@@ -111,6 +111,34 @@ describe.skipIf(!HAS_DB)("what one company can reach of another", () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("narrows for real when a company is named inside a scope that spans them", async () => {
+    const [a, b] = await acrossTenants(async () => [await company("e1"), await company("e2")]);
+
+    await fill(a, "e1");
+    await fill(b, "e2");
+
+    // The shape the nightly job and every action test are written in: open a
+    // scope that spans companies, then take one company's turn inside it. The
+    // narrowing has to reach Postgres, not only the AsyncLocalStorage — the
+    // policy passes anything while the bypass is up, so a scope that named a
+    // company and left it up would answer for both of them.
+    const [seen, after] = await acrossTenants(async () => {
+      const mine = await withTenant(a, () => getDb().select().from(schema.sourceFiles));
+
+      // And back out again: the transaction outlives the inner scope, so the
+      // outer one must still span companies afterwards.
+      return [mine, await getDb().select().from(schema.sourceFiles)];
+    });
+
+    expect(seen.map((row) => row.originalFilename)).toEqual(["e1.csv"]);
+    // Both of them, and not by exact equality: the tests above this one leave
+    // their companies' rows behind, and seeing those too is the outer scope
+    // working rather than a leak.
+    expect(after.map((row) => row.originalFilename)).toEqual(
+      expect.arrayContaining(["e1.csv", "e2.csv"]),
+    );
+  });
+
   it("refuses to write a row into another company", async () => {
     const [a, b] = await acrossTenants(async () => [await company("d1"), await company("d2")]);
 
@@ -167,5 +195,33 @@ describe.skipIf(!HAS_DB)("every table that carries a company is protected", () =
     for (const table of withCompany) {
       expect(forced.get(table), `${table} does not have row-level security forced`).toBe(true);
     }
+  });
+
+  it("connects as a role that cannot walk past a policy", async () => {
+    // Two separate exemptions, and forcing the policies only closes one of
+    // them. `FORCE ROW LEVEL SECURITY` answers the owner's exemption; a role
+    // carrying the BYPASSRLS attribute walks past every policy regardless, and
+    // the whole layer above is then inert.
+    //
+    // The tests above do notice — granting the attribute to the test role
+    // fails six of them. This one exists because they fail as six queries
+    // returning rows they should not, which reads like a broken policy, and
+    // the policies would be fine. It is also the only property here that
+    // belongs to the connection rather than to the schema: nothing in a
+    // migration can fix it, and a deployment can acquire it without the
+    // application changing at all.
+    const rows = await rootDb().execute(
+      sql`select rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+    );
+
+    const [role] = rows as unknown as { rolsuper: boolean; rolbypassrls: boolean }[];
+
+    expect(role, "current_user has no row in pg_roles").toBeDefined();
+    expect(role.rolbypassrls, "the connecting role has BYPASSRLS, so no policy applies to it").toBe(
+      false,
+    );
+    expect(role.rolsuper, "the connecting role is a superuser, so no policy applies to it").toBe(
+      false,
+    );
   });
 });

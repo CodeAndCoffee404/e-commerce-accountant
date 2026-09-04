@@ -3,7 +3,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { maySignIn, resolveAccess, roleFor } from "@/lib/auth/allowlist";
-import { getDb, schema } from "@/lib/db";
+import { rootDb, schema } from "@/lib/db";
 import { acrossTenants } from "@/lib/db/tenant";
 import { serverEnv } from "@/lib/env";
 
@@ -32,7 +32,12 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
   const env = serverEnv();
 
   return {
-    adapter: DrizzleAdapter(getDb(), {
+    // `rootDb()` rather than `getDb()`: the adapter is given a database and
+    // keeps it, so handing it whatever scope happened to be open would hand it
+    // a transaction that ends. Harmless while sessions live in the token and
+    // the adapter only writes during the OAuth callback; wrong the day
+    // database sessions are turned on, which is not a day to discover it.
+    adapter: DrizzleAdapter(rootDb(), {
       usersTable: schema.users,
       accountsTable: schema.accounts,
       sessionsTable: schema.sessions,
@@ -62,7 +67,18 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
       // company the person belongs to — the invitation is looked up by email
       // across all of them — so it says so rather than leaving it to be
       // inferred from the absence of a scope.
-      signIn: ({ user }) => acrossTenants(() => maySignIn(user.email)),
+      //
+      // The address has to be one Google says it verified. Every invitation in
+      // this application is an email address and nothing else, so an
+      // unverified one is an invitation handed to whoever claimed the address
+      // rather than to whoever holds it. Google verifies its own accounts, so
+      // in practice this refuses nothing that would otherwise get in — which
+      // is the argument for checking rather than for trusting.
+      signIn: ({ user, profile }) => {
+        if (profile && profile.email_verified !== true) return false;
+
+        return acrossTenants(() => maySignIn(user.email));
+      },
 
       async jwt({ token, trigger, session, user }) {
         // `user` is set on the sign-in pass only; on later requests the token

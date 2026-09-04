@@ -76,12 +76,18 @@ function conflict(current: string, wanted: string): Error {
  * gone when it ends. Without it the value would outlive the request on a
  * pooled connection, which is the one way this design could hand somebody
  * another company's rows.
+ *
+ * Naming a company also puts the bypass back down. The policy reads
+ * `tenant_id = … or bypass = 'on'`, so a scope that named a company while the
+ * bypass was still up would be labelled as one company and answer for all of
+ * them — which is what narrowing into a company inside `acrossTenants` looked
+ * like until this line existed.
  */
 async function announce(executor: Executor, tenantId: string | null): Promise<void> {
   await executor.execute(
     tenantId === null
       ? sql`select set_config('app.bypass_rls', 'on', true)`
-      : sql`select set_config('app.tenant_id', ${tenantId}, true)`,
+      : sql`select set_config('app.bypass_rls', 'off', true), set_config('app.tenant_id', ${tenantId}, true)`,
   );
 }
 
@@ -90,11 +96,23 @@ async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Prom
 
   // Already inside a transaction this module opened — the nightly job taking
   // one company's turn, or a page whose action re-enters. Re-announce on the
-  // same transaction rather than nesting another.
+  // same transaction rather than nesting another, and put the announcement
+  // back on the way out: the transaction outlives this scope, so leaving it
+  // narrowed would silently scope whatever the outer one does next.
   if (open) {
+    const outer = storage.getStore()?.tenantId ?? null;
+
     await announce(open, tenantId);
 
-    return storage.run({ tenantId, executor: open }, fn);
+    try {
+      return await storage.run({ tenantId, executor: open }, fn);
+    } finally {
+      // Best effort: if `fn` threw a database error the transaction is already
+      // aborted and this fails too. That direction is safe — the scope stays
+      // narrow, and every later statement in an aborted transaction fails
+      // anyway. Restoring is what matters when `fn` returned normally.
+      await announce(open, outer).catch(() => undefined);
+    }
   }
 
   return rootDb().transaction(async (executor) => {

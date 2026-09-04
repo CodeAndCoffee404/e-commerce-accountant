@@ -17,9 +17,11 @@ import { acrossTenants } from "@/lib/db/tenant";
  * for all of its tests, so without a scope of its own each test would inherit
  * the company the last one signed in as.
  *
- * The isolation itself is not tested through here — it could not be, since
- * this stands it down. `tests/tenant-isolation.test.ts` proves it the other
- * way round, from outside any scope.
+ * Standing it down applies to the fixtures, not to the action under test: an
+ * action calls `inRequest`, which names a company on the same transaction and
+ * puts the bypass back down, so what the action itself does runs under the
+ * database's check like it does in production. `tests/tenant-isolation.test.ts`
+ * proves the check the other way round, from outside any scope.
  */
 export function inRequest(body: () => Promise<void>): () => Promise<void> {
   return () => acrossTenants(body);
