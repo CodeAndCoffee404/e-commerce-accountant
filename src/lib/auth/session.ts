@@ -5,7 +5,7 @@ import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
-import { SELECT_COMPANY } from "@/lib/navigation";
+import { DEFAULT_ROUTE, SELECT_COMPANY } from "@/lib/navigation";
 import { landingRoute } from "@/lib/navigation";
 import { membershipIn } from "./allowlist";
 
@@ -16,6 +16,8 @@ export type CurrentUser = {
   image: string | null;
   tenantId: string;
   role: MembershipRole;
+  /** Above the companies. Not a role: it says nothing about this company. */
+  isSuperAdmin: boolean;
 };
 
 /**
@@ -96,6 +98,24 @@ export async function apiUser(): Promise<UserWithAccess | null> {
   if (!user?.role) return null;
 
   return { ...user, role: user.role, access: await loadAccessFor(user.tenantId, user.role) };
+}
+
+/**
+ * Guards the admin area, which is above the companies rather than inside one.
+ *
+ * A separate check from `requireSection`: those ask what a role may do in the
+ * company being worked in, and this asks something the companies cannot answer
+ * about themselves. Anyone else is sent to their own dashboard rather than
+ * shown a refusal — a screen they are not meant to know about should not
+ * announce itself.
+ */
+export async function requireSuperAdmin(): Promise<CurrentUser & { isSuperAdmin: true }> {
+  const user = await signedIn();
+
+  if (!user) redirect("/signin");
+  if (!user.isSuperAdmin) redirect(DEFAULT_ROUTE);
+
+  return { ...user, role: user.role ?? "owner", isSuperAdmin: true };
 }
 
 export type UserWithAccess = CurrentUser & { access: AccessMap };

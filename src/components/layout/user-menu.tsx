@@ -1,7 +1,14 @@
 "use client";
 
-import { BankOutlined, CheckOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons";
+import {
+  BankOutlined,
+  CheckOutlined,
+  DeploymentUnitOutlined,
+  LogoutOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { Avatar, Dropdown, Typography, message } from "antd";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -80,6 +87,18 @@ export function UserMenu({
           },
           { type: "divider" },
           ...switcher,
+          // Only for the person above the companies, and only as a way back to
+          // the list — everything else about a company is inside it.
+          ...(user.isSuperAdmin
+            ? [
+                {
+                  key: "admin",
+                  icon: <DeploymentUnitOutlined />,
+                  label: <Link href="/admin">All companies</Link>,
+                },
+                { type: "divider" as const },
+              ]
+            : []),
           {
             key: "sign-out",
             icon: <LogoutOutlined />,
