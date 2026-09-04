@@ -14,6 +14,7 @@ import type {
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
 import { parseShopifyTaxRate } from "./off-amazon-sales";
+import { notASale, notASaleReason, unpaidOrderWarning } from "./shopify-orders";
 import type { ReportModule, UnmappedSku } from "./types";
 
 /**
@@ -183,67 +184,15 @@ function money(value: string | undefined): Decimal | null {
   }
 }
 
-/**
- * Whether a hand-made order was really bought: money in it, arrived by a means
- * the shop actually accepts.
- */
-function isRealSale(order: OrderFacts | undefined, rules: RulesSnapshot): boolean {
-  if (!order?.total?.greaterThan(0)) return false;
-
-  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
-
-  return !unpaid.includes(order.paymentMethod);
-}
-
-/**
- * The message for a hand-made order that claims money it cannot have taken —
- * null when there is nothing wrong with it.
- *
- * These are worth naming one by one rather than counting: each is an order
- * somebody has to go and fix in Shopify, and until it is fixed the month's
- * revenue is understated by exactly this much.
- */
-function unpaidOrderProblem(
-  order: OrderFacts | undefined,
-  rules: RulesSnapshot,
-  orderName: string,
-): string | null {
-  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
-
-  if (!order?.total?.greaterThan(0)) return null;
-  if (!unpaid.includes(order.paymentMethod)) return null;
-
-  return (
-    `Shopify invoice: order ${orderName} was made by hand and marked paid by ` +
-    `"${order.paymentMethod}", which the shop does not accept — ${order.total.toFixed(2)} left ` +
-    "off the invoice. If it is a warranty replacement it needs a 100% discount in Shopify; " +
-    "if it was really bought, the payment needs recording."
-  );
-}
-
 function isExcludedRow(
   row: LedgerRow,
   rules: RulesSnapshot,
   facts: ReadonlyMap<string, OrderFacts>,
   arrival: string,
 ): string | null {
-  const excludedSources = channelRule<string[]>(rules, "shopify_geyser", "excluded_sources") ?? [];
-  const order = facts.get(row.raw["Name"] ?? "");
-  const source = order?.source ?? "";
+  const why = notASale(facts.get(row.raw["Name"] ?? ""));
 
-  // `shopify_draft_order` is not an order that is still a draft: it is one an
-  // employee wrote up by hand in the admin, which Shopify then shows as an
-  // ordinary order. That is how a warranty replacement or an adapter ships.
-  //
-  // It is a sale only if it was actually paid for, and the shop takes card
-  // payments only — so a total that arrived through `manual` is not money that
-  // exists. It is the known mistake: the replacement should have been zeroed
-  // with a 100% discount and was marked paid by hand instead. Billing it would
-  // invent revenue, and its VAT with it, so it is excluded like the rest and
-  // named in the warnings by `unpaidOrderProblem` below.
-  if (excludedSources.includes(source) && !isRealSale(order, rules)) {
-    return "Shopify invoice: made by hand, nothing paid";
-  }
+  if (why) return notASaleReason("Shopify invoice", why);
 
   const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
 
@@ -295,9 +244,9 @@ export function generateShopifyZohoInvoice(
   // an order claiming money the shop cannot have taken is somebody's mistake to
   // go and fix, and a count in the skipped list would never say which orders.
   for (const [orderName, order] of facts) {
-    const problem = unpaidOrderProblem(order, context.rules, orderName);
-
-    if (problem) warnings.push(problem);
+    if (notASale(order) === "unpaid") {
+      warnings.push(unpaidOrderWarning("Shopify invoice", orderName, order));
+    }
   }
 
   /* ------------------------------------------------------------------ *

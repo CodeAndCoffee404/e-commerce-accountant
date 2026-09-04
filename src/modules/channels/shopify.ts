@@ -243,26 +243,6 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
       "is computed from the order total. Elsewhere a zero means zero and must " +
       "not be filled in.",
   },
-  {
-    channel: GEYSER.dataset,
-    key: "unpaid_payment_methods",
-    value: ["manual"],
-    note:
-      "The shop takes card payments only, so an order marked paid by hand was " +
-      "not paid at all. It is the known mistake on a warranty replacement: the " +
-      "item should have been zeroed with a 100% discount and was marked paid " +
-      "instead. Such an order is left off the invoice and named in the warnings.",
-  },
-  {
-    channel: GEYSER.dataset,
-    key: "excluded_sources",
-    value: ["shopify_draft_order"],
-    note:
-      "Orders an employee wrote up by hand in the admin. Shopify shows them as " +
-      "ordinary orders afterwards; only the export still says where they came " +
-      "from. Most carry no money — an adapter or a warranty replacement — but " +
-      "one that was paid for is a sale, so the source is only half the test.",
-  },
 ];
 
 /**

@@ -141,6 +141,13 @@
       "when": 1788509871995,
       "tag": "0019_sku_mapping_source_name",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788532187624,
+      "tag": "0020_drop_shopify_exclusion_rules",
+      "breakpoints": true
     }
   ]
 }

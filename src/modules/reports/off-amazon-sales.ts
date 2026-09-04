@@ -4,6 +4,7 @@ import { parseDecimalValue } from "@/lib/ingest/numbers";
 
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
 
+import { notASale, notASaleReason, unpaidOrderWarning } from "./shopify-orders";
 import type { ReportModule } from "./types";
 import type {
   GeneratorResult,
@@ -257,26 +258,13 @@ function cdiscountRow(
  * Shopify
  * ------------------------------------------------------------------ */
 
-/**
- * Whether an order was really bought: money in it, arrived by a means the shop
- * actually accepts. An unreadable total counts as no money, so such an order
- * stays excluded exactly as it was before this distinction existed, and the
- * unreadable total is reported further down.
- */
-function isPaidFor(orderTotal: string, row: LedgerRow, rules: RulesSnapshot): boolean {
-  let total: Decimal | null = null;
-
+/** An amount, or null when the column holds something that is not one. */
+function readMoney(value: string): Decimal | null {
   try {
-    total = parseDecimalValue(orderTotal, { decimalSeparator: ".", column: "Total" });
+    return parseDecimalValue(value, { decimalSeparator: ".", column: "Total" });
   } catch {
-    return false;
+    return null;
   }
-
-  if (!total?.greaterThan(0)) return false;
-
-  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
-
-  return !unpaid.includes(row.raw["Payment Method"] ?? "");
 }
 
 /** `FR TVA 20%` → 0.2. The rate is only ever written into the tax label. */
@@ -305,16 +293,20 @@ function shopifyRow(
 
   if (!orderTotal) return skip(skipped, "Shopify: a line item; the order total comes from the first row");
 
-  const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
+  // The same test the Zoho invoice applies, from the same place: the two
+  // reports are one month's money at two grains, and an order counted by one
+  // and not the other is a discrepancy nobody can reconcile.
+  const order = {
+    source: row.raw["Source"] ?? "",
+    total: readMoney(orderTotal),
+    paymentMethod: row.raw["Payment Method"] ?? "",
+  };
+  const why = notASale(order);
 
-  // `shopify_draft_order` is not an order that is still a draft: it is one an
-  // employee wrote up by hand in the admin. That is how a warranty replacement
-  // or an adapter ships, and it is a sale only if it was really paid for — the
-  // shop takes card payments only, so a total that arrived through `manual` is
-  // money that does not exist, and the same order is named in the Shopify
-  // invoice's warnings for somebody to go and fix.
-  if (excluded.includes(row.raw["Source"] ?? "") && !isPaidFor(orderTotal, row, context.rules)) {
-    return skip(skipped, "Shopify: made by hand, nothing paid");
+  if (why) {
+    if (why === "unpaid") warnings.push(unpaidOrderWarning("Shopify", row.raw["Name"] ?? "", order));
+
+    return skip(skipped, notASaleReason("Shopify", why));
   }
 
   const defaults = channelRule<{
