@@ -606,6 +606,7 @@ async function loadRules(tenantId: string): Promise<RulesSnapshot> {
       .select({
         channel: schema.skuMappings.channel,
         sourceSku: schema.skuMappings.sourceSku,
+        sourceName: schema.skuMappings.sourceName,
         targetSku: schema.skuMappings.targetSku,
         itemName: schema.skuMappings.itemName,
         isIgnored: schema.skuMappings.isIgnored,

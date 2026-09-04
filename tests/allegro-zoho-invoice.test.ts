@@ -46,9 +46,9 @@ const rules: RulesSnapshot = {
   ],
   sellerVatNumbers: [],
   skuMappings: [
-    { channel: "allegro", sourceSku: "111", targetSku: "ZOHO-A", itemName: "Widget A", isIgnored: false },
-    { channel: "allegro", sourceSku: "222", targetSku: "ZOHO-B", itemName: "Widget B", isIgnored: false },
-    { channel: "allegro", sourceSku: "333", targetSku: null, itemName: null, isIgnored: true },
+    { channel: "allegro", sourceSku: "111", sourceName: "", targetSku: "ZOHO-A", itemName: "Widget A", isIgnored: false },
+    { channel: "allegro", sourceSku: "222", sourceName: "", targetSku: "ZOHO-B", itemName: "Widget B", isIgnored: false },
+    { channel: "allegro", sourceSku: "333", sourceName: "", targetSku: null, itemName: null, isIgnored: true },
   ],
   channelRules: [{ channel: "allegro", key: "currency_map", value: ALLEGRO_CURRENCY_MAP }],
 };

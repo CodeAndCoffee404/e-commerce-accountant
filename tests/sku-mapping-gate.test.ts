@@ -56,7 +56,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "amazon", sourceSku: "MAPPED-1", targetSku: "TS-1", itemName: "Widget", isIgnored: false },
+        { channel: "amazon", sourceSku: "MAPPED-1", sourceName: "", targetSku: "TS-1", itemName: "Widget", isIgnored: false },
       ],
     };
 
@@ -67,7 +67,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "amazon", sourceSku: "IGNORED-1", targetSku: null, itemName: null, isIgnored: true },
+        { channel: "amazon", sourceSku: "IGNORED-1", sourceName: "", targetSku: null, itemName: null, isIgnored: true },
       ],
     };
 
@@ -78,7 +78,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "allegro", sourceSku: "SHARED-1", targetSku: "AL-1", itemName: "Widget", isIgnored: false },
+        { channel: "allegro", sourceSku: "SHARED-1", sourceName: "", targetSku: "AL-1", itemName: "Widget", isIgnored: false },
       ],
     };
 

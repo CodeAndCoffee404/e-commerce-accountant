@@ -134,6 +134,13 @@
       "when": 1788461759464,
       "tag": "0018_shopify_stores",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788509871995,
+      "tag": "0019_sku_mapping_source_name",
+      "breakpoints": true
     }
   ]
 }

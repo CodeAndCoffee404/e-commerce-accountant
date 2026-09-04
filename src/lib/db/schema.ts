@@ -452,13 +452,29 @@ export const skuMappings = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     channel: text("channel").notNull(),
     sourceSku: text("source_sku").notNull(),
+    /**
+     * The item name the source is expected to carry alongside that code — a
+     * checksum, not a second key. Empty means the channel does not report a
+     * name worth checking, which is every channel but Shopify.
+     *
+     * It is part of the unique key because a code alone is not always one
+     * product: Shopify sells two different items under
+     * `QE-5795-1Z7V-stickerless`, and they have to be two rows billed as two
+     * things rather than one row that silently swallows the other.
+     */
+    sourceName: text("source_name").notNull().default(""),
     targetSku: text("target_sku"),
     itemName: text("item_name"),
     /** Connectors and packaging: sold, but never invoiced through Zoho. */
     isIgnored: boolean("is_ignored").notNull().default(false),
   },
   (table) => [
-    uniqueIndex("sku_mappings_source_idx").on(table.tenantId, table.channel, table.sourceSku),
+    uniqueIndex("sku_mappings_source_idx").on(
+      table.tenantId,
+      table.channel,
+      table.sourceSku,
+      table.sourceName,
+    ),
   ],
 );
 

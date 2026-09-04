@@ -152,6 +152,7 @@ const skuSchema = z.object({
   id: z.string().uuid().optional(),
   channel: z.string().trim().min(1),
   sourceSku: z.string().trim().min(1),
+  sourceName: z.string().trim().default(""),
   targetSku: z.string().trim().nullable().optional(),
   itemName: z.string().trim().nullable().optional(),
   isIgnored: z.boolean(),
