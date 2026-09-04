@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
-import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { inRequest } from "@/lib/auth/session";
+import { apiUser, inRequest } from "@/lib/auth/session";
 import { log } from "@/lib/log";
 import { listTransactions, type TransactionFilters } from "@/lib/transactions/queries";
 
@@ -47,15 +45,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 // One request, one unit of work: a route handler answers the browser itself
 // and never passes through requireUser, so it names the company here.
 async function exportTransactions(request: Request): Promise<NextResponse> {
-  const session = await auth();
+  const user = await apiUser();
 
-  if (!session?.user?.id || !session.tenantId) {
+  if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const access = await loadAccessFor(session.tenantId, session.role);
-
-  if (!allows(access, "transactions", "view")) {
+  if (!allows(user.access, "transactions", "view")) {
     return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
@@ -73,7 +69,7 @@ async function exportTransactions(request: Request): Promise<NextResponse> {
     pageSize: 200,
   };
 
-  const page = await listTransactions(session.tenantId, { ...filters, pageSize: 200 });
+  const page = await listTransactions(user.tenantId, { ...filters, pageSize: 200 });
   const rows: string[] = [COLUMNS.join(",")];
 
   // Paged through rather than fetched at once, so a large period does not build
@@ -82,7 +78,7 @@ async function exportTransactions(request: Request): Promise<NextResponse> {
   let collected = 0;
 
   while (collected < page.total) {
-    const chunk = await listTransactions(session.tenantId, {
+    const chunk = await listTransactions(user.tenantId, {
       ...filters,
       page: current,
       pageSize: 200,
@@ -120,8 +116,8 @@ async function exportTransactions(request: Request): Promise<NextResponse> {
   }
 
   log.info("transactions.exported", {
-    tenantId: session.tenantId,
-    userId: session.user.id,
+    tenantId: user.tenantId,
+    userId: user.id,
     rows: collected,
     filters: Object.fromEntries(url.searchParams),
   });

@@ -37,6 +37,10 @@ const EXEMPT: Record<string, string> = {
   "src/app/layout.tsx": "the document shell: a theme cookie and fonts, no data",
   "src/app/page.tsx": "redirects to the dashboard and nothing else",
   "src/app/signin/page.tsx": "the sign-in screen, shown before anyone has a company",
+  "src/app/select-company/page.tsx":
+    "the company chooser: it exists because none has been chosen, and reads nothing a company owns",
+  "src/lib/auth/companies.ts":
+    "the switcher: lists the companies a person is in and moves between them, so it precedes the choice",
   "src/app/api/auth/[...nextauth]/route.ts": "Auth.js's own handlers; sign-in names the company",
   "src/lib/auth/actions.ts": "starts and ends a session; touches no company data",
 };

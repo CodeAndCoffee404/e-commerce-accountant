@@ -1,12 +1,63 @@
 "use client";
 
-import { LogoutOutlined, UserOutlined } from "@ant-design/icons";
-import { Avatar, Dropdown, Typography } from "antd";
+import { BankOutlined, CheckOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons";
+import { Avatar, Dropdown, Typography, message } from "antd";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 
+import type { Company } from "@/lib/auth/allowlist";
 import { signOutAction } from "@/lib/auth/actions";
+import { switchCompany } from "@/lib/auth/companies";
 import type { CurrentUser } from "@/lib/auth/session";
 
-export function UserMenu({ user }: { user: CurrentUser }) {
+export function UserMenu({
+  user,
+  company,
+  companies,
+}: {
+  user: CurrentUser;
+  company: string;
+  companies: Company[];
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  function move(tenantId: string) {
+    if (tenantId === user.tenantId || pending) return;
+
+    start(async () => {
+      const result = await switchCompany(tenantId);
+
+      if (!result.ok) {
+        message.error(result.message);
+
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
+  // Only when there is something to switch to. One company is not a choice,
+  // and a menu that offers it reads as though something were missing.
+  const switcher =
+    companies.length > 1
+      ? [
+          {
+            key: "companies",
+            type: "group" as const,
+            label: "Company",
+            children: companies.map((option) => ({
+              key: `company-${option.id}`,
+              icon: option.id === user.tenantId ? <CheckOutlined /> : <BankOutlined />,
+              label: option.name,
+              onClick: () => move(option.id),
+            })),
+          },
+          { type: "divider" as const },
+        ]
+      : [];
+
   return (
     <Dropdown
       trigger={["click"]}
@@ -23,10 +74,12 @@ export function UserMenu({ user }: { user: CurrentUser }) {
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {user.email} · {user.role}
                 </Typography.Text>
+                <Typography.Text style={{ fontSize: 12 }}>{company}</Typography.Text>
               </div>
             ),
           },
           { type: "divider" },
+          ...switcher,
           {
             key: "sign-out",
             icon: <LogoutOutlined />,

@@ -70,6 +70,14 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
       .insert(schema.users)
       .values({ id: session.userId, email: `${session.userId}@example.invalid` })
       .onConflictDoNothing();
+
+    // The role is read from the membership on every request, so the session
+    // needs one to be anything other than a stranger to this company.
+    await db()
+      .insert(schema.memberships)
+      .values({ tenantId: session.tenantId, userId: session.userId, role: "owner" })
+      .onConflictDoNothing();
+
     await seedReferenceData(session.tenantId);
 
     for (const relative of [

@@ -4,14 +4,15 @@ import Google from "next-auth/providers/google";
 
 import { maySignIn, resolveAccess } from "@/lib/auth/allowlist";
 import { getDb, schema } from "@/lib/db";
-import type { MembershipRole } from "@/lib/db/schema";
 import { acrossTenants } from "@/lib/db/tenant";
 import { serverEnv } from "@/lib/env";
 
 declare module "next-auth" {
   interface Session {
+    /** The company this session is currently working in. */
     tenantId: string;
-    role: MembershipRole;
+    /** Above the companies: may see the list of them and step into any. */
+    isSuperAdmin: boolean;
   }
 }
 
@@ -20,7 +21,7 @@ declare module "next-auth" {
 declare module "@auth/core/jwt" {
   interface JWT {
     tenantId?: string;
-    role?: MembershipRole;
+    isSuperAdmin?: boolean;
   }
 }
 
@@ -29,7 +30,7 @@ declare module "@auth/core/jwt" {
  * it at import time would fail `next build`, which imports modules without a
  * runtime environment.
  */
-export const { handlers, auth, signIn, signOut } = NextAuth(() => {
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() => {
   const env = serverEnv();
 
   return {
@@ -63,9 +64,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       // inferred from the absence of a scope.
       signIn: ({ user }) => acrossTenants(() => maySignIn(user.email)),
 
-      async jwt({ token, user }) {
+      async jwt({ token, trigger, session, user }) {
         // `user` is set on the sign-in pass only; on later requests the token
-        // already carries the tenant and there is nothing to look up.
+        // already carries the company and there is nothing to look up.
         const { id, email } = user ?? {};
 
         if (id && email) {
@@ -74,7 +75,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
           if (!access) return null;
 
           token.tenantId = access.tenantId;
-          token.role = access.role;
+          token.isSuperAdmin = access.isSuperAdmin;
+        }
+
+        // Switching company. The membership was checked before this was
+        // called; checking it again here would be checking it in the wrong
+        // place, since the token is written from whatever the caller passes.
+        if (trigger === "update" && typeof session?.tenantId === "string") {
+          token.tenantId = session.tenantId;
         }
 
         return token;
@@ -83,7 +91,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => {
       session({ session, token }) {
         if (token.sub) session.user.id = token.sub;
         if (token.tenantId) session.tenantId = token.tenantId;
-        if (token.role) session.role = token.role;
+        session.isSuperAdmin = token.isSuperAdmin ?? false;
 
         return session;
       },

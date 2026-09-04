@@ -62,6 +62,14 @@ export const users = pgTable("users", {
   email: text("email").unique().notNull(),
   emailVerified: timestamp("email_verified", { mode: "date", withTimezone: true }),
   image: text("image"),
+  /**
+   * Above the companies rather than inside one.
+   *
+   * Not a role: roles say what a person may do in a company they belong to,
+   * and this says they may see the list of companies at all and step into any
+   * of them. Nobody grants it from inside a company, which is the point.
+   */
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
 });
 
 export const accounts = pgTable(
@@ -187,7 +195,12 @@ export const allowedEmails = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("allowed_emails_email_idx").on(table.email),
+  (table) => [
+    // Per company, not globally. One person can be invited to two companies —
+    // an accountant who keeps the books for both — and the switcher exists for
+    // exactly that. Globally unique was the old assumption that one address
+    // meant one company.
+    uniqueIndex("allowed_emails_tenant_email_idx").on(table.tenantId, table.email),
     tenantIsolation(),
   ],
 );

@@ -56,12 +56,26 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;
+
+    // The role is read from the membership on every request, so the session
+    // needs one: without it this person is a stranger to this company and gets
+    // sent to the chooser instead.
+    await db()
+      .insert(schema.users)
+      .values({ id: session.userId, email: "test@example.invalid" })
+      .onConflictDoNothing();
+
+    await db()
+      .insert(schema.memberships)
+      .values({ tenantId: tenant.id, userId: session.userId, role: "owner" })
+      .onConflictDoNothing();
   }));
 
   afterAll(inRequest(async () => {
     if (session.tenantId) {
       await db().delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
     }
+    await db().delete(schema.users).where(eq(schema.users.id, session.userId));
   }));
 
   /** Uploads the same fixture again, salting the checksum so it is not a duplicate. */

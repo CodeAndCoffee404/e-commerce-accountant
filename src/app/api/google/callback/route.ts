@@ -1,10 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
-import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { inRequest } from "@/lib/auth/session";
+import { apiUser, inRequest } from "@/lib/auth/session";
 import { saveConnection } from "@/lib/google/connection";
 import { accountEmail, exchangeCode } from "@/lib/google/oauth";
 
@@ -21,18 +19,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 // One request, one unit of work: a route handler answers the browser itself
 // and never passes through requireUser, so it names the company here.
 async function finishConnect(request: Request): Promise<NextResponse> {
-  const session = await auth();
+  const user = await apiUser();
 
-  if (!session?.user?.id || !session.tenantId) {
+  if (!user) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  // The connection is a company setting, so it is the same permission that
-  // started the flow — checked again on return, because the redirect back is
-  // itself a request anyone can make.
-  const access = await loadAccessFor(session.tenantId, session.role);
-
-  if (!allows(access, "settings_company", "edit")) return back(request, "forbidden");
+  if (!allows(user.access, "settings_company", "edit")) return back(request, "forbidden");
 
   const url = new URL(request.url);
   const store = await cookies();
@@ -63,11 +56,11 @@ async function finishConnect(request: Request): Promise<NextResponse> {
     }
 
     await saveConnection({
-      tenantId: session.tenantId,
+      tenantId: user.tenantId,
       email: await accountEmail(tokens.accessToken),
       refreshToken: tokens.refreshToken,
       scope: tokens.scope,
-      connectedBy: session.user.id,
+      connectedBy: user.id,
     });
 
     return back(request, "connected");

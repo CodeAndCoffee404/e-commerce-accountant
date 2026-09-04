@@ -3,10 +3,8 @@ import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
-import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { inRequest } from "@/lib/auth/session";
+import { apiUser, inRequest } from "@/lib/auth/session";
 import { connectUrl } from "@/lib/google/oauth";
 
 export const STATE_COOKIE = "ea-google-state";
@@ -33,15 +31,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 // One request, one unit of work: a route handler answers the browser itself
 // and never passes through requireUser, so it names the company here.
 async function startConnect(request: Request): Promise<NextResponse> {
-  const session = await auth();
+  const user = await apiUser();
 
-  if (!session?.user?.id || !session.tenantId) {
+  if (!user) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  const access = await loadAccessFor(session.tenantId, session.role);
-
-  if (!allows(access, "settings_company", "edit")) {
+  if (!allows(user.access, "settings_company", "edit")) {
     return NextResponse.redirect(new URL("/settings?drive=forbidden", request.url));
   }
 

@@ -5,7 +5,9 @@ import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
+import { SELECT_COMPANY } from "@/lib/navigation";
 import { landingRoute } from "@/lib/navigation";
+import { membershipIn } from "./allowlist";
 
 export type CurrentUser = {
   id: string;
@@ -46,11 +48,32 @@ export function inRequest<T>(body: () => Promise<T>): Promise<T> {
  * every page behind the dashboard has to come through here.
  */
 export async function requireUser(): Promise<CurrentUser> {
+  const user = await signedIn();
+
+  // Not signed in at all, or signed in and holding a company they are no
+  // longer in — an access that was withdrawn while the token was still valid.
+  // The second is why the role is read on every request rather than carried in
+  // the token: a withdrawal that takes effect at the next sign-in is not a
+  // withdrawal.
+  if (!user) redirect("/signin");
+  if (!user.role) redirect(SELECT_COMPANY);
+
+  return { ...user, role: user.role };
+}
+
+/**
+ * The signed-in person, or null — for route handlers, which answer the browser
+ * with a status rather than a redirect.
+ *
+ * `role` is null when the session names a company this person is not in.
+ */
+export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
+  role: MembershipRole | null;
+  isSuperAdmin: boolean;
+}) | null> {
   const session = await auth();
 
-  if (!session?.user?.id || !session.user.email || !session.tenantId) {
-    redirect("/signin");
-  }
+  if (!session?.user?.id || !session.user.email || !session.tenantId) return null;
 
   return {
     id: session.user.id,
@@ -58,8 +81,21 @@ export async function requireUser(): Promise<CurrentUser> {
     email: session.user.email,
     image: session.user.image ?? null,
     tenantId: session.tenantId,
-    role: session.role,
+    isSuperAdmin: session.isSuperAdmin,
+    role: await membershipIn(session.user.id, session.tenantId),
   };
+}
+
+/**
+ * The signed-in person and what they may do, for a route handler. Null covers
+ * both "not signed in" and "not in this company"; the caller answers 401.
+ */
+export async function apiUser(): Promise<UserWithAccess | null> {
+  const user = await signedIn();
+
+  if (!user?.role) return null;
+
+  return { ...user, role: user.role, access: await loadAccessFor(user.tenantId, user.role) };
 }
 
 export type UserWithAccess = CurrentUser & { access: AccessMap };

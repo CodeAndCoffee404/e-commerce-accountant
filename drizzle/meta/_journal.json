@@ -169,6 +169,13 @@
       "when": 1788542689865,
       "tag": "0023_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788546598720,
+      "tag": "0024_memberships_across_companies",
+      "breakpoints": true
     }
   ]
 }

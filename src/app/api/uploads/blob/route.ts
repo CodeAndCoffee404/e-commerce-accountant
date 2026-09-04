@@ -2,10 +2,8 @@ import { issueSignedToken } from "@vercel/blob";
 import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
-import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { inRequest } from "@/lib/auth/session";
+import { apiUser, inRequest } from "@/lib/auth/session";
 import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants";
 import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
 
@@ -31,17 +29,13 @@ async function presignUpload(request: Request): Promise<NextResponse> {
   // Checked before the handler: it validates store credentials first, so a
   // misconfigured store would answer an anonymous caller with a configuration
   // error instead of a refusal.
-  const session = await auth();
+  const user = await apiUser();
 
-  if (!session?.user?.id || !session.tenantId) {
+  if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  // Reading a section is not writing to it. Checked at the token as well as at
-  // registration, because a signed token IS the write.
-  const access = await loadAccessFor(session.tenantId, session.role);
-
-  if (!allows(access, "source_files", "edit")) {
+  if (!allows(user.access, "source_files", "edit")) {
     return NextResponse.json({ error: "Your role cannot upload files" }, { status: 403 });
   }
 
@@ -55,8 +49,8 @@ async function presignUpload(request: Request): Promise<NextResponse> {
         // The browser proposes the path, so this is the only place that can
         // stop one tenant writing over another's objects. A token is issued
         // for the caller's own prefix and nothing else.
-        if (!isOwnUpload(pathname, session.tenantId)) {
-          throw new Error(`Uploads must go under ${uploadPrefix(session.tenantId)}`);
+        if (!isOwnUpload(pathname, user.tenantId)) {
+          throw new Error(`Uploads must go under ${uploadPrefix(user.tenantId)}`);
         }
 
         return {

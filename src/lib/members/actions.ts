@@ -41,23 +41,16 @@ async function inviteMemberInScope(input: unknown): Promise<MemberResult> {
   const email = normaliseEmail(parsed.data.email);
   const db = getDb();
 
-  // The allowlist is unique on email across all tenants: one person belongs to
-  // one tenant, and a silent move between them would be worse than a refusal.
-  const [existing] = await db
-    .select({ tenantId: schema.allowedEmails.tenantId })
-    .from(schema.allowedEmails)
-    .where(eq(schema.allowedEmails.email, email))
-    .limit(1);
-
-  if (existing && existing.tenantId !== user.tenantId) {
-    return { ok: false, message: "That address already has access to another account." };
-  }
-
+  // No longer a refusal when the address already works somewhere else: an
+  // accountant can keep the books for two companies, and each owner invites
+  // them to their own without either knowing about the other. What one owner
+  // cannot do is see, or touch, the other company's invitation — the
+  // uniqueness, and the database's own check, are both per company.
   await db
     .insert(schema.allowedEmails)
     .values({ tenantId: user.tenantId, email, role: parsed.data.role, isActive: true })
     .onConflictDoUpdate({
-      target: schema.allowedEmails.email,
+      target: [schema.allowedEmails.tenantId, schema.allowedEmails.email],
       set: { role: parsed.data.role, isActive: true },
     });
 
