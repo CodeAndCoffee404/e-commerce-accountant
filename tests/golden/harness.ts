@@ -46,10 +46,11 @@ export function seededRules(): RulesSnapshot {
       vatNumber: entry.vatNumber,
     })),
     skuMappings: [
-      ...SKU_MAPPINGS.map((mapping) => ({ ...mapping, isIgnored: false })),
+      ...SKU_MAPPINGS.map((mapping) => ({ ...mapping, sourceName: "", isIgnored: false })),
       ...IGNORED_SKUS.map((sku) => ({
         channel: "amazon",
         sourceSku: sku,
+        sourceName: "",
         targetSku: null,
         itemName: null,
         isIgnored: true,

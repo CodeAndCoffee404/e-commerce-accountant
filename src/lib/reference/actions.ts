@@ -152,6 +152,7 @@ const skuSchema = z.object({
   id: z.string().uuid().optional(),
   channel: z.string().trim().min(1),
   sourceSku: z.string().trim().min(1),
+  sourceName: z.string().trim().default(""),
   targetSku: z.string().trim().nullable().optional(),
   itemName: z.string().trim().nullable().optional(),
   isIgnored: z.boolean(),
@@ -164,6 +165,18 @@ export async function saveSkuMapping(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
   const { id, ...values } = parsed.data;
+
+  // Shopify writes its item code only when the product has one, and renames
+  // products freely, so a mapping there is only trustworthy as a pair. The
+  // channels that report no name have nothing to put here and must not be
+  // made to invent one.
+  if (values.channel.startsWith("shopify") && values.sourceName === "") {
+    return {
+      ok: false,
+      message: "A Shopify mapping needs the source name the code arrives with.",
+    };
+  }
+
   const db = getDb();
 
   if (id) {

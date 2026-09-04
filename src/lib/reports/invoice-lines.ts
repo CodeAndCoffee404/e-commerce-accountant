@@ -61,3 +61,45 @@ export function exactLines(total: Decimal, quantity: Decimal): PricedLine[] {
     { quantity: rest, price },
   ];
 }
+
+/**
+ * Splits `total` across `weights` in proportion, to the cent, so the parts add
+ * back up to `total` exactly.
+ *
+ * For an order-level amount that has to reach the line items: a discount code
+ * takes money off the order, not off any one product, and the invoice can only
+ * state products. Rounding each share on its own leaves the parts a cent or
+ * two off the whole, always in the same direction, so the last cents go to the
+ * shares that were cut by most — the largest-remainder method.
+ *
+ * Weightless input (every weight zero, or none at all) has no proportion to
+ * follow: the parts come back zero and the caller is left to notice that the
+ * total went nowhere.
+ */
+export function allocate(total: Decimal, weights: readonly Decimal[]): Decimal[] {
+  if (weights.length === 0) return [];
+
+  const sum = weights.reduce((t, w) => t.plus(w), new Decimal(0));
+
+  if (sum.isZero()) return weights.map(() => new Decimal(0));
+
+  const exact = weights.map((weight) => total.times(weight).dividedBy(sum));
+  const parts = exact.map((share) => share.toDecimalPlaces(2, Decimal.ROUND_DOWN));
+  const placed = parts.reduce((t, part) => t.plus(part), new Decimal(0));
+
+  // Whole cents: `total` is money and every part was just truncated to the
+  // cent, so what is left over divides exactly.
+  let left = total.minus(placed).times(100).toDecimalPlaces(0).toNumber();
+  const step = left < 0 ? new Decimal("-0.01") : new Decimal("0.01");
+
+  const order = exact
+    .map((share, index) => ({ index, remainder: share.minus(parts[index]).abs() }))
+    .sort((a, b) => b.remainder.comparedTo(a.remainder) || a.index - b.index);
+
+  for (let i = 0; left !== 0 && i < order.length; i += 1) {
+    parts[order[i].index] = parts[order[i].index].plus(step);
+    left += left < 0 ? 1 : -1;
+  }
+
+  return parts;
+}

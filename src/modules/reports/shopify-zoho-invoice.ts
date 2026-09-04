@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
-import { exactLines } from "@/lib/reports/invoice-lines";
+import { allocate, exactLines } from "@/lib/reports/invoice-lines";
 import { channelRule, decideSku, splitGross, vatRateOn } from "@/lib/reports/rules";
 import type {
   GeneratorResult,
@@ -14,7 +14,17 @@ import type {
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
 import { parseShopifyTaxRate } from "./off-amazon-sales";
-import type { ReportModule } from "./types";
+import {
+  DEPARTURE_COUNTRY,
+  arrivalCountryOf,
+  isDomestic,
+  isSkippedCountry,
+  notASale,
+  notASaleReason,
+  recomputesZeroTax,
+  unpaidOrderWarning,
+} from "./shopify-orders";
+import type { ReportModule, UnmappedSku } from "./types";
 
 /**
  * Shopify invoice for Zoho: one line per item sold, plus VAT split by market.
@@ -30,97 +40,150 @@ import type { ReportModule } from "./types";
  * order, on that first line — so the VAT pass below still reads only the
  * rows that carry an order `Total`, exactly as `shopifyRow` does.
  *
- * A single order's other columns (`Source`, used to drop draft orders) are
- * likewise only written on that first line, but every one of an order's
- * lines has to be excluded together — so `orderSourceMap` below resolves
- * each order's `Source` once, up front, and every row looks it up by order
- * number rather than trusting its own (possibly blank) `raw["Source"]`.
+ * A single order's other columns (`Source`, which says whether it was made
+ * by hand) are likewise only written on that first line, but every one of an
+ * order's lines has to be excluded together — so `orderFactsMap` resolves each
+ * order's `Source` and `Total` once, up front, and every row looks them up by
+ * order number rather than trusting its own (possibly blank) columns.
  */
 
+/**
+ * What a line item is, as far as SKU mapping is concerned.
+ *
+ * Shopify writes `Lineitem sku` when the product has one and leaves it blank
+ * when it does not — 51 of July's 72 lines carried one — so the code alone
+ * cannot be the key for every line. Where there is a code it is the key and
+ * the name checks it; where there is none the name is the key, and a mapping
+ * row for it stores the same text in both columns.
+ *
+ * Both passes below identify a line through this, so `unmappedSkus` asks
+ * about exactly the lines `generate` would otherwise get wrong.
+ */
+function identify(row: LedgerRow): { key: string; name: string } | null {
+  const name = row.raw["Lineitem name"]?.trim() ?? "";
+  const code = row.sku?.trim() ?? "";
+  const key = code === "" ? name : code;
+
+  return key === "" ? null : { key, name };
+}
+
 type ShopifyDefaults = {
-  departureCountry: string;
   domesticScheme: string;
   domesticSellerVat: string;
   exportScheme: string;
   exportSellerVat: string;
 };
 
+/** Where the shop's goods post in Zoho. The name is the account, exactly. */
+const SALES_ACCOUNT = "Shopify Geyser Sales";
+
 /**
- * The four export markets big enough for their own Zoho ledger line.
- * Everything else pools into "VAT OSS Other countries" — a fixed list, not a
- * setting, by agreement (see the ТЗ discussion): it does not grow on its own
- * just because a new country shows up in a file.
+ * The Zoho account an order's VAT posts to: country in the middle, scheme
+ * last, that capitalisation — the same shape the Amazon and Allegro invoices
+ * use, so one country's tax lands on one account whichever channel sold it.
+ *
+ * The domestic name is built from the departure country rather than spelled
+ * out, so it cannot drift away from where the goods actually ship from. The
+ * four export markets big enough for their own line are a fixed list by
+ * agreement: it does not grow on its own just because a new country shows up
+ * in a file, and everything else pools into one account with no country to
+ * place. Not the grouping a legacy-built invoice once used (Austria filed
+ * under "DE", Slovenia under "FR") — that was a manual mistake, not a rule.
  */
 const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
+const POOLED_VAT_ACCOUNT = "VAT OSS Other countries";
 
-const VAT_BUCKET_ORDER = ["ES", "DE", "FR", "IT", "PL", "OTHER"] as const;
+function vatAccount(arrival: string): string {
+  if (isDomestic(arrival)) return `VAT ${DEPARTURE_COUNTRY} Regular`;
 
-/**
- * The names of the Zoho accounts these lines post to, not labels: country in
- * the middle, scheme last, that capitalisation — the same shape the Amazon and
- * Allegro invoices use, so one country's tax lands on one account whichever
- * channel sold it. The pooled line has no country to place and keeps the name
- * all three share.
- */
-const VAT_BUCKET_LABELS: Record<string, string> = {
-  ES: "VAT ES Regular",
-  DE: "VAT DE OSS",
-  FR: "VAT FR OSS",
-  IT: "VAT IT OSS",
-  PL: "VAT PL OSS",
-  OTHER: "VAT OSS Other countries",
-};
-
-function arrivalCountryOf(row: LedgerRow, rules: RulesSnapshot): string {
-  const aliases = channelRule<Record<string, string>>(rules, "shopify_geyser", "country_aliases") ?? {};
-  const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
-
-  return aliases[raw] ?? raw;
+  return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? `VAT ${arrival} OSS` : POOLED_VAT_ACCOUNT;
 }
 
+/** The order the accounts print in; only the ones with money in them show. */
+const VAT_ACCOUNT_ORDER = [
+  `VAT ${DEPARTURE_COUNTRY} Regular`,
+  ...OSS_BREAKOUT_COUNTRIES.map((country) => `VAT ${country} OSS`),
+  POOLED_VAT_ACCOUNT,
+];
+
+type OrderFacts = { source: string; total: Decimal | null; paymentMethod: string };
+
 /**
- * Which VAT ledger line an order's country falls under: Spain's own domestic
- * line, one of the four breakout markets, or the shared "other" bucket. Not
- * the grouping a legacy-built invoice once used (Austria filed under "DE",
- * Slovenia under "FR") — that was confirmed to be a manual mistake, not a
- * rule, and is not reproduced here.
+ * Every order's `Source`, `Total` and `Payment Method`, resolved once from
+ * whichever of its lines carries them — all three are order-level columns
+ * Shopify writes on the first line only, and every line of the order is judged
+ * by them.
  */
-function vatBucketKey(arrival: string, departure: string): string {
-  if (arrival === departure) return "ES";
-
-  return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? arrival : "OTHER";
-}
-
-/** Every order's `Source`, resolved once from whichever of its lines carries it. */
-function orderSourceMap(rows: readonly LedgerRow[]): Map<string, string> {
-  const map = new Map<string, string>();
+function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
+  const map = new Map<string, OrderFacts>();
 
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
     const name = row.raw["Name"];
-    const source = row.raw["Source"];
 
-    if (name && source) map.set(name, source);
+    if (!name) continue;
+
+    const found = map.get(name);
+
+    map.set(name, {
+      source: row.raw["Source"] || found?.source || "",
+      total: money(row.raw["Total"]) ?? found?.total ?? null,
+      paymentMethod: row.raw["Payment Method"] || found?.paymentMethod || "",
+    });
   }
 
   return map;
 }
 
+/**
+ * Every order's `Subtotal` and `Shipping`, from whichever of its lines carries
+ * them — Shopify writes order-level columns on the first line only.
+ *
+ * `Total` is what the buyer paid — goods after any order-level discount, plus
+ * delivery — and it is the figure Off-Amazon Sales bills and the VAT below is
+ * charged on. `Subtotal` is the same without delivery, kept only to tell a
+ * discount apart from a delivery charge when checking the order adds up.
+ */
+function orderMoneyMap(
+  rows: readonly LedgerRow[],
+): Map<string, { total: Decimal | null; subtotal: Decimal | null }> {
+  const map = new Map<string, { total: Decimal | null; subtotal: Decimal | null }>();
+
+  for (const row of rows) {
+    if (row.dataset !== "shopify_geyser") continue;
+
+    const name = row.raw["Name"];
+
+    if (!name || !row.raw["Total"] || map.has(name)) continue;
+
+    map.set(name, { total: money(row.raw["Total"]), subtotal: money(row.raw["Subtotal"]) });
+  }
+
+  return map;
+}
+
+function money(value: string | undefined): Decimal | null {
+  if (value === undefined || value.trim() === "") return null;
+
+  try {
+    return parseDecimalValue(value, { decimalSeparator: ".", column: "amount" });
+  } catch {
+    return null;
+  }
+}
+
 function isExcludedRow(
   row: LedgerRow,
   rules: RulesSnapshot,
-  sources: ReadonlyMap<string, string>,
+  facts: ReadonlyMap<string, OrderFacts>,
   arrival: string,
 ): string | null {
-  const excludedSources = channelRule<string[]>(rules, "shopify_geyser", "excluded_sources") ?? [];
-  const source = sources.get(row.raw["Name"] ?? "") ?? "";
+  const why = notASale(facts.get(row.raw["Name"] ?? ""));
 
-  if (excludedSources.includes(source)) return "Shopify invoice: draft order";
+  if (why) return notASaleReason("Shopify invoice", why);
 
-  const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
-
-  if (skippedCountries.includes(arrival)) return `Shopify invoice: delivered to ${arrival}`;
+  if (isSkippedCountry(arrival)) return `Shopify invoice: delivered to ${arrival}`;
 
   return null;
 }
@@ -162,7 +225,16 @@ export function generateShopifyZohoInvoice(
     );
   }
 
-  const sources = orderSourceMap(rows);
+  const facts = orderFactsMap(rows);
+
+  // Named before anything is built, once per order rather than once per line:
+  // an order claiming money the shop cannot have taken is somebody's mistake to
+  // go and fix, and a count in the skipped list would never say which orders.
+  for (const [orderName, order] of facts) {
+    if (notASale(order) === "unpaid") {
+      warnings.push(unpaidOrderWarning("Shopify invoice", orderName, order));
+    }
+  }
 
   /* ------------------------------------------------------------------ *
    * Product lines: every line item, one row per (item, unit price).
@@ -170,21 +242,92 @@ export function generateShopifyZohoInvoice(
 
   const productAgg = new Map<string, ProductLine>();
 
+  /* ------------------------------------------------------------------ *
+   * What each line is worth once the order's own money reaches it.
+   *
+   * The base is the order's `Total`: what the buyer actually paid, after any
+   * discount and with delivery in it. That is the figure Off-Amazon Sales
+   * bills and the VAT below is charged on, so spreading it over the order's
+   * lines is what makes the two reports the same money.
+   *
+   * Neither adjustment can be read off a line. A discount code comes off the
+   * order and leaves `Lineitem discount` at zero; delivery is charged on the
+   * order and belongs to no product. Both are spread over the order's lines in
+   * proportion, to the cent, and delivery ends up inside the item price rather
+   * than on a line of its own.
+   *
+   * Every priced line of the order shares in it, including ones that will not
+   * be invoiced — an ignored item takes its share away with it rather than
+   * pushing it onto the items that are billed.
+   * ------------------------------------------------------------------ */
+
+  const orderMoney = orderMoneyMap(rows);
+  const linesByOrder = new Map<string, LedgerRow[]>();
+
+  for (const row of rows) {
+    if (row.dataset !== "shopify_geyser") continue;
+    if (row.gross === null || row.quantity === null || row.quantity.isZero()) continue;
+
+    const arrival = arrivalCountryOf(row);
+
+    if (isExcludedRow(row, context.rules, facts, arrival)) continue;
+
+    const order = row.raw["Name"] ?? "";
+    const found = linesByOrder.get(order);
+
+    if (found) found.push(row);
+    else linesByOrder.set(order, [row]);
+  }
+
+  const billedPerLine = new Map<string, Decimal>();
+
+  for (const [order, lines] of linesByOrder) {
+    const money = orderMoney.get(order);
+    const listed = lines.reduce((total, line) => total.plus(line.gross!), new Decimal(0));
+
+    // No readable total is no basis to adjust anything: the lines stand as the
+    // file states them, and the run says so rather than inventing a base.
+    if (!money?.total) {
+      warnings.push(`Shopify invoice: order ${order} has no readable total; its items are billed at list price`);
+      for (const line of lines) billedPerLine.set(line.id, line.gross!);
+      continue;
+    }
+
+    // Goods above what the lines list for is not a discount and not delivery:
+    // it would invent revenue no line item accounts for. Checked without
+    // delivery, which is allowed to raise the total and nothing else is.
+    if (money.subtotal?.greaterThan(listed)) {
+      warnings.push(
+        `Shopify invoice: order ${order} has goods of ${money.subtotal.toFixed(2)} above its ` +
+          `items' ${listed.toFixed(2)}; its items are billed at list price`,
+      );
+      for (const line of lines) billedPerLine.set(line.id, line.gross!);
+      continue;
+    }
+
+    const shares = allocate(money.total, lines.map((line) => line.gross!));
+
+    lines.forEach((line, index) => billedPerLine.set(line.id, shares[index]));
+  }
+
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
-    const arrival = arrivalCountryOf(row, context.rules);
-    const excludeReason = isExcludedRow(row, context.rules, sources, arrival);
+    const arrival = arrivalCountryOf(row);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     if (excludeReason) {
       skip(excludeReason);
       continue;
     }
 
-    const name = row.raw["Lineitem name"]?.trim();
+    const item = identify(row);
 
-    if (!name) {
-      skip("Shopify invoice: line item has no name");
+    if (!item) {
+      warnings.push(
+        `Shopify invoice: a line item with neither a SKU nor a name, row ${row.sourceRowNumber}`,
+      );
+      skip("Shopify invoice: line item has neither a SKU nor a name");
       continue;
     }
 
@@ -200,26 +343,45 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const decision = decideSku(context.rules, "shopify_geyser", name);
+    const decision = decideSku(context.rules, "shopify_geyser", item.key, item.name);
 
     if (decision.kind === "ignore") {
       skip("Shopify invoice: item is on the ignore list");
       continue;
     }
 
+    // Unreachable in a normal build — `unmappedSkus` stops the run and asks
+    // first — but if it is ever reached, nothing here may invent what to bill.
+    // A raw Shopify code in the SKU column and a blank Item Name are both a
+    // line the client's catalogue does not contain, and Zoho reads Item Name
+    // as a lookup: the file fails on import, or worse, does not.
+    if (decision.kind !== "map") {
+      warnings.push(
+        decision.kind === "mismatch"
+          ? `Shopify invoice: ${item.key} arrived as "${item.name}", but SKU mapping expects ` +
+            `${decision.expectedNames.map((expected) => `"${expected}"`).join(" or ")}`
+          : `Shopify invoice: ${item.key} ("${item.name}") has no complete SKU mapping — ` +
+            "an invoice code and an item name are both needed",
+      );
+      skip("Shopify invoice: no complete SKU mapping for this item");
+      continue;
+    }
+
     // Grouped by the exact unit price, not the rounded one — two sales at
     // genuinely different prices are two invoice lines, same reasoning as
     // the Amazon invoice.
-    const unitPrice = row.gross.dividedBy(quantity);
-    const sku = decision.kind === "map" ? decision.targetSku : name;
-    const itemName = decision.kind === "map" ? decision.itemName : "";
+    // What this line is worth once the order's discount and delivery have
+    // reached it — the same money Off-Amazon Sales bills as the order's total.
+    const billed = billedPerLine.get(row.id) ?? row.gross;
+    const unitPrice = billed.dividedBy(quantity);
+    const { targetSku: sku, itemName } = decision;
     const key = `${sku}|${unitPrice.toFixed(10)}`;
     const existing = productAgg.get(key);
 
     if (existing) {
       existing.qty = existing.qty.plus(quantity);
-      existing.total = existing.total.plus(row.gross);
-    } else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice, total: row.gross });
+      existing.total = existing.total.plus(billed);
+    } else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice, total: billed });
   }
 
   /* ------------------------------------------------------------------ *
@@ -227,9 +389,6 @@ export function generateShopifyZohoInvoice(
    * ------------------------------------------------------------------ */
 
   const vatAgg = new Map<string, Decimal>();
-  const recompute =
-    channelRule<string[]>(context.rules, "shopify_geyser", "recompute_zero_tax_countries") ?? [];
-
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
@@ -237,8 +396,8 @@ export function generateShopifyZohoInvoice(
 
     if (!orderTotal) continue; // a continuation line — the order total lives on the first row
 
-    const arrival = arrivalCountryOf(row, context.rules);
-    const excludeReason = isExcludedRow(row, context.rules, sources, arrival);
+    const arrival = arrivalCountryOf(row);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     // Already tallied in `skipped` above, once per line, in the product
     // pass — this is the same order's first line, not a new row to count.
@@ -285,7 +444,7 @@ export function generateShopifyZohoInvoice(
 
     const computedVat = rate === null ? null : splitGross(total, rate).vat;
     const vat =
-      reportedVat === null || (reportedVat.isZero() && recompute.includes(arrival))
+      reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(arrival))
         ? computedVat
         : reportedVat;
 
@@ -295,9 +454,9 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const bucket = vatBucketKey(arrival, defaults.departureCountry);
+    const account = vatAccount(arrival);
 
-    vatAgg.set(bucket, (vatAgg.get(bucket) ?? new Decimal(0)).plus(vat));
+    vatAgg.set(account, (vatAgg.get(account) ?? new Decimal(0)).plus(vat));
   }
 
   /* ------------------------------------------------------------------ *
@@ -329,19 +488,17 @@ export function generateShopifyZohoInvoice(
         "",
         line.quantity.toFixed(),
         line.price.toFixed(2),
-        "Shopify Sales",
+        SALES_ACCOUNT,
       ]);
     }
   }
 
-  for (const bucket of VAT_BUCKET_ORDER) {
-    const amount = vatAgg.get(bucket);
+  for (const account of VAT_ACCOUNT_ORDER) {
+    const amount = vatAgg.get(account);
 
-    // Omitted, not printed as zero: a bucket nothing sold under this period
+    // Omitted, not printed as zero: an account nothing sold under this period
     // is not a real line on the invoice.
     if (!amount) continue;
-
-    const label = VAT_BUCKET_LABELS[bucket];
 
     output.push([
       invoiceDate,
@@ -356,10 +513,10 @@ export function generateShopifyZohoInvoice(
       // VAT lines this way.
       "",
       "",
-      label,
+      account,
       "1",
       amount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
-      label,
+      account,
     ]);
   }
 
@@ -377,34 +534,54 @@ export function generateShopifyZohoInvoice(
 }
 
 /**
- * Distinct Shopify line-item names this period's invoice would bill under
- * that have no row in SKU mapping yet. Shopify's own `Lineitem sku` column is
- * blank in every real export seen so far, so the mapping key is the item's
- * name instead — this mirrors that exactly, and mirrors `generate`'s own row
- * filter for the same reason the other invoices do: a looser or stricter
- * check here would risk silently changing what actually gets invoiced.
+ * The line items this period's invoice would bill that SKU mapping cannot
+ * answer for: no row at all, or rows that disagree about what the code is.
+ *
+ * It mirrors `generate`'s own row filter exactly, for the reason the other
+ * invoices do — a looser or stricter check here would silently change what
+ * actually gets invoiced — and identifies a line the same way, so what is
+ * asked about is precisely what would otherwise go out wrong.
  */
-function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
-  const found = new Set<string>();
-  const sources = orderSourceMap(rows);
+function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
+  const found = new Map<string, UnmappedSku>();
+  const facts = orderFactsMap(rows);
 
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
-    const arrival = arrivalCountryOf(row, rules);
+    const arrival = arrivalCountryOf(row);
 
-    if (isExcludedRow(row, rules, sources, arrival)) continue;
+    if (isExcludedRow(row, rules, facts, arrival)) continue;
 
-    const name = row.raw["Lineitem name"]?.trim();
+    const item = identify(row);
 
-    if (!name) continue;
+    if (!item) continue;
     if (row.gross === null) continue;
     if (row.quantity === null || row.quantity.isZero()) continue;
 
-    if (decideSku(rules, "shopify_geyser", name).kind === "passthrough") found.add(name);
+    const decision = decideSku(rules, "shopify_geyser", item.key, item.name);
+
+    if (decision.kind === "map" || decision.kind === "ignore") continue;
+
+    // The pair is the identity, not the code: one code can be two products,
+    // and each needs its own answer.
+    const key = `${item.key}\u0000${item.name}`;
+
+    found.set(key, {
+      key,
+      sourceSku: item.key,
+      sourceName: item.name,
+      problem:
+        decision.kind === "mismatch"
+          ? "mismatch"
+          : decision.kind === "incomplete"
+            ? "incomplete"
+            : "unmapped",
+      expectedNames: decision.kind === "mismatch" ? decision.expectedNames : [],
+    });
   }
 
-  return [...found].sort();
+  return [...found.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export const shopifyZohoInvoiceModule: ReportModule = {

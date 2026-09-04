@@ -46,9 +46,9 @@ const rules: RulesSnapshot = {
   ],
   sellerVatNumbers: [],
   skuMappings: [
-    { channel: "allegro", sourceSku: "111", targetSku: "ZOHO-A", itemName: "Widget A", isIgnored: false },
-    { channel: "allegro", sourceSku: "222", targetSku: "ZOHO-B", itemName: "Widget B", isIgnored: false },
-    { channel: "allegro", sourceSku: "333", targetSku: null, itemName: null, isIgnored: true },
+    { channel: "allegro", sourceSku: "111", sourceName: "", targetSku: "ZOHO-A", itemName: "Widget A", isIgnored: false },
+    { channel: "allegro", sourceSku: "222", sourceName: "", targetSku: "ZOHO-B", itemName: "Widget B", isIgnored: false },
+    { channel: "allegro", sourceSku: "333", sourceName: "", targetSku: null, itemName: null, isIgnored: true },
   ],
   channelRules: [{ channel: "allegro", key: "currency_map", value: ALLEGRO_CURRENCY_MAP }],
 };
@@ -225,7 +225,9 @@ describe("allegroZohoInvoiceModule.unmappedSkus", () => {
       row({ gross: new Decimal("1"), raw: { oferta: "999;Thing;1 szt." } }),
     ];
 
-    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual(["999"]);
+    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      { key: "999", sourceSku: "999", sourceName: "", problem: "unmapped", expectedNames: [] },
+    ]);
   });
 
   it("does not flag a mapped or an ignored SKU", () => {

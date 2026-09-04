@@ -40,6 +40,8 @@ export type RulesSnapshot = {
   skuMappings: {
     channel: string;
     sourceSku: string;
+    /** The name the source must carry with that code; empty means unchecked. */
+    sourceName: string;
     targetSku: string | null;
     itemName: string | null;
     isIgnored: boolean;

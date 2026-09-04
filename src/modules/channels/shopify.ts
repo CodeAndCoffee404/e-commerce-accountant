@@ -214,40 +214,17 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
     channel: GEYSER.dataset,
     key: "defaults",
     value: {
-      departureCountry: "ES",
       domesticScheme: "REGULAR",
       domesticSellerVat: "ESN0531416F",
       exportScheme: "UNION-OSS",
       exportSellerVat: "EE102013089",
     },
-    note: "Always ships from Spain; REGULAR within Spain, UNION-OSS otherwise.",
-  },
-  {
-    channel: GEYSER.dataset,
-    key: "skipped_arrival_countries",
-    value: ["CH"],
-    note: "Orders to Switzerland stay out of the report — an agreed rule.",
-  },
-  {
-    channel: GEYSER.dataset,
-    key: "country_aliases",
-    value: { UK: "GB" },
-    note: "Shopify writes UK; reporting needs GB.",
-  },
-  {
-    channel: GEYSER.dataset,
-    key: "recompute_zero_tax_countries",
-    value: ["GB"],
     note:
-      "British orders arrive with zero tax and no rate in the label, so the VAT " +
-      "is computed from the order total. Elsewhere a zero means zero and must " +
-      "not be filled in.",
-  },
-  {
-    channel: GEYSER.dataset,
-    key: "excluded_sources",
-    value: ["shopify_draft_order"],
-    note: "Draft orders are not sales.",
+      "The shop's VAT registrations and the scheme each sale is reported " +
+      "under. REGULAR inside the departure country, UNION-OSS beyond it. " +
+      "Where the goods ship from is not here — it is a fact about the " +
+      "business, not a monthly setting, and both reports read it from the " +
+      "code so the domestic VAT account cannot drift away from it.",
   },
 ];
 

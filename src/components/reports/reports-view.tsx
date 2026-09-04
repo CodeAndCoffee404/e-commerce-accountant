@@ -1012,7 +1012,7 @@ function RunDetails({ run }: { run: ReportRunCard }) {
           <Typography.Text strong>Skipped rows</Typography.Text>
           <br />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            Deliberate, not lost: fees, draft orders and anything the channel rules exclude.
+            Deliberate, not lost: fees, giveaways and anything the channel rules exclude.
           </Typography.Text>
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
             {run.stats?.skipped?.map((entry) => (

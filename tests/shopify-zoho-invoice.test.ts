@@ -49,9 +49,15 @@ function orderHead(args: {
   name: string;
   country: string;
   total: string;
+  /** Goods after an order-level discount; defaults to the order total. */
+  subtotal?: string;
+  shipping?: string;
   taxes: string;
   taxLabel: string;
   itemName: string;
+  /** Shopify writes this only when the product has one. */
+  sku?: string;
+  paymentMethod?: string;
   price: string;
   qty: number;
   occurredOn?: string;
@@ -62,13 +68,20 @@ function orderHead(args: {
     occurredOn: args.occurredOn ?? "2026-01-15",
     quantity: new Decimal(args.qty),
     gross: new Decimal(args.price).times(args.qty),
+    sku: args.sku ?? null,
     raw: {
       Name: args.name,
       Total: args.total,
+      // Shopify's own split of the order: goods after any order-level
+      // discount, then delivery. Defaults keep the existing cases saying
+      // "no discount, no delivery".
+      Subtotal: args.subtotal ?? args.total,
+      Shipping: args.shipping ?? "0.00",
       Taxes: args.taxes,
       "Tax 1 Name": args.taxLabel,
       "Shipping Country": args.country,
       Source: args.source ?? "web",
+      "Payment Method": args.paymentMethod ?? "Shopify Payments",
       "Lineitem name": args.itemName,
       "Lineitem price": args.price,
     },
@@ -79,6 +92,7 @@ function orderHead(args: {
 function orderLine(args: {
   name: string;
   itemName: string;
+  sku?: string;
   price: string;
   qty: number;
   occurredOn?: string;
@@ -88,6 +102,7 @@ function orderLine(args: {
     occurredOn: args.occurredOn ?? "2026-01-15",
     quantity: new Decimal(args.qty),
     gross: new Decimal(args.price).times(args.qty),
+    sku: args.sku ?? null,
     raw: {
       Name: args.name,
       "Lineitem name": args.itemName,
@@ -105,28 +120,23 @@ const rules: RulesSnapshot = {
   ],
   sellerVatNumbers: [],
   skuMappings: [
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Kit - +1 Cartridge", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Filter", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", sourceName: "Geyser EURO Cartridge - 1 Cartridge", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", sourceName: "Geyser EURO Cartridge - 2 Cartridges", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "Geyser EURO Cartridge - 4 Cartridges", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Kit - +1 Cartridge", sourceName: "Geyser EURO Kit - +1 Cartridge", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Filter", sourceName: "Geyser EURO Filter", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
   ],
   channelRules: [
     {
       channel: "shopify_geyser",
       key: "defaults",
       value: {
-        departureCountry: "ES",
         domesticScheme: "REGULAR",
         domesticSellerVat: "ESN0531416F",
         exportScheme: "UNION-OSS",
         exportSellerVat: "EE102013089",
       },
     },
-    { channel: "shopify_geyser", key: "skipped_arrival_countries", value: ["CH"] },
-    { channel: "shopify_geyser", key: "country_aliases", value: { UK: "GB" } },
-    { channel: "shopify_geyser", key: "recompute_zero_tax_countries", value: ["GB"] },
-    { channel: "shopify_geyser", key: "excluded_sources", value: ["shopify_draft_order"] },
   ],
 };
 
@@ -228,30 +238,30 @@ function januaryRows(): LedgerRow[] {
 describe("generateShopifyZohoInvoice", () => {
   it("aggregates every line item by (SKU, unit price), one row per item — no combo collapsing", () => {
     const result = generateShopifyZohoInvoice(januaryRows(), context);
-    const products = result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales");
+    const products = result.sheets[0].rows.filter((r) => r[10] === "Shopify Geyser Sales");
     const bySku = new Map(products.map((r) => [r[6], r]));
 
     expect(bySku.get("CART-1")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge", "CART-1", "", "3", "45.90", "Shopify Sales",
+      "Geyser Euro Cartridge", "CART-1", "", "3", "45.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("CART-2")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge 2-Pack", "CART-2", "", "3", "72.90", "Shopify Sales",
+      "Geyser Euro Cartridge 2-Pack", "CART-2", "", "3", "72.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("CART-4")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge 4-Pack", "CART-4", "", "1", "123.90", "Shopify Sales",
+      "Geyser Euro Cartridge 4-Pack", "CART-4", "", "1", "123.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("FILTER-KIT")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Filter", "FILTER-KIT", "", "2", "45.90", "Shopify Sales",
+      "Geyser Euro Filter", "FILTER-KIT", "", "2", "45.90", "Shopify Geyser Sales",
     ]);
     // The order #171112 "Filter" line stays its own product row — no combo
     // collapsing into "Filter with 1 extra Cartridge", confirmed out of scope.
     expect(bySku.get("FILTER")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Filter Only", "FILTER", "", "1", "89.90", "Shopify Sales",
+      "Geyser Euro Filter Only", "FILTER", "", "1", "89.90", "Shopify Geyser Sales",
     ]);
     expect(products).toHaveLength(5);
 
@@ -314,16 +324,16 @@ describe("generateShopifyZohoInvoice", () => {
     ]);
   });
 
-  it("drops a draft order's line items entirely, even the continuation lines the source column is blank on", () => {
+  it("drops a hand-made order with nothing paid, continuation lines and all", () => {
     const rows = [
       orderHead({
         name: "#999",
         country: "FR",
-        total: "50.00",
+        total: "0.00",
         taxes: "8.33",
         taxLabel: "FR TVA 20%",
         itemName: "Geyser EURO Cartridge - 1 Cartridge",
-        price: "50.00",
+        price: "0.00",
         qty: 1,
         source: "shopify_draft_order",
       }),
@@ -333,9 +343,90 @@ describe("generateShopifyZohoInvoice", () => {
     const result = generateShopifyZohoInvoice(rows, context);
 
     expect(result.sheets[0].rows).toEqual([]);
-    expect(result.skipped.map((s) => s.reason)).toContain("Shopify invoice: draft order");
-    // Both lines of the draft order were dropped, not just the first.
-    expect(result.skipped.find((s) => s.reason === "Shopify invoice: draft order")?.count).toBe(2);
+    expect(result.skipped.map((s) => s.reason)).toContain("Shopify invoice: made by hand, nothing paid");
+    // Both lines of the order were dropped, not just the first.
+    expect(result.skipped.find((s) => s.reason === "Shopify invoice: made by hand, nothing paid")?.count).toBe(2);
+  });
+
+  it("bills a hand-made order that was really paid for — it is a sale", () => {
+    // A hand-made order that the buyer actually paid by card is an ordinary
+    // sale that happens to have been written up in the admin.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        price: "89.90",
+        qty: 1,
+        source: "shopify_draft_order",
+        paymentMethod: "Shopify Payments",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+    const vat = built.sheets[0].rows.filter((line) => String(line[10]).startsWith("VAT"));
+
+    expect(goods).toHaveLength(1);
+    expect(goods[0][9]).toBe("89.90");
+    // And its VAT with it, or the invoice would charge tax on nothing.
+    expect(vat.map((line) => line[9])).toEqual(["14.98"]);
+    expect(built.warnings).toEqual([]);
+  });
+
+  it("refuses to bill a hand-made order marked paid by a means the shop does not take", () => {
+    // The known mistake: a warranty replacement that should have been zeroed
+    // with a 100% discount was marked paid by hand instead. The shop takes
+    // cards only, so this money never arrived and billing it would invent
+    // revenue — and VAT on it.
+    const rows = [
+      orderHead({
+        name: "#171337",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        price: "89.90",
+        qty: 1,
+        source: "shopify_draft_order",
+        paymentMethod: "manual",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+
+    expect(built.sheets[0].rows).toEqual([]);
+
+    // Named, not merely counted: somebody has to go and fix this one order.
+    expect(built.warnings).toHaveLength(1);
+    expect(built.warnings[0]).toContain("#171337");
+    expect(built.warnings[0]).toContain("89.90");
+    expect(built.warnings[0]).toContain("100% discount");
+  });
+
+  it("still drops a hand-made order with no money in it", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "0.00",
+        taxes: "0.00",
+        taxLabel: "FR TVA 20%",
+        itemName: "Adapter: Inside 16 - Outside 22 - Height 13 (China)",
+        price: "0.00",
+        qty: 1,
+        source: "shopify_draft_order",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+
+    expect(built.sheets[0].rows).toEqual([]);
+    expect(built.skipped.map((s) => s.reason)).toContain("Shopify invoice: made by hand, nothing paid");
   });
 
   it("drops an order shipped to Switzerland", () => {
@@ -363,7 +454,7 @@ describe("generateShopifyZohoInvoice", () => {
       ...rules,
       skuMappings: [
         ...rules.skuMappings.filter((m) => m.sourceSku !== "Geyser EURO Cartridge - 4 Cartridges"),
-        { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", targetSku: null, itemName: null, isIgnored: true },
+        { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "Geyser EURO Cartridge - 4 Cartridges", targetSku: null, itemName: null, isIgnored: true },
       ],
     };
     const rows = [
@@ -381,7 +472,7 @@ describe("generateShopifyZohoInvoice", () => {
 
     const result = generateShopifyZohoInvoice(rows, { ...context, rules: ignoredRules });
 
-    expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales")).toEqual([]);
+    expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Geyser Sales")).toEqual([]);
     const vatLine = result.sheets[0].rows.find((r) => r[7] === "VAT FR OSS");
     expect(vatLine?.[9]).toBe("16.67");
   });
@@ -411,10 +502,372 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual(["Geyser EURO New Thing"]);
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      {
+        key: "Geyser EURO New Thing\u0000Geyser EURO New Thing",
+        sourceSku: "Geyser EURO New Thing",
+        sourceName: "Geyser EURO New Thing",
+        problem: "unmapped",
+        expectedNames: [],
+      },
+    ]);
   });
 
-  it("does not flag a mapped item, and ignores a draft order's items", () => {
+  it("keys on the code when there is one, and on the name when there is not", () => {
+    // The real July shape: the same cartridge sold both ways, because Shopify
+    // only writes `Lineitem sku` for products that have one.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        sku: "9Z-0IH0-ECWV",
+        price: "45.90",
+        qty: 1,
+      }),
+      orderHead({
+        name: "#2",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    // Only the coded one is unknown: the mapping keyed by that name already
+    // covers the other, and asking again would be asking a settled question.
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      {
+        key: "9Z-0IH0-ECWV\u0000Geyser EURO Cartridge - 1 Cartridge",
+        sourceSku: "9Z-0IH0-ECWV",
+        sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+        problem: "unmapped",
+        expectedNames: [],
+      },
+    ]);
+  });
+
+  it("asks separately about two products sold under one code", () => {
+    // QE-5795-1Z7V-stickerless is a filter at 89.90 and a kit at 45.90 in the
+    // same month. One question about the code would get one answer, and one
+    // of the two products would be invoiced as the other.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        sku: "QE-5795-1Z7V-stickerless",
+        price: "89.90",
+        qty: 1,
+      }),
+      orderHead({
+        name: "#2",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Kit - +1 Cartridge",
+        sku: "QE-5795-1Z7V-stickerless",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const asked = shopifyZohoInvoiceModule.unmappedSkus!(rows, rules);
+
+    expect(asked).toHaveLength(2);
+    expect(asked.map((item) => item.sourceName)).toEqual([
+      "Geyser EURO Filter",
+      "Geyser EURO Kit - +1 Cartridge",
+    ]);
+    expect(new Set(asked.map((item) => item.sourceSku))).toEqual(
+      new Set(["QE-5795-1Z7V-stickerless"]),
+    );
+  });
+
+  it("stops on a code whose item has been renamed, rather than billing the old name", () => {
+    const renamed = orderHead({
+      name: "#1",
+      country: "FR",
+      total: "45.90",
+      taxes: "7.65",
+      taxLabel: "FR TVA 20%",
+      itemName: "Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+      sku: "CODE-1",
+      price: "45.90",
+      qty: 1,
+    });
+
+    const mapped: RulesSnapshot = {
+      ...rules,
+      skuMappings: [
+        ...rules.skuMappings,
+        {
+          channel: "shopify_geyser",
+          sourceSku: "CODE-1",
+          sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+          targetSku: "CART-1",
+          itemName: "Geyser Euro Cartridge",
+          isIgnored: false,
+        },
+      ],
+    };
+
+    expect(shopifyZohoInvoiceModule.unmappedSkus!([renamed], mapped)).toEqual([
+      {
+        key: "CODE-1\u0000Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+        sourceSku: "CODE-1",
+        sourceName: "Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+        problem: "mismatch",
+        expectedNames: ["Geyser EURO Cartridge - 1 Cartridge"],
+      },
+    ]);
+
+    // And the invoice does not quietly bill it as the old product either: a
+    // build that somehow got past the gate leaves the line out and says so.
+    const built = generateShopifyZohoInvoice([renamed], {
+      period: context.period,
+      rules: mapped,
+      fx: {},
+    });
+
+    expect(built.sheets[0].rows.some((line) => line[6] === "CART-1")).toBe(false);
+    expect(built.warnings.join(" ")).toContain("SKU mapping expects");
+  });
+
+  it("bills what the buyer paid, not the list price, when a discount code was used", () => {
+    // Shopify puts a discount code on the order and leaves `Lineitem discount`
+    // at zero, so the line still reads 45.90 while the buyer paid 35.90.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "35.90",
+        subtotal: "35.90",
+        taxes: "5.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+
+    expect(goods).toHaveLength(1);
+    expect(goods[0][9]).toBe("35.90");
+  });
+
+  it("spreads an order's discount over its lines, to the cent", () => {
+    // Two items, 10.00 off the order. Neither line can carry it alone and the
+    // two shares have to add back to what the buyer paid.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "108.80",
+        subtotal: "108.80",
+        taxes: "18.13",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+      orderLine({ name: "#1", itemName: "Geyser EURO Cartridge - 2 Cartridges", price: "72.90", qty: 1 }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+    const billed = goods.reduce(
+      (total, line) => total + Number(line[9]) * Number(line[8]),
+      0,
+    );
+
+    expect(billed.toFixed(2)).toBe("108.80");
+    // In proportion, not split down the middle: the dearer item takes more.
+    // 108.80 x 45.90/118.80 = 42.036..., and the other line takes the rest.
+    expect(goods.map((line) => line[9]).sort()).toEqual(["42.04", "66.76"]);
+  });
+
+  it("bills delivery inside the item's price, not as a line of its own", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "IT",
+        total: "75.85",
+        subtotal: "72.90",
+        shipping: "2.95",
+        taxes: "13.68",
+        taxLabel: "IT IVA 22%",
+        itemName: "Geyser EURO Cartridge - 2 Cartridges",
+        price: "72.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+
+    // One line, priced at what the buyer paid for the whole order.
+    expect(goods).toHaveLength(1);
+    expect(goods[0][9]).toBe("75.85");
+    // And nothing anywhere posts to a delivery account.
+    expect(built.sheets[0].rows.some((line) => String(line[10]).includes("Shipping"))).toBe(false);
+  });
+
+  it("spreads delivery over the items when there is more than one", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "121.75",
+        subtotal: "118.80",
+        shipping: "2.95",
+        taxes: "20.29",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+      orderLine({ name: "#1", itemName: "Geyser EURO Cartridge - 2 Cartridges", price: "72.90", qty: 1 }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+    const billed = goods.reduce((total, line) => total + Number(line[9]) * Number(line[8]), 0);
+
+    expect(billed.toFixed(2)).toBe("121.75");
+    expect(goods.map((line) => line[9]).sort()).toEqual(["47.04", "74.71"]);
+  });
+
+  it("adds up to the same money Off-Amazon Sales bills for the order", () => {
+    // The whole point of both changes: goods + delivery = the order's Total,
+    // which is the figure the other report states, and VAT is unchanged.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "38.85",
+        subtotal: "35.90",
+        shipping: "2.95",
+        taxes: "6.48",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context).sheets[0].rows;
+    const billed = built
+      .filter((line) => line[10] === "Shopify Geyser Sales")
+      .reduce((total, line) => total + Number(line[9]) * Number(line[8]), 0);
+
+    expect(billed.toFixed(2)).toBe("38.85");
+  });
+
+  it("bills at list price and says so when the order total cannot be read", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "",
+        subtotal: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+
+    expect(goods[0][9]).toBe("45.90");
+    expect(built.warnings.join(" ")).toContain("no readable total");
+  });
+
+  it("asks rather than billing an item whose mapping does not say what to bill", () => {
+    // A row exists but has no invoice code, or no item name. Falling back to
+    // the raw Shopify code puts a string the client's catalogue does not
+    // contain into the SKU column, and Zoho reads Item Name as a lookup — so
+    // this is a question for the gate, not something to paper over.
+    for (const half of [
+      { targetSku: null, itemName: "Geyser Euro Cartridge" },
+      { targetSku: "CART-1", itemName: null },
+    ]) {
+      const rules2: RulesSnapshot = {
+        ...rules,
+        skuMappings: [
+          {
+            channel: "shopify_geyser",
+            sourceSku: "Geyser EURO Cartridge - 1 Cartridge",
+            sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+            isIgnored: false,
+            ...half,
+          },
+        ],
+      };
+      const rows = [
+        orderHead({
+          name: "#1",
+          country: "FR",
+          total: "45.90",
+          taxes: "7.65",
+          taxLabel: "FR TVA 20%",
+          itemName: "Geyser EURO Cartridge - 1 Cartridge",
+          price: "45.90",
+          qty: 1,
+        }),
+      ];
+
+      expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules2)).toMatchObject([
+        { sourceSku: "Geyser EURO Cartridge - 1 Cartridge", problem: "incomplete" },
+      ]);
+
+      // And a build that somehow got past the gate bills nothing under it.
+      const built = generateShopifyZohoInvoice(rows, { ...context, rules: rules2 });
+
+      expect(built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales")).toEqual([]);
+      expect(built.warnings.join(" ")).toContain("no complete SKU mapping");
+    }
+  });
+
+  it("never bills an item with no mapping row at all", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Brand New Thing",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+
+    // It used to reach the invoice under its raw Shopify text, with a blank
+    // Item Name beside it.
+    expect(goods).toEqual([]);
+    expect(built.warnings.join(" ")).toContain("Geyser EURO Brand New Thing");
+  });
+
+  it("does not flag a mapped item, and ignores a hand-made order's items", () => {
     const rows = [
       orderHead({
         name: "#1",
@@ -429,11 +882,11 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       orderHead({
         name: "#2",
         country: "FR",
-        total: "10.00",
-        taxes: "1.67",
+        total: "0.00",
+        taxes: "0.00",
         taxLabel: "FR TVA 20%",
         itemName: "Geyser EURO Draft Thing",
-        price: "10.00",
+        price: "0.00",
         qty: 1,
         source: "shopify_draft_order",
       }),

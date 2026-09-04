@@ -4,6 +4,16 @@ import { parseDecimalValue } from "@/lib/ingest/numbers";
 
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
 
+import {
+  DEPARTURE_COUNTRY,
+  arrivalCountryOf,
+  isDomestic,
+  isSkippedCountry,
+  notASale,
+  notASaleReason,
+  recomputesZeroTax,
+  unpaidOrderWarning,
+} from "./shopify-orders";
 import type { ReportModule } from "./types";
 import type {
   GeneratorResult,
@@ -257,6 +267,15 @@ function cdiscountRow(
  * Shopify
  * ------------------------------------------------------------------ */
 
+/** An amount, or null when the column holds something that is not one. */
+function readMoney(value: string): Decimal | null {
+  try {
+    return parseDecimalValue(value, { decimalSeparator: ".", column: "Total" });
+  } catch {
+    return null;
+  }
+}
+
 /** `FR TVA 20%` → 0.2. The rate is only ever written into the tax label. */
 export function parseShopifyTaxRate(label: string | undefined): Decimal | null {
   const match = (label ?? "").match(/(\d+(?:[.,]\d+)?)\s*%/);
@@ -283,14 +302,23 @@ function shopifyRow(
 
   if (!orderTotal) return skip(skipped, "Shopify: a line item; the order total comes from the first row");
 
-  const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
+  // The same test the Zoho invoice applies, from the same place: the two
+  // reports are one month's money at two grains, and an order counted by one
+  // and not the other is a discrepancy nobody can reconcile.
+  const order = {
+    source: row.raw["Source"] ?? "",
+    total: readMoney(orderTotal),
+    paymentMethod: row.raw["Payment Method"] ?? "",
+  };
+  const why = notASale(order);
 
-  if (excluded.includes(row.raw["Source"] ?? "")) {
-    return skip(skipped, "Shopify: draft order");
+  if (why) {
+    if (why === "unpaid") warnings.push(unpaidOrderWarning("Shopify", row.raw["Name"] ?? "", order));
+
+    return skip(skipped, notASaleReason("Shopify", why));
   }
 
   const defaults = channelRule<{
-    departureCountry: string;
     domesticScheme: string;
     domesticSellerVat: string;
     exportScheme: string;
@@ -303,16 +331,11 @@ function shopifyRow(
     return skip(skipped, "Shopify: the defaults rule is missing");
   }
 
-  const aliases = channelRule<Record<string, string>>(context.rules, "shopify_geyser", "country_aliases") ?? {};
-  const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
-  const arrival = aliases[raw] ?? raw;
-
-  const skippedCountries =
-    channelRule<string[]>(context.rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
+  const arrival = arrivalCountryOf(row);
 
   // Swiss orders are out of scope by agreement, and silently — no marker in
   // the report, see the rules table in PLAN §1.
-  if (skippedCountries.includes(arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
+  if (isSkippedCountry(arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
 
   // The shared parser, not `new Decimal(...)`: it knows about spaces used for
   // thousands, a currency written beside the amount and a Unicode minus, and it
@@ -331,8 +354,8 @@ function shopifyRow(
     return skip(skipped, "Shopify: order total could not be read");
   }
 
-  const departure = defaults.departureCountry;
-  const domestic = arrival === departure;
+  const departure = DEPARTURE_COUNTRY;
+  const domestic = isDomestic(arrival);
   const scheme = domestic ? defaults.domesticScheme : defaults.exportScheme;
   const sellerVat = domestic ? defaults.domesticSellerVat : defaults.exportSellerVat;
 
@@ -355,8 +378,6 @@ function shopifyRow(
   // Britain is the exception: those orders arrive with zero tax and no rate in
   // the label, and the VAT is real. Which countries that applies to is a rule,
   // not a constant, because zero elsewhere means zero.
-  const recompute =
-    channelRule<string[]>(context.rules, "shopify_geyser", "recompute_zero_tax_countries") ?? [];
   const reported = row.raw["Taxes"];
   let reportedVat: Decimal | null = null;
 
@@ -368,7 +389,7 @@ function shopifyRow(
   const computedVat = rate === null ? null : splitGross(total, rate).vat;
 
   const vat =
-    reportedVat === null || (reportedVat.isZero() && recompute.includes(arrival))
+    reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(arrival))
       ? computedVat
       : reportedVat;
   const net = vat === null ? null : total.minus(vat);

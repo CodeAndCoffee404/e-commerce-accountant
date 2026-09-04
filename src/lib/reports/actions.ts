@@ -13,6 +13,8 @@ import { log } from "@/lib/log";
 
 import { publishRun } from "@/lib/google/publish";
 
+import type { UnmappedSku } from "@/modules/reports/types";
+
 import { runReport } from "./run";
 
 export type BuildResult =
@@ -21,7 +23,7 @@ export type BuildResult =
       ok: false;
       message: string;
       /** Set when the refusal is specifically unmapped SKUs — the interface opens the mapping form instead of just a toast. */
-      needsSkuMapping?: string[];
+      needsSkuMapping?: UnmappedSku[];
       /** Same idea, for an Allegro currency with no rule in currency_map yet. */
       needsCurrencyMapping?: string[];
     };

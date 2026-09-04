@@ -11,7 +11,7 @@ import type {
   RulesSnapshot,
 } from "@/lib/reports/types";
 
-import type { ReportModule } from "./types";
+import { unmappedCode, type ReportModule, type UnmappedSku } from "./types";
 
 export const ZOHO_HEADERS = [
   "Invoice Date",
@@ -544,7 +544,7 @@ export function missingCountries(
  * stricter or looser check here would otherwise risk silently changing what
  * actually gets invoiced.
  */
-function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
+function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
   const found = new Set<string>();
 
   for (const row of rows) {
@@ -569,7 +569,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[
     if (decideSku(rules, "amazon", sku).kind === "passthrough") found.add(sku);
   }
 
-  return [...found].sort();
+  return [...found].sort().map(unmappedCode);
 }
 
 export const amazonZohoInvoiceModule: ReportModule = {

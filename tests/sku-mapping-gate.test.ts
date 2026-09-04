@@ -45,7 +45,14 @@ const emptyRules: RulesSnapshot = {
   channelRules: [],
 };
 
-const unmappedSkus = amazonZohoInvoiceModule.unmappedSkus!;
+const askAbout = amazonZohoInvoiceModule.unmappedSkus!;
+
+/**
+ * Amazon reports a code and no name to check it against, so every question it
+ * raises is the same shape. The codes are what these are about.
+ */
+const unmappedSkus = (...args: Parameters<typeof askAbout>) =>
+  askAbout(...args).map((sku) => sku.sourceSku);
 
 describe("amazonZohoInvoiceModule.unmappedSkus", () => {
   it("flags a SKU that would invoice but has no mapping row", () => {
@@ -56,7 +63,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "amazon", sourceSku: "MAPPED-1", targetSku: "TS-1", itemName: "Widget", isIgnored: false },
+        { channel: "amazon", sourceSku: "MAPPED-1", sourceName: "", targetSku: "TS-1", itemName: "Widget", isIgnored: false },
       ],
     };
 
@@ -67,7 +74,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "amazon", sourceSku: "IGNORED-1", targetSku: null, itemName: null, isIgnored: true },
+        { channel: "amazon", sourceSku: "IGNORED-1", sourceName: "", targetSku: null, itemName: null, isIgnored: true },
       ],
     };
 
@@ -78,7 +85,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
     const rules: RulesSnapshot = {
       ...emptyRules,
       skuMappings: [
-        { channel: "allegro", sourceSku: "SHARED-1", targetSku: "AL-1", itemName: "Widget", isIgnored: false },
+        { channel: "allegro", sourceSku: "SHARED-1", sourceName: "", targetSku: "AL-1", itemName: "Widget", isIgnored: false },
       ],
     };
 

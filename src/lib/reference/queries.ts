@@ -23,6 +23,7 @@ export type ReferenceData = {
     id: string;
     channel: string;
     sourceSku: string;
+    sourceName: string;
     targetSku: string | null;
     itemName: string | null;
     isIgnored: boolean;
@@ -77,6 +78,7 @@ export async function loadReferenceData(tenantId: string): Promise<ReferenceData
           id: schema.skuMappings.id,
           channel: schema.skuMappings.channel,
           sourceSku: schema.skuMappings.sourceSku,
+          sourceName: schema.skuMappings.sourceName,
           targetSku: schema.skuMappings.targetSku,
           itemName: schema.skuMappings.itemName,
           isIgnored: schema.skuMappings.isIgnored,
