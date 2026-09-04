@@ -76,6 +76,13 @@ async function asOwnerOfFreshTenant(): Promise<string> {
     .values({ id: session.id, email: session.email })
     .onConflictDoNothing();
 
+  // The access list, not just the membership: it is what every check reads,
+  // so that a role an owner changes is a role that changes.
+  await getDb()
+    .insert(schema.allowedEmails)
+    .values({ tenantId: tenant.id, email: session.email, role: session.role })
+    .onConflictDoNothing();
+
   await getDb()
     .insert(schema.memberships)
     .values({ tenantId: tenant.id, userId: session.id, role: session.role })
@@ -191,12 +198,12 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
 
     session.role = "accountant";
     await getDb()
-      .update(schema.memberships)
+      .update(schema.allowedEmails)
       .set({ role: "accountant" })
       .where(
         and(
-          eq(schema.memberships.tenantId, tenantId),
-          eq(schema.memberships.userId, session.id),
+          eq(schema.allowedEmails.tenantId, tenantId),
+          eq(schema.allowedEmails.email, session.email),
         ),
       );
 

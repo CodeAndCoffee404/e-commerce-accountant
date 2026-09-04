@@ -38,7 +38,7 @@ const EXEMPT: Record<string, string> = {
   "src/app/page.tsx": "redirects to the dashboard and nothing else",
   "src/app/signin/page.tsx": "the sign-in screen, shown before anyone has a company",
   "src/app/select-company/page.tsx":
-    "the company chooser: it exists because none has been chosen, and reads nothing a company owns",
+    "the company chooser: it exists because none has been chosen, and reads only this person's own invitations",
   "src/app/(admin)/layout.tsx":
     "the admin shell: above the companies, so it names none — its guard is requireSuperAdmin",
   "src/app/(admin)/admin/page.tsx":

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 /**
@@ -10,11 +10,12 @@ import { afterAll, describe, expect, it, vi } from "vitest";
  * from the browser.
  */
 
-const session: { userId: string | null } = { userId: null };
+const session: { userId: string | null; email: string | null } = { userId: null, email: null };
 const updated: { tenantId?: string }[] = [];
 
 vi.mock("@/auth", () => ({
-  auth: async () => (session.userId ? { user: { id: session.userId } } : null),
+  auth: async () =>
+    session.userId ? { user: { id: session.userId, email: session.email } } : null,
   unstable_update: async (data: { tenantId?: string }) => {
     updated.push(data);
 
@@ -26,7 +27,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
 
 const { getDb, schema } = await import("@/lib/db");
 const { acrossTenants } = await import("@/lib/db/tenant");
-const { companiesFor, resolveAccess } = await import("@/lib/auth/allowlist");
+const { companiesFor, resolveAccess, roleFor } = await import("@/lib/auth/allowlist");
 const { switchCompany } = await import("@/lib/auth/companies");
 const { inRequest } = await import("./helpers/request-scope");
 
@@ -58,18 +59,23 @@ async function person(email: string): Promise<string> {
   return id;
 }
 
-describe.skipIf(!HAS_DB)("belonging to more than one company", () => {
-  afterAll(
-    inRequest(async () => {
-      for (const id of tenants) {
-        await getDb().delete(schema.tenants).where(eq(schema.tenants.id, id));
-      }
-      for (const id of people) {
-        await getDb().delete(schema.users).where(eq(schema.users.id, id));
-      }
-    }),
-  );
+// At the file's top level, not inside the first block: the second one builds
+// companies through the same helpers, and cleanup that finishes with the first
+// describe leaves them behind on every run.
+afterAll(
+  inRequest(async () => {
+    if (!HAS_DB) return;
 
+    for (const id of tenants) {
+      await getDb().delete(schema.tenants).where(eq(schema.tenants.id, id));
+    }
+    for (const id of people) {
+      await getDb().delete(schema.users).where(eq(schema.users.id, id));
+    }
+  }),
+);
+
+describe.skipIf(!HAS_DB)("belonging to more than one company", () => {
   it(
     "invites the same address to two companies, and neither refuses",
     inRequest(async () => {
@@ -109,7 +115,7 @@ describe.skipIf(!HAS_DB)("belonging to more than one company", () => {
       // Not only the first: an invitation that never became a membership is a
       // company the switcher offers and the person cannot enter.
       expect(signedIn?.tenantId).toBe(a);
-      expect((await companiesFor(userId)).map((row) => row.id).sort()).toEqual([a, b].sort());
+      expect((await companiesFor(email)).map((row) => row.id).sort()).toEqual([a, b].sort());
     }),
   );
 
@@ -130,7 +136,7 @@ describe.skipIf(!HAS_DB)("belonging to more than one company", () => {
 });
 
 describe.skipIf(!HAS_DB)("moving between companies", () => {
-  it("refuses a company the person is not in", async () => {
+  it("refuses a company the person is not on the access list of", async () => {
     const [a, stranger] = await acrossTenants(async () => [
       await company("zeta"),
       await company("eta"),
@@ -139,10 +145,11 @@ describe.skipIf(!HAS_DB)("moving between companies", () => {
     const userId = await acrossTenants(() => person(email));
 
     await acrossTenants(() =>
-      getDb().insert(schema.memberships).values({ tenantId: a, userId, role: "owner" }),
+      getDb().insert(schema.allowedEmails).values({ tenantId: a, email, role: "owner" }),
     );
 
     session.userId = userId;
+    session.email = email;
 
     // The target comes from the browser, so it is checked here rather than
     // trusted — and refused by name, not ignored.
@@ -159,7 +166,62 @@ describe.skipIf(!HAS_DB)("moving between companies", () => {
 
   it("refuses when nobody is signed in", async () => {
     session.userId = null;
+    session.email = null;
 
     expect(await switchCompany(tenants[0])).toEqual({ ok: false, message: "Sign in first." });
   });
+});
+
+describe.skipIf(!HAS_DB)("what the owner changes takes effect", () => {
+  it(
+    "answers with the role the access list says today, not the one it said at sign-in",
+    inRequest(async () => {
+      const a = await company("theta");
+      const email = `demoted-${stamp}@example.invalid`;
+      const userId = await person(email);
+
+      await getDb()
+        .insert(schema.allowedEmails)
+        .values({ tenantId: a, email, role: "accountant" });
+      await resolveAccess(userId, email);
+
+      expect(await roleFor(email, a)).toBe("accountant");
+
+      // What the Team screen does when an owner changes somebody's role. It
+      // writes the invitation and nothing else — so anything reading the
+      // membership instead would answer "accountant" here forever.
+      await getDb()
+        .update(schema.allowedEmails)
+        .set({ role: "viewer" })
+        .where(eq(schema.allowedEmails.email, email));
+
+      expect(await roleFor(email, a)).toBe("viewer");
+    }),
+  );
+
+  it(
+    "takes the company away when the address is suspended",
+    inRequest(async () => {
+      const [a, b] = [await company("iota"), await company("kappa")];
+      const email = `suspended-${stamp}@example.invalid`;
+      const userId = await person(email);
+
+      await getDb().insert(schema.allowedEmails).values([
+        { tenantId: a, email, role: "owner" },
+        { tenantId: b, email, role: "accountant" },
+      ]);
+      await resolveAccess(userId, email);
+
+      await getDb()
+        .update(schema.allowedEmails)
+        .set({ isActive: false })
+        .where(and(eq(schema.allowedEmails.email, email), eq(schema.allowedEmails.tenantId, a)));
+
+      // Gone from both answers, not just from the screen: the membership row
+      // is still there, and a suspension that leaves the person working is
+      // not a suspension.
+      expect(await roleFor(email, a)).toBeNull();
+      expect((await companiesFor(email)).map((row) => row.id)).toEqual([b]);
+    }),
+  );
 });

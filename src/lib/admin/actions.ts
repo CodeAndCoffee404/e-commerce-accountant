@@ -86,11 +86,14 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
 /**
  * Steps into a company.
  *
- * It grants itself an owner membership when there is none, rather than making
- * `requireUser` treat super-admins as a special case everywhere. The point is
- * that it is visible: the company's own owner sees who is in their Team list,
- * and the audit log says when it happened. An invisible way in would be worse
- * than no way in.
+ * It puts itself on that company's access list as an owner, rather than making
+ * every check in the application treat super-admins as a special case. The
+ * point is that it is visible: the company's own owner finds that address in
+ * their Team list and can suspend it, and the audit log says when it happened.
+ * An invisible way into someone's books would be worse than no way in.
+ *
+ * The access list, not just a membership: the list is what every check reads,
+ * and what an owner edits. A membership alone would be a row nobody looks at.
  */
 export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
   const admin = await requireSuperAdmin();
@@ -112,6 +115,14 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
   if (!company) return { ok: false, message: "No such company." };
 
   await withTenant(company.id, async () => {
+    await getDb()
+      .insert(schema.allowedEmails)
+      .values({ tenantId: company.id, email: normaliseEmail(admin.email), role: "owner" })
+      .onConflictDoUpdate({
+        target: [schema.allowedEmails.tenantId, schema.allowedEmails.email],
+        set: { role: "owner", isActive: true },
+      });
+
     await getDb()
       .insert(schema.memberships)
       .values({ tenantId: company.id, userId: admin.id, role: "owner" })

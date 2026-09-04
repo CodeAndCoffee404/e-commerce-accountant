@@ -68,14 +68,18 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     // runReport records who asked, and the column is a real foreign key.
     await db()
       .insert(schema.users)
-      .values({ id: session.userId, email: `${session.userId}@example.invalid` })
+      .values({ id: session.userId, email: "close@example.invalid" })
       .onConflictDoNothing();
 
-    // The role is read from the membership on every request, so the session
-    // needs one to be anything other than a stranger to this company.
+    // The role is read from the access list on every request, so the session
+    // needs a row there to be anything other than a stranger to this company.
     await db()
-      .insert(schema.memberships)
-      .values({ tenantId: session.tenantId, userId: session.userId, role: "owner" })
+      .insert(schema.allowedEmails)
+      .values({
+        tenantId: session.tenantId,
+        email: "close@example.invalid",
+        role: "owner",
+      })
       .onConflictDoNothing();
 
     await seedReferenceData(session.tenantId);

@@ -91,12 +91,13 @@ export type SignedIn = {
 };
 
 /**
- * Called once the user row exists. Turns every invitation this address holds
- * into a membership, and says which company the session opens in.
+ * Called once the user row exists. Records that this address has arrived in
+ * every company that invited it, and says which one the session opens in.
  *
- * Every one of them, not just the first: an invitation the person never
- * "arrived" at would otherwise leave them a company they can see in the
- * switcher and cannot enter.
+ * Every one of them, not just the first: a membership is what the Team screen
+ * reads to show who has actually signed in, and an address missing from it
+ * looks invited but absent forever. It is only a record — what a person may do
+ * is read from the invitation, on every request.
  */
 export async function resolveAccess(userId: string, email: string): Promise<SignedIn | null> {
   const invitations = await findInvitations(email);
@@ -138,11 +139,17 @@ export async function resolveAccess(userId: string, email: string): Promise<Sign
 /**
  * The companies this person may work in.
  *
- * A question that spans companies by its nature — "which of them is this
- * person in" — so it says `acrossTenants` rather than pretending otherwise.
- * It is still narrow: filtered by the person, returning names and nothing else.
+ * Read from the invitations rather than from the memberships, and that is the
+ * whole point: an invitation is what an owner edits — the list that says who
+ * may come in and as what — while a membership only records that somebody once
+ * did. Suspending an address has to take a company off this list, and it can
+ * only do so if the list is built from the thing suspension writes to.
+ *
+ * A question that spans companies by its nature, so it says `acrossTenants`
+ * rather than pretending otherwise. It is still narrow: filtered by the
+ * address, returning names and nothing else.
  */
-export async function companiesFor(userId: string): Promise<Company[]> {
+export async function companiesFor(email: string): Promise<Company[]> {
   return acrossTenants(() =>
     getDb()
       .select({
@@ -150,30 +157,45 @@ export async function companiesFor(userId: string): Promise<Company[]> {
         name: schema.tenants.name,
         slug: schema.tenants.slug,
       })
-      .from(schema.memberships)
-      .innerJoin(schema.tenants, eq(schema.tenants.id, schema.memberships.tenantId))
-      .where(eq(schema.memberships.userId, userId))
+      .from(schema.allowedEmails)
+      .innerJoin(schema.tenants, eq(schema.tenants.id, schema.allowedEmails.tenantId))
+      .where(
+        and(
+          eq(schema.allowedEmails.email, normaliseEmail(email)),
+          eq(schema.allowedEmails.isActive, true),
+        ),
+      )
       .orderBy(asc(schema.tenants.name)),
   );
 }
 
 /**
- * What this person may do in one company, or null when they are not in it.
+ * What this address may do in one company, or null when it may not come in.
+ *
+ * The invitation is the authority, not the membership. An owner demoting an
+ * accountant or suspending them writes to the invitation; a membership is
+ * written once, at a first sign-in, and never again. Reading the membership
+ * here would freeze everyone's role at whatever it was the day they arrived —
+ * which is how a demotion becomes a change that shows on the screen and
+ * changes nothing.
  *
  * Scoped to the company being asked about rather than reaching across all of
  * them: the row is that company's, and the database will only hand it over to
  * a query that says so. Asking about the company already in hand — which is
  * what every request does — reuses its transaction rather than opening one.
  */
-export async function membershipIn(
-  userId: string,
-  tenantId: string,
-): Promise<MembershipRole | null> {
+export async function roleFor(email: string, tenantId: string): Promise<MembershipRole | null> {
   const [row] = await withTenant(tenantId, () =>
     getDb()
-      .select({ role: schema.memberships.role })
-      .from(schema.memberships)
-      .where(and(eq(schema.memberships.userId, userId), eq(schema.memberships.tenantId, tenantId)))
+      .select({ role: schema.allowedEmails.role })
+      .from(schema.allowedEmails)
+      .where(
+        and(
+          eq(schema.allowedEmails.tenantId, tenantId),
+          eq(schema.allowedEmails.email, normaliseEmail(email)),
+          eq(schema.allowedEmails.isActive, true),
+        ),
+      )
       .limit(1),
   );
 

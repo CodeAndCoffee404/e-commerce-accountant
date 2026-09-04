@@ -2,7 +2,7 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
-import { maySignIn, resolveAccess } from "@/lib/auth/allowlist";
+import { maySignIn, resolveAccess, roleFor } from "@/lib/auth/allowlist";
 import { getDb, schema } from "@/lib/db";
 import { acrossTenants } from "@/lib/db/tenant";
 import { serverEnv } from "@/lib/env";
@@ -42,8 +42,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
     }),
 
     // JWT rather than database sessions: every request would otherwise hit
-    // Postgres just to read the session, and the tenant a user belongs to
-    // changes rarely enough to live in the token.
+    // Postgres just to read the session. What the token carries is the company
+    // this session has *chosen*, not what the person is entitled to — that is
+    // read from the access list on each request, so a withdrawal does not wait
+    // for the token to expire.
     session: { strategy: "jwt" },
 
     pages: { signIn: "/signin", error: "/signin" },
@@ -78,11 +80,21 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
           token.isSuperAdmin = access.isSuperAdmin;
         }
 
-        // Switching company. The membership was checked before this was
-        // called; checking it again here would be checking it in the wrong
-        // place, since the token is written from whatever the caller passes.
-        if (trigger === "update" && typeof session?.tenantId === "string") {
-          token.tenantId = session.tenantId;
+        // Switching company.
+        //
+        // Checked here rather than trusted from the caller: Auth.js exposes
+        // this update as an endpoint of its own, so the value can arrive from
+        // the browser without passing through `switchCompany` at all. Every
+        // screen would still refuse the company afterwards — each one asks
+        // what this person may do in it — but that would leave the guarantee
+        // resting on the ordering of checks inside forty function bodies
+        // rather than on the token itself.
+        if (trigger === "update" && typeof session?.tenantId === "string" && token.email) {
+          const email = token.email;
+          const wanted = session.tenantId;
+          const role = await roleFor(email, wanted);
+
+          if (role) token.tenantId = wanted;
         }
 
         return token;

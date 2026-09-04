@@ -57,17 +57,17 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
 
     session.tenantId = tenant.id;
 
-    // The role is read from the membership on every request, so the session
-    // needs one: without it this person is a stranger to this company and gets
-    // sent to the chooser instead.
+    // The role is read from the access list on every request, so the session
+    // needs a row there: without it this person is a stranger to this company
+    // and gets sent to the chooser instead.
     await db()
       .insert(schema.users)
       .values({ id: session.userId, email: "test@example.invalid" })
       .onConflictDoNothing();
 
     await db()
-      .insert(schema.memberships)
-      .values({ tenantId: tenant.id, userId: session.userId, role: "owner" })
+      .insert(schema.allowedEmails)
+      .values({ tenantId: tenant.id, email: "test@example.invalid", role: "owner" })
       .onConflictDoNothing();
   }));
 

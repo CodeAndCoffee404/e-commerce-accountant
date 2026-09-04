@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { auth, unstable_update } from "@/auth";
-import { companiesFor, membershipIn, type Company } from "@/lib/auth/allowlist";
-import { acrossTenants } from "@/lib/db/tenant";
+import { companiesFor, roleFor, type Company } from "@/lib/auth/allowlist";
 
 /**
  * Which company a session is working in, and how it moves to another.
@@ -27,9 +26,9 @@ import { acrossTenants } from "@/lib/db/tenant";
 export async function myCompanies(): Promise<Company[]> {
   const session = await auth();
 
-  if (!session?.user?.id) return [];
+  if (!session?.user?.email) return [];
 
-  return companiesFor(session.user.id);
+  return companiesFor(session.user.email);
 }
 
 export type SwitchResult = { ok: true; tenantId: string } | { ok: false; message: string };
@@ -45,14 +44,16 @@ export type SwitchResult = { ok: true; tenantId: string } | { ok: false; message
  */
 export async function switchCompany(tenantId: unknown): Promise<SwitchResult> {
   const session = await auth();
-  const userId = session?.user?.id;
+  const email = session?.user?.email;
 
-  if (!userId) return { ok: false, message: "Sign in first." };
+  if (!email) return { ok: false, message: "Sign in first." };
   if (typeof tenantId !== "string" || tenantId.length === 0) {
     return { ok: false, message: "No company chosen." };
   }
 
-  const role = await acrossTenants(() => membershipIn(userId, tenantId));
+  // `roleFor` scopes itself to the company being asked about, which is the
+  // right amount of access for the question — no wider.
+  const role = await roleFor(email, tenantId);
 
   if (!role) return { ok: false, message: "You are not a member of that company." };
 

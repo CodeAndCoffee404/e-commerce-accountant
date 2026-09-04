@@ -5,9 +5,9 @@ import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
-import { DEFAULT_ROUTE, SELECT_COMPANY } from "@/lib/navigation";
-import { landingRoute } from "@/lib/navigation";
-import { membershipIn } from "./allowlist";
+
+import { DEFAULT_ROUTE, landingRoute, SELECT_COMPANY } from "@/lib/navigation";
+import { roleFor } from "./allowlist";
 
 export type CurrentUser = {
   id: string;
@@ -26,8 +26,9 @@ export type CurrentUser = {
  *
  * It reads the session itself rather than taking the company as an argument,
  * because the company is not known until the session is read and the body
- * cannot enclose itself. Reading it twice — here and again in the body's own
- * `requireUser` — costs a JWT verification, not a query.
+ * cannot enclose itself. That means the session is read twice, here and again
+ * in the body's own `requireUser` — a JWT verification, and one small query
+ * for the role.
  *
  * Nobody signed in is left to the body: its own check redirects or refuses,
  * with the wording that belongs to it, and there is nothing to scope anyway.
@@ -84,13 +85,15 @@ export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
     image: session.user.image ?? null,
     tenantId: session.tenantId,
     isSuperAdmin: session.isSuperAdmin,
-    role: await membershipIn(session.user.id, session.tenantId),
+    role: await roleFor(session.user.email, session.tenantId),
   };
 }
 
 /**
  * The signed-in person and what they may do, for a route handler. Null covers
- * both "not signed in" and "not in this company"; the caller answers 401.
+ * both "not signed in" and "not on this company's access list"; what the
+ * caller does with that is its own business — most answer 401, the two Google
+ * routes send the browser back to sign-in.
  */
 export async function apiUser(): Promise<UserWithAccess | null> {
   const user = await signedIn();
