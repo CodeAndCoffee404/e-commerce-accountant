@@ -62,14 +62,58 @@ export type SkuDecision =
   | { kind: "ignore" }
   | { kind: "map"; targetSku: string; itemName: string }
   /** Unmapped SKUs still reach the invoice, with the raw code — legacy does the same. */
-  | { kind: "passthrough" };
+  | { kind: "passthrough" }
+  /**
+   * The code is mapped, but to something else: the rows filed under it expect
+   * a different item name than the one the source just sent. Never invoiced —
+   * a mapping that no longer describes what arrived is not a mapping.
+   */
+  | { kind: "mismatch"; expectedNames: string[] };
 
-export function decideSku(rules: RulesSnapshot, channel: string, sku: string): SkuDecision {
-  const mapping = rules.skuMappings.find(
+/**
+ * Names are compared as a person would read them: case and spacing are not
+ * what makes two items different.
+ */
+export function normaliseItemName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * What to bill a source code as.
+ *
+ * Pass `sourceName` and the mapping is checked as well as read: the row has
+ * to agree about what that code is, or the build stops and asks. That is for
+ * channels whose export carries an item name next to the code — Shopify,
+ * where the code is optional, products get renamed and one code has been seen
+ * covering two different products. Leave it out and only the code is matched,
+ * which is what every other channel means by a mapping.
+ */
+export function decideSku(
+  rules: RulesSnapshot,
+  channel: string,
+  sku: string,
+  sourceName?: string,
+): SkuDecision {
+  const candidates = rules.skuMappings.filter(
     (entry) => entry.channel === channel && entry.sourceSku === sku,
   );
 
-  if (!mapping) return { kind: "passthrough" };
+  if (candidates.length === 0) return { kind: "passthrough" };
+
+  const mapping =
+    sourceName === undefined
+      ? candidates[0]
+      : candidates.find(
+          (entry) =>
+            entry.sourceName !== "" &&
+            normaliseItemName(entry.sourceName) === normaliseItemName(sourceName),
+        );
+
+  // Rows exist for the code and none of them claims this name. An empty
+  // expected name is a row nobody has finished filling in, and it is reported
+  // rather than trusted: that is the whole point of asking for the name.
+  if (!mapping) return { kind: "mismatch", expectedNames: candidates.map((e) => e.sourceName) };
+
   if (mapping.isIgnored) return { kind: "ignore" };
 
   return {
