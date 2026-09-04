@@ -13,8 +13,7 @@ import type {
 } from "@/lib/reports/types";
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
-import { unmappedCode, type UnmappedSku } from "./types";
-import type { ReportModule } from "./types";
+import { unmappedCode, type ReportModule, type UnmappedSku } from "./types";
 
 /**
  * Allegro invoice for Zoho: the same idea as the Amazon one, built from the

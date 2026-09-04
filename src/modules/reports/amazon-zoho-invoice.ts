@@ -11,8 +11,7 @@ import type {
   RulesSnapshot,
 } from "@/lib/reports/types";
 
-import { unmappedCode, type UnmappedSku } from "./types";
-import type { ReportModule } from "./types";
+import { unmappedCode, type ReportModule, type UnmappedSku } from "./types";
 
 export const ZOHO_HEADERS = [
   "Invoice Date",

@@ -14,8 +14,7 @@ import type {
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
 import { parseShopifyTaxRate } from "./off-amazon-sales";
-import { type UnmappedSku } from "./types";
-import type { ReportModule } from "./types";
+import type { ReportModule, UnmappedSku } from "./types";
 
 /**
  * Shopify invoice for Zoho: one line per item sold, plus VAT split by market.
