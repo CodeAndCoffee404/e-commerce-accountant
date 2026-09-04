@@ -55,24 +55,19 @@ export type NotASale =
 export function notASale(order: ShopifyOrder | undefined): NotASale | null {
   if (!order) return null;
 
-  // Money that cannot have arrived, whatever the order looks like otherwise.
-  // The shop takes cards; that is a fact about the shop, not about how an
-  // order was typed in, so it is checked before the source and independently
-  // of it. Today every such order also happens to be hand-made — but the two
-  // things move independently, and a web order marked paid by hand would be
-  // just as unpaid.
-  if (order.total?.greaterThan(0) && METHODS_THAT_ARE_NOT_PAYMENTS.includes(order.paymentMethod)) {
-    return "unpaid";
-  }
-
-  // The rest is about how the order was made. An order nobody typed by hand is
-  // a sale: it came through a checkout, which is the shop's ordinary way of
-  // taking money.
+  // Everything here is about orders somebody typed in by hand. An order nobody
+  // typed by hand is a sale: it came through a checkout, which is the shop's
+  // ordinary way of taking money.
   if (!HAND_MADE_SOURCES.includes(order.source)) return null;
 
   // An unreadable total counts as no money: the report says so elsewhere, and
   // guessing that it might have been a sale is the wrong way to be wrong.
-  return order.total?.greaterThan(0) ? null : "giveaway";
+  if (!order.total?.greaterThan(0)) return "giveaway";
+
+  // It claims money. The shop takes cards, so a hand-typed "paid" is the known
+  // mistake on a warranty replacement: the 100% discount that should have
+  // zeroed it was never applied.
+  return METHODS_THAT_ARE_NOT_PAYMENTS.includes(order.paymentMethod) ? "unpaid" : null;
 }
 
 /**
