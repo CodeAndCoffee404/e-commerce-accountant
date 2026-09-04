@@ -57,6 +57,7 @@ function orderHead(args: {
   itemName: string;
   /** Shopify writes this only when the product has one. */
   sku?: string;
+  paymentMethod?: string;
   price: string;
   qty: number;
   occurredOn?: string;
@@ -80,6 +81,7 @@ function orderHead(args: {
       "Tax 1 Name": args.taxLabel,
       "Shipping Country": args.country,
       Source: args.source ?? "web",
+      "Payment Method": args.paymentMethod ?? "Shopify Payments",
       "Lineitem name": args.itemName,
       "Lineitem price": args.price,
     },
@@ -140,6 +142,7 @@ const rules: RulesSnapshot = {
     { channel: "shopify_geyser", key: "country_aliases", value: { UK: "GB" } },
     { channel: "shopify_geyser", key: "recompute_zero_tax_countries", value: ["GB"] },
     { channel: "shopify_geyser", key: "excluded_sources", value: ["shopify_draft_order"] },
+    { channel: "shopify_geyser", key: "unpaid_payment_methods", value: ["manual"] },
   ],
 };
 
@@ -351,10 +354,9 @@ describe("generateShopifyZohoInvoice", () => {
     expect(result.skipped.find((s) => s.reason === "Shopify invoice: made by hand, nothing paid")?.count).toBe(2);
   });
 
-  it("bills a hand-made order that was paid for — it is a sale", () => {
-    // How the shop ships an adapter or a warranty replacement is a draft with
-    // no money in it. A draft with money is a real sale: three of them in the
-    // client's July export, three more in August, 495.40 EUR between them.
+  it("bills a hand-made order that was really paid for — it is a sale", () => {
+    // A hand-made order that the buyer actually paid by card is an ordinary
+    // sale that happens to have been written up in the admin.
     const rows = [
       orderHead({
         name: "#1",
@@ -366,6 +368,7 @@ describe("generateShopifyZohoInvoice", () => {
         price: "89.90",
         qty: 1,
         source: "shopify_draft_order",
+        paymentMethod: "Shopify Payments",
       }),
     ];
 
@@ -377,6 +380,38 @@ describe("generateShopifyZohoInvoice", () => {
     expect(goods[0][9]).toBe("89.90");
     // And its VAT with it, or the invoice would charge tax on nothing.
     expect(vat.map((line) => line[9])).toEqual(["14.98"]);
+    expect(built.warnings).toEqual([]);
+  });
+
+  it("refuses to bill a hand-made order marked paid by a means the shop does not take", () => {
+    // The known mistake: a warranty replacement that should have been zeroed
+    // with a 100% discount was marked paid by hand instead. The shop takes
+    // cards only, so this money never arrived and billing it would invent
+    // revenue — and VAT on it.
+    const rows = [
+      orderHead({
+        name: "#171337",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        price: "89.90",
+        qty: 1,
+        source: "shopify_draft_order",
+        paymentMethod: "manual",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+
+    expect(built.sheets[0].rows).toEqual([]);
+
+    // Named, not merely counted: somebody has to go and fix this one order.
+    expect(built.warnings).toHaveLength(1);
+    expect(built.warnings[0]).toContain("#171337");
+    expect(built.warnings[0]).toContain("89.90");
+    expect(built.warnings[0]).toContain("100% discount");
   });
 
   it("still drops a hand-made order with no money in it", () => {

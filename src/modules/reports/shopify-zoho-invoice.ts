@@ -119,12 +119,13 @@ function vatBucketKey(arrival: string, departure: string): string {
   return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? arrival : "OTHER";
 }
 
-type OrderFacts = { source: string; total: Decimal | null };
+type OrderFacts = { source: string; total: Decimal | null; paymentMethod: string };
 
 /**
- * Every order's `Source` and `Total`, resolved once from whichever of its
- * lines carries them — both are order-level columns Shopify writes on the
- * first line only, and every line of the order is judged by them.
+ * Every order's `Source`, `Total` and `Payment Method`, resolved once from
+ * whichever of its lines carries them — all three are order-level columns
+ * Shopify writes on the first line only, and every line of the order is judged
+ * by them.
  */
 function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
   const map = new Map<string, OrderFacts>();
@@ -141,6 +142,7 @@ function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
     map.set(name, {
       source: row.raw["Source"] || found?.source || "",
       total: money(row.raw["Total"]) ?? found?.total ?? null,
+      paymentMethod: row.raw["Payment Method"] || found?.paymentMethod || "",
     });
   }
 
@@ -181,6 +183,44 @@ function money(value: string | undefined): Decimal | null {
   }
 }
 
+/**
+ * Whether a hand-made order was really bought: money in it, arrived by a means
+ * the shop actually accepts.
+ */
+function isRealSale(order: OrderFacts | undefined, rules: RulesSnapshot): boolean {
+  if (!order?.total?.greaterThan(0)) return false;
+
+  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
+
+  return !unpaid.includes(order.paymentMethod);
+}
+
+/**
+ * The message for a hand-made order that claims money it cannot have taken —
+ * null when there is nothing wrong with it.
+ *
+ * These are worth naming one by one rather than counting: each is an order
+ * somebody has to go and fix in Shopify, and until it is fixed the month's
+ * revenue is understated by exactly this much.
+ */
+function unpaidOrderProblem(
+  order: OrderFacts | undefined,
+  rules: RulesSnapshot,
+  orderName: string,
+): string | null {
+  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
+
+  if (!order?.total?.greaterThan(0)) return null;
+  if (!unpaid.includes(order.paymentMethod)) return null;
+
+  return (
+    `Shopify invoice: order ${orderName} was made by hand and marked paid by ` +
+    `"${order.paymentMethod}", which the shop does not accept — ${order.total.toFixed(2)} left ` +
+    "off the invoice. If it is a warranty replacement it needs a 100% discount in Shopify; " +
+    "if it was really bought, the payment needs recording."
+  );
+}
+
 function isExcludedRow(
   row: LedgerRow,
   rules: RulesSnapshot,
@@ -193,11 +233,15 @@ function isExcludedRow(
 
   // `shopify_draft_order` is not an order that is still a draft: it is one an
   // employee wrote up by hand in the admin, which Shopify then shows as an
-  // ordinary order. Most carry no money — that is how an adapter or a warranty
-  // replacement is shipped. The ones that were paid for are sales, and dropping
-  // them loses real revenue: three in July, three in August. The source alone
-  // cannot tell the two apart; the amount can.
-  if (excludedSources.includes(source) && !(order?.total?.greaterThan(0) ?? false)) {
+  // ordinary order. That is how a warranty replacement or an adapter ships.
+  //
+  // It is a sale only if it was actually paid for, and the shop takes card
+  // payments only — so a total that arrived through `manual` is not money that
+  // exists. It is the known mistake: the replacement should have been zeroed
+  // with a 100% discount and was marked paid by hand instead. Billing it would
+  // invent revenue, and its VAT with it, so it is excluded like the rest and
+  // named in the warnings by `unpaidOrderProblem` below.
+  if (excludedSources.includes(source) && !isRealSale(order, rules)) {
     return "Shopify invoice: made by hand, nothing paid";
   }
 
@@ -246,6 +290,15 @@ export function generateShopifyZohoInvoice(
   }
 
   const facts = orderFactsMap(rows);
+
+  // Named before anything is built, once per order rather than once per line:
+  // an order claiming money the shop cannot have taken is somebody's mistake to
+  // go and fix, and a count in the skipped list would never say which orders.
+  for (const [orderName, order] of facts) {
+    const problem = unpaidOrderProblem(order, context.rules, orderName);
+
+    if (problem) warnings.push(problem);
+  }
 
   /* ------------------------------------------------------------------ *
    * Product lines: every line item, one row per (item, unit price).

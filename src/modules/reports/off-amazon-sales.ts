@@ -258,17 +258,25 @@ function cdiscountRow(
  * ------------------------------------------------------------------ */
 
 /**
- * Whether an order's total is money rather than nothing — an unreadable total
- * counts as nothing, so a draft stays excluded exactly as it was before this
- * distinction existed, and the unreadable total is reported further down.
+ * Whether an order was really bought: money in it, arrived by a means the shop
+ * actually accepts. An unreadable total counts as no money, so such an order
+ * stays excluded exactly as it was before this distinction existed, and the
+ * unreadable total is reported further down.
  */
-function isPaidFor(orderTotal: string): boolean {
+function isPaidFor(orderTotal: string, row: LedgerRow, rules: RulesSnapshot): boolean {
+  let total: Decimal | null = null;
+
   try {
-    return parseDecimalValue(orderTotal, { decimalSeparator: ".", column: "Total" })
-      ?.greaterThan(0) ?? false;
+    total = parseDecimalValue(orderTotal, { decimalSeparator: ".", column: "Total" });
   } catch {
     return false;
   }
+
+  if (!total?.greaterThan(0)) return false;
+
+  const unpaid = channelRule<string[]>(rules, "shopify_geyser", "unpaid_payment_methods") ?? [];
+
+  return !unpaid.includes(row.raw["Payment Method"] ?? "");
 }
 
 /** `FR TVA 20%` → 0.2. The rate is only ever written into the tax label. */
@@ -300,10 +308,12 @@ function shopifyRow(
   const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
 
   // `shopify_draft_order` is not an order that is still a draft: it is one an
-  // employee wrote up by hand in the admin. Most carry no money — that is how
-  // an adapter or a warranty replacement is shipped — but one that was paid
-  // for is a sale, and dropping it loses real revenue.
-  if (excluded.includes(row.raw["Source"] ?? "") && !isPaidFor(orderTotal)) {
+  // employee wrote up by hand in the admin. That is how a warranty replacement
+  // or an adapter ships, and it is a sale only if it was really paid for — the
+  // shop takes card payments only, so a total that arrived through `manual` is
+  // money that does not exist, and the same order is named in the Shopify
+  // invoice's warnings for somebody to go and fix.
+  if (excluded.includes(row.raw["Source"] ?? "") && !isPaidFor(orderTotal, row, context.rules)) {
     return skip(skipped, "Shopify: made by hand, nothing paid");
   }
 

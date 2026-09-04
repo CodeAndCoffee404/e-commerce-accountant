@@ -245,6 +245,16 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
   },
   {
     channel: GEYSER.dataset,
+    key: "unpaid_payment_methods",
+    value: ["manual"],
+    note:
+      "The shop takes card payments only, so an order marked paid by hand was " +
+      "not paid at all. It is the known mistake on a warranty replacement: the " +
+      "item should have been zeroed with a 100% discount and was marked paid " +
+      "instead. Such an order is left off the invoice and named in the warnings.",
+  },
+  {
+    channel: GEYSER.dataset,
     key: "excluded_sources",
     value: ["shopify_draft_order"],
     note:
