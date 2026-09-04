@@ -48,13 +48,13 @@ const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRE
 
 const created: string[] = [];
 
-afterAll(async () => {
+afterAll(inRequest(async () => {
   if (!HAS_DB) return;
 
   for (const tenantId of created) {
     await getDb().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   }
-});
+}));
 
 async function asOwnerOfFreshTenant(): Promise<string> {
   const suffix = created.length + Date.now();

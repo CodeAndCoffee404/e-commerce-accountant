@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
@@ -39,6 +39,12 @@ export type SaveDeadlineRuleInput = z.input<typeof inputSchema>;
  * what makes editing the rule retroactive for free — see PLAN §3.
  */
 export async function saveDeadlineRule(
+  raw: SaveDeadlineRuleInput,
+): Promise<DeadlineActionResult> {
+  return inRequest(() => saveDeadlineRuleInScope(raw));
+}
+
+async function saveDeadlineRuleInScope(
   raw: SaveDeadlineRuleInput,
 ): Promise<DeadlineActionResult> {
   const user = await requireAccess();

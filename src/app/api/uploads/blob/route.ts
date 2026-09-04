@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { enterTenant } from "@/lib/db/tenant";
+import { inRequest } from "@/lib/auth/session";
 import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants";
 import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
 
@@ -22,6 +22,12 @@ import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
  * keep anywhere.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  return inRequest(() => presignUpload(request));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function presignUpload(request: Request): Promise<NextResponse> {
   // Checked before the handler: it validates store credentials first, so a
   // misconfigured store would answer an anonymous caller with a configuration
   // error instead of a refusal.
@@ -30,10 +36,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
-
-  // Named here rather than by requireUser: a route handler answers the
-  // browser directly and never passes through it.
-  enterTenant(session.tenantId);
 
   // Reading a section is not writing to it. Checked at the token as well as at
   // registration, because a signed token IS the write.

@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
-import { enterTenant } from "@/lib/db/tenant";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -23,6 +23,15 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
  */
 export async function GET(
   _request: Request,
+  context: { params: Promise<{ artifactId: string }> },
+): Promise<NextResponse> {
+  return inRequest(() => downloadArtifact(_request, context));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function downloadArtifact(
+  _request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<NextResponse> {
   const session = await auth();
@@ -30,10 +39,6 @@ export async function GET(
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
-
-  // Named here rather than by requireUser: a route handler answers the
-  // browser directly and never passes through it.
-  enterTenant(session.tenantId);
 
   const access = await loadAccessFor(session.tenantId, session.role);
 

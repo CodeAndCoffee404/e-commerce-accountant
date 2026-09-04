@@ -23,6 +23,7 @@ const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
 const { runReport } = await import("@/lib/reports/run");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
+const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -51,7 +52,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
   const db = () => getDb();
   let tenantId = "";
 
-  beforeAll(async () => {
+  beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Rules guard test", slug: `rules-${process.pid}` })
@@ -94,13 +95,13 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
       await ingestSourceFile(row.id, tenantId, parsed.grid);
     }
-  }, 300_000);
+  }), 300_000);
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-  });
+  }));
 
-  it("refuses, and names the rules that are missing", async () => {
+  it("refuses, and names the rules that are missing", inRequest(async () => {
     const outcome = await runReport({
       tenantId,
       reportType: "off_amazon_sales",
@@ -129,9 +130,9 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
       .where(eq(schema.reportRuns.tenantId, tenantId));
 
     expect(artifacts).toEqual([]);
-  }, 300_000);
+  }), 300_000);
 
-  it("builds once the defaults are restored", async () => {
+  it("builds once the defaults are restored", inRequest(async () => {
     await seedReferenceData(tenantId);
 
     const outcome = await runReport({
@@ -156,5 +157,5 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
     // than every one of them being skipped as unrecognised.
     expect(stats.outputRows ?? 0).toBeGreaterThan(0);
     expect(stats.warnings ?? []).not.toContain("Shopify: the defaults rule is missing");
-  }, 300_000);
+  }), 300_000);
 });

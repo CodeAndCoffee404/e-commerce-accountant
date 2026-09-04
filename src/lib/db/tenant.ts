@@ -1,24 +1,25 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { Executor } from "./index";
+import { sql } from "drizzle-orm";
+
+import { rootDb, type Executor } from "./index";
 
 /**
- * Which company the work in hand belongs to.
+ * Which company the work in hand belongs to — told to Postgres, not just to us.
  *
- * Every query in this application is already written with `tenant_id` in its
- * `where` — all of them, checked one by one. But that correctness lives in
- * thirty-odd files and in the discipline of everyone who edits them, and a
- * forgotten filter is not a failing test, it is one company's numbers inside
- * another company's report. The point of this module is to move that from
- * discipline to structure: the company becomes a property of the request
- * rather than an argument each query has to remember to pass.
+ * Every query in this application is written with `tenant_id` in its `where`.
+ * All of them, checked one by one. But that correctness lives in thirty-odd
+ * files and in the discipline of everyone who edits them, and a forgotten
+ * filter is not a failing test: it is one company's numbers inside another
+ * company's report. So the company is named to the database itself, and its
+ * row-level security answers a query that did not name one with no rows rather
+ * than with somebody else's.
  *
- * Today it only records the company and refuses contradictions. What it is
- * built for is the step after: `executor` will carry a transaction that has
- * named the company to Postgres, and row-level security will make a query
- * without one return no rows instead of somebody else's. `getDb()` already
- * prefers that executor, so that step changes this file and not the thirty
- * others.
+ * The unit is a transaction, and that is forced, not chosen. The connection
+ * runs through Neon's pooler, which is PgBouncer in transaction mode: a
+ * session-level `SET` would outlive the request and land on whoever borrowed
+ * the same server connection next. `set_config(…, true)` is scoped to the
+ * transaction and cannot.
  */
 
 type Scope = {
@@ -28,11 +29,8 @@ type Scope = {
    * all of them.
    */
   tenantId: string | null;
-  /**
-   * Where queries in this scope run. Unset for now, which is why nothing
-   * changes yet: `getDb()` falls back to the ordinary connection.
-   */
-  executor?: Executor;
+  /** The transaction this scope's queries run on, and which named the company. */
+  executor: Executor;
 };
 
 const storage = new AsyncLocalStorage<Scope>();
@@ -60,7 +58,7 @@ export function requireTenantId(): string {
   return tenantId;
 }
 
-/** Where queries should run, when the scope has said. Read by `getDb()`. */
+/** Where queries should run. Read by `getDb()`, which is how the thirty other files find it. */
 export function currentExecutor(): Executor | undefined {
   return storage.getStore()?.executor;
 }
@@ -73,7 +71,42 @@ function conflict(current: string, wanted: string): Error {
 }
 
 /**
- * Runs `fn` as work belonging to one company.
+ * Tells Postgres whose work this is.
+ *
+ * `true` is the local flag: the setting belongs to this transaction and is
+ * gone when it ends. Without it the value would outlive the request on a
+ * pooled connection, which is the one way this design could hand somebody
+ * another company's rows.
+ */
+async function announce(executor: Executor, tenantId: string | null): Promise<void> {
+  await executor.execute(
+    tenantId === null
+      ? sql`select set_config('app.bypass_rls', 'on', true)`
+      : sql`select set_config('app.tenant_id', ${tenantId}, true)`,
+  );
+}
+
+async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Promise<T> {
+  const open = currentExecutor();
+
+  // Already inside a transaction this module opened — the nightly job taking
+  // one company's turn, or a page whose action re-enters. Re-announce on the
+  // same transaction rather than nesting another.
+  if (open) {
+    await announce(open, tenantId);
+
+    return storage.run({ tenantId, executor: open }, fn);
+  }
+
+  return rootDb().transaction(async (executor) => {
+    await announce(executor, tenantId);
+
+    return storage.run({ tenantId, executor }, fn);
+  });
+}
+
+/**
+ * Runs `fn` as work belonging to one company, in a transaction that says so.
  *
  * Re-entering the same company is fine — a page that checks the session twice
  * should not be a special case. A *different* company is not: nothing in this
@@ -84,36 +117,22 @@ function conflict(current: string, wanted: string): Error {
 export function withTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   const current = currentTenantId();
 
-  if (current && current !== tenantId) throw conflict(current, tenantId);
-
-  return storage.run({ tenantId, executor: currentExecutor() }, fn);
-}
-
-/**
- * Names the company for the rest of the current request, without wrapping it.
- *
- * The wrapping form cannot reach the places that need this most: `requireUser`
- * returns the signed-in person to a page, it does not enclose the page. Every
- * page and every Server Action already goes through it, so entering the scope
- * there covers all of them at once instead of asking each to remember.
- */
-export function enterTenant(tenantId: string): void {
-  const current = currentTenantId();
-
-  if (current === tenantId) return;
+  if (current === tenantId) return fn();
   if (current) throw conflict(current, tenantId);
 
-  storage.enterWith({ tenantId, executor: currentExecutor() });
+  return runScoped(tenantId, fn);
 }
 
 /**
- * Runs `fn` with no company in scope, on purpose.
+ * Runs `fn` with no company in scope, on purpose — and with row-level security
+ * stood down for the duration.
  *
  * Three callers, and they are the whole list: signing in, which happens before
- * anyone knows which company the person belongs to; the nightly job, which
- * opens the month for every company in turn; and tests. Spelling it out is the
- * point — when the database starts enforcing the company itself, this is the
- * one door around it, and a door nobody can name is a door nobody guards.
+ * anyone knows which company the person belongs to and looks the invitation up
+ * by email across all of them; the nightly job, which opens the month for every
+ * company in turn; and tests, which build the rows the other two read. Spelling
+ * it out is the point — this is the one door around the database's own check,
+ * and a door nobody can name is a door nobody guards.
  *
  * It refuses to open inside a company's scope. That direction is the dangerous
  * one: it would widen a request that had been narrowed, which is exactly the
@@ -129,5 +148,8 @@ export function acrossTenants<T>(fn: () => Promise<T>): Promise<T> {
     );
   }
 
-  return storage.run({ tenantId: null }, fn);
+  // Already company-less and already in a transaction: nothing to open.
+  if (storage.getStore()) return fn();
+
+  return runScoped(null, fn);
 }

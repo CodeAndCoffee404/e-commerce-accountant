@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 
@@ -42,6 +42,10 @@ const buildSchema = z.object({
 });
 
 export async function buildReport(input: unknown): Promise<BuildResult> {
+  return inRequest(() => buildReportInScope(input));
+}
+
+async function buildReportInScope(input: unknown): Promise<BuildResult> {
   const user = await requireAccess();
 
   if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
@@ -101,6 +105,10 @@ export async function buildReport(input: unknown): Promise<BuildResult> {
 
 /** Retry delivery for a run whose upload failed, without rebuilding it. */
 export async function republish(runId: string): Promise<BuildResult> {
+  return inRequest(() => republishInScope(runId));
+}
+
+async function republishInScope(runId: string): Promise<BuildResult> {
   const user = await requireAccess();
 
   if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };
@@ -134,6 +142,10 @@ export async function republish(runId: string): Promise<BuildResult> {
  * take it back is not this application's business.
  */
 export async function deleteRun(runId: string): Promise<BuildResult> {
+  return inRequest(() => deleteRunInScope(runId));
+}
+
+async function deleteRunInScope(runId: string): Promise<BuildResult> {
   const user = await requireAccess();
 
   if (!can(user, "reports", "edit")) return { ok: false, message: "Not allowed." };

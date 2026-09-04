@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
-import { enterTenant } from "@/lib/db/tenant";
 
 const DEFAULT_MIME = "application/octet-stream";
 
@@ -18,6 +18,15 @@ const DEFAULT_MIME = "application/octet-stream";
  */
 export async function GET(
   _request: Request,
+  context: { params: Promise<{ fileId: string }> },
+): Promise<NextResponse> {
+  return inRequest(() => downloadUpload(_request, context));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function downloadUpload(
+  _request: Request,
   { params }: { params: Promise<{ fileId: string }> },
 ): Promise<NextResponse> {
   const session = await auth();
@@ -25,10 +34,6 @@ export async function GET(
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
-
-  // Named here rather than by requireUser: a route handler answers the
-  // browser directly and never passes through it.
-  enterTenant(session.tenantId);
 
   const access = await loadAccessFor(session.tenantId, session.role);
 

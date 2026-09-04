@@ -14,6 +14,8 @@ import { ingestSourceFile } from "@/lib/uploads/ingest";
 import { ensurePeriodFor, ensurePeriods, loadPeriodConfiguration } from "@/lib/periods/ensure";
 import { PERIODS_CHANNEL, SCHEDULE_KEY, type PeriodSchedule } from "@/lib/periods/schedule";
 
+import { inRequest } from "./helpers/request-scope";
+
 /**
  * Opening periods is the one piece the calendar cannot prove on its own: that
  * calling it twice is the same as calling it once. Everything downstream —
@@ -26,7 +28,7 @@ const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRE
 
 const created: string[] = [];
 
-afterAll(async () => {
+afterAll(inRequest(async () => {
   if (!HAS_DB || created.length === 0) return;
 
   const db = getDb();
@@ -34,7 +36,7 @@ afterAll(async () => {
   for (const tenantId of created) {
     await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   }
-});
+}));
 
 async function tenant(schedule?: Partial<PeriodSchedule>): Promise<string> {
   const db = getDb();
@@ -70,16 +72,16 @@ async function labels(tenantId: string): Promise<string[]> {
 }
 
 describe.skipIf(!HAS_DB)("opening periods", () => {
-  it("opens the month and the quarter being lived through on the first run", async () => {
+  it("opens the month and the quarter being lived through on the first run", inRequest(async () => {
     const tenantId = await tenant();
 
     const opened = await ensurePeriods(tenantId, "2026-08-22");
 
     expect(opened.map((period) => period.label).sort()).toEqual(["2026.08 August", "2026.Q3"]);
     expect(await labels(tenantId)).toEqual(["2026.Q3", "2026.08 August"]);
-  });
+  }));
 
-  it("does nothing at all the second time", async () => {
+  it("does nothing at all the second time", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
@@ -87,18 +89,18 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
 
     expect(again).toEqual([]);
     expect(await labels(tenantId)).toHaveLength(2);
-  });
+  }));
 
-  it("opens the new month when the day rolls over, and only that", async () => {
+  it("opens the new month when the day rolls over, and only that", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
     const opened = await ensurePeriods(tenantId, "2026-09-01");
 
     expect(opened.map((period) => period.label)).toEqual(["2026.09 September"]);
-  });
+  }));
 
-  it("catches up months a silent scheduler missed, in one call", async () => {
+  it("catches up months a silent scheduler missed, in one call", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
@@ -111,9 +113,9 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
       "2026.12 December",
       "2026.Q4",
     ]);
-  });
+  }));
 
-  it("never opens a period from before the schedule started", async () => {
+  it("never opens a period from before the schedule started", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
@@ -121,9 +123,9 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
     // July belongs to the quarter that was opened, but the month itself began
     // before this tenant had a schedule and is not invented after the fact.
     expect(await labels(tenantId)).not.toContain("2026.07 July");
-  });
+  }));
 
-  it("starts a granularity turned on later from where it is turned on", async () => {
+  it("starts a granularity turned on later from where it is turned on", inRequest(async () => {
     const tenantId = await tenant({
       month: true,
       quarter: true,
@@ -147,9 +149,9 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
     const opened = await ensurePeriods(tenantId, "2026-08-22");
 
     expect(opened.map((period) => period.label)).toEqual(["2026.Y"]);
-  });
+  }));
 
-  it("remembers where each granularity started", async () => {
+  it("remembers where each granularity started", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
@@ -157,9 +159,9 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
     const { anchors } = await loadPeriodConfiguration(tenantId);
 
     expect(anchors).toEqual({ month: "2026-08-01", quarter: "2026-07-01" });
-  });
+  }));
 
-  it("honours a fiscal year that does not start in January", async () => {
+  it("honours a fiscal year that does not start in January", inRequest(async () => {
     const tenantId = await tenant({
       month: false,
       quarter: false,
@@ -172,9 +174,9 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
     expect(opened.map((period) => period.label)).toEqual(["2026.Y"]);
     expect(opened[0].startDate).toBe("2026-04-01");
     expect(opened[0].endDate).toBe("2027-03-31");
-  });
+  }));
 
-  it("keeps two tenants' periods apart under the same label", async () => {
+  it("keeps two tenants' periods apart under the same label", inRequest(async () => {
     const one = await tenant();
     const two = await tenant();
 
@@ -182,11 +184,11 @@ describe.skipIf(!HAS_DB)("opening periods", () => {
     const opened = await ensurePeriods(two, "2026-08-22");
 
     expect(opened.map((period) => period.label).sort()).toEqual(["2026.08 August", "2026.Q3"]);
-  });
+  }));
 });
 
 describe.skipIf(!HAS_DB)("the period a file belongs to", () => {
-  it("opens one for a month the schedule never reached, marked as an upload", async () => {
+  it("opens one for a month the schedule never reached, marked as an upload", inRequest(async () => {
     const tenantId = await tenant();
 
     await ensurePeriods(tenantId, "2026-08-22");
@@ -205,9 +207,9 @@ describe.skipIf(!HAS_DB)("the period a file belongs to", () => {
 
     expect(row.origin).toBe("upload");
     expect(row.label).toBe("2026.03 March");
-  });
+  }));
 
-  it("returns the existing period rather than a second one", async () => {
+  it("returns the existing period rather than a second one", inRequest(async () => {
     const tenantId = await tenant();
 
     const [august] = await ensurePeriods(tenantId, "2026-08-01");
@@ -221,9 +223,9 @@ describe.skipIf(!HAS_DB)("the period a file belongs to", () => {
     expect(id).toBe(august.id);
     // The calendar opened it, and a file arriving later does not rewrite that.
     expect(august.origin).toBe("schedule");
-  });
+  }));
 
-  it("opens a granularity this tenant does not schedule rather than refusing the file", async () => {
+  it("opens a granularity this tenant does not schedule rather than refusing the file", inRequest(async () => {
     const tenantId = await tenant({
       month: true,
       quarter: false,
@@ -238,7 +240,7 @@ describe.skipIf(!HAS_DB)("the period a file belongs to", () => {
 
     expect(row.granularity).toBe("year");
     expect(row.origin).toBe("upload");
-  });
+  }));
 });
 
 describe.skipIf(!HAS_DB)("a file joining the ledger", () => {
@@ -248,7 +250,7 @@ describe.skipIf(!HAS_DB)("a file joining the ledger", () => {
    * in the ledger with no period would be invisible to every page that lists
    * periods — present in the database and absent from the application.
    */
-  it("is attached to its period, opened for it if need be", async () => {
+  it("is attached to its period, opened for it if need be", inRequest(async () => {
     const tenantId = await tenant();
     const file = "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv";
     const bytes = readFileSync(path.resolve(process.cwd(), file));
@@ -303,5 +305,5 @@ describe.skipIf(!HAS_DB)("a file joining the ledger", () => {
 
     expect(period.label).toBe("2026.07 July");
     expect(period.origin).toBe("upload");
-  });
+  }));
 });

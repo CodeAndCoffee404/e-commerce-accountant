@@ -58,7 +58,7 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
   // test that is really running.
   const db = () => getDb();
 
-  beforeAll(async () => {
+  beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Close test", slug: `close-${process.pid}` })
@@ -118,14 +118,14 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
         .set({ detectionMeta: { sourceRows: ingested.sourceRows, mappedRows: ingested.inserted } })
         .where(eq(schema.sourceFiles.id, row.id));
     }
-  }, 300_000);
+  }), 300_000);
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (session.tenantId) {
       await db().delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
     }
     await db().delete(schema.users).where(eq(schema.users.id, session.userId));
-  });
+  }));
 
   it("derives the checklist from the enabled reports and marks what landed", inRequest(async () => {
     const data = await loadDashboard(session.tenantId);

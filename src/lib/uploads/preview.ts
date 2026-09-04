@@ -3,7 +3,7 @@
 import { get } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
 
@@ -22,6 +22,10 @@ const PREVIEW_COLUMNS = 12;
  * and to erase on request.
  */
 export async function previewUpload(fileId: string): Promise<Preview> {
+  return inRequest(() => previewUploadInScope(fileId));
+}
+
+async function previewUploadInScope(fileId: string): Promise<Preview> {
   const user = await requireAccess();
 
   // These are the rows themselves, buyer data and all. A Server Action is a

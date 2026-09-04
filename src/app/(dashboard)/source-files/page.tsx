@@ -1,13 +1,19 @@
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { UploadsTable } from "@/components/uploads/uploads-table";
 import { one } from "@/lib/params";
-import { can, requireSection } from "@/lib/auth/session";
+import { can, inRequest, requireSection } from "@/lib/auth/session";
 import { listUploads, uploadFilterOptions, type UploadFilters } from "@/lib/uploads/queries";
 import { reconcileFiles } from "@/lib/uploads/reconciliation";
 
 export const metadata = { title: "Source files" };
 
-export default async function SourceFilesPage({ searchParams }: PageProps<"/source-files">) {
+export default async function SourceFilesPage(props: PageProps<"/source-files">) {
+  return inRequest(() => sourceFilesPage(props));
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function sourceFilesPage({ searchParams }: PageProps<"/source-files">) {
   const user = await requireSection("source_files");
   const params = await searchParams;
 

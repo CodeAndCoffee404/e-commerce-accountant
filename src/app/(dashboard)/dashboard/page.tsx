@@ -2,7 +2,7 @@ import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { UploadDialog } from "@/components/uploads/upload-dialog";
 import { one } from "@/lib/params";
 import { listAudit } from "@/lib/audit/record";
-import { can, requireSection } from "@/lib/auth/session";
+import { can, inRequest, requireSection } from "@/lib/auth/session";
 import { loadDashboard } from "@/lib/dashboard/queries";
 import { loadConnection } from "@/lib/google/connection";
 import { loadReportDeadlines } from "@/lib/reports/deadlines-queries";
@@ -10,7 +10,13 @@ import { countNeedsAttention } from "@/lib/transactions/queries";
 
 export const metadata = { title: "Dashboard" };
 
-export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
+export default async function DashboardPage(props: PageProps<"/dashboard">) {
+  return inRequest(() => dashboardPage(props));
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function dashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireSection("dashboard");
   const params = await searchParams;
 

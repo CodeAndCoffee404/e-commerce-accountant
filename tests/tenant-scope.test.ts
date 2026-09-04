@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  acrossTenants,
-  currentTenantId,
-  enterTenant,
-  requireTenantId,
-  withTenant,
-} from "@/lib/db/tenant";
+import { acrossTenants, currentTenantId, requireTenantId, withTenant } from "@/lib/db/tenant";
+
+/**
+ * The scope's own rules — what it refuses, and what it keeps apart.
+ *
+ * Database-backed, because a scope is a transaction now: naming a company is
+ * something said to Postgres, and there is nothing to say it on without a
+ * connection.
+ */
+
+const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
+  (name) => (process.env[name] ?? "").length > 0,
+);
 
 const A = "11111111-1111-1111-1111-111111111111";
 const B = "22222222-2222-2222-2222-222222222222";
@@ -16,12 +22,13 @@ describe("company scope", () => {
     expect(currentTenantId()).toBeNull();
     expect(() => requireTenantId()).toThrow(/No company in scope/);
   });
+});
 
-  it("names the company for the work inside it", async () => {
+describe.skipIf(!HAS_DB)("company scope, against a database", () => {
+  it("names the company for the work inside it, and gives it back afterwards", async () => {
     const seen = await withTenant(A, async () => requireTenantId());
 
     expect(seen).toBe(A);
-    // And gives it back afterwards, rather than leaving it set.
     expect(currentTenantId()).toBeNull();
   });
 
@@ -32,7 +39,7 @@ describe("company scope", () => {
     });
   });
 
-  it("lets the same company be named again", async () => {
+  it("lets the same company be named again, without a second transaction", async () => {
     await withTenant(A, async () => {
       await withTenant(A, async () => {
         expect(currentTenantId()).toBe(A);
@@ -43,7 +50,6 @@ describe("company scope", () => {
   it("refuses a second company in the same unit of work", async () => {
     await withTenant(A, async () => {
       expect(() => withTenant(B, async () => undefined)).toThrow(/cannot switch/);
-      expect(() => enterTenant(B)).toThrow(/cannot switch/);
     });
   });
 
@@ -78,27 +84,7 @@ describe("company scope", () => {
   });
 });
 
-describe("enterTenant", () => {
-  it("names the company for the rest of the caller, without wrapping it", async () => {
-    // What requireUser does: it returns the signed-in person to a page rather
-    // than enclosing the page, so the scope has to outlive the call.
-    async function signIn() {
-      enterTenant(A);
-    }
-
-    await withTenant(B, async () => {
-      // The wrapping form still wins inside its own scope.
-      expect(currentTenantId()).toBe(B);
-    });
-
-    await acrossTenants(async () => {
-      await signIn();
-      expect(currentTenantId()).toBe(A);
-    });
-  });
-});
-
-describe("acrossTenants", () => {
+describe.skipIf(!HAS_DB)("acrossTenants", () => {
   it("is a company-less scope, not the absence of one", async () => {
     await acrossTenants(async () => {
       expect(currentTenantId()).toBeNull();

@@ -22,6 +22,7 @@ const { seedReferenceData } = await import("@/lib/reference/seed");
 const { availablePeriods } = await import("@/lib/reports/queries");
 const { runReport } = await import("@/lib/reports/run");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
+const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -44,7 +45,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
   const db = () => getDb();
   let tenantId = "";
 
-  beforeAll(async () => {
+  beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Report settings test", slug: `rset-${process.pid}` })
@@ -99,13 +100,13 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
 
       await ingestSourceFile(row.id, tenantId, parsed.grid);
     }
-  }, 300_000);
+  }), 300_000);
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-  });
+  }));
 
-  it("offers the period with two of three channels in", async () => {
+  it("offers the period with two of three channels in", inRequest(async () => {
     const state = await availablePeriods(tenantId);
 
     expect(state.off_amazon_sales.ready).toEqual([PERIOD]);
@@ -113,9 +114,9 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
     // The card's Needs line follows the configuration.
     expect(state.off_amazon_sales.needs).toContain("Allegro and Shopify Geyser");
     expect(state.off_amazon_sales.needs).toContain("Cdiscount");
-  });
+  }));
 
-  it("builds it, with both channels' rows in the sheet", async () => {
+  it("builds it, with both channels' rows in the sheet", inRequest(async () => {
     const outcome = await runReport({
       tenantId,
       reportType: "off_amazon_sales",
@@ -133,9 +134,9 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
     const stats = run.stats as { outputRows?: number };
 
     expect(stats.outputRows ?? 0).toBeGreaterThan(0);
-  }, 300_000);
+  }), 300_000);
 
-  it("a disabled report vanishes from the cards and refuses to run", async () => {
+  it("a disabled report vanishes from the cards and refuses to run", inRequest(async () => {
     await db().insert(schema.channelRules).values({
       tenantId,
       channel: "reports",
@@ -156,5 +157,5 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
 
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.message).toContain("turned off");
-  });
+  }));
 });

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { refreshFxRates } from "./fx";
@@ -43,6 +43,10 @@ const vatRateSchema = z.object({
 // `unknown` on purpose: a Server Action is a public endpoint, and whatever the
 // interface believes it sends, the request can carry anything. zod decides.
 export async function saveVatRate(input: unknown): Promise<ActionResult> {
+  return inRequest(() => saveVatRateInScope(input));
+}
+
+async function saveVatRateInScope(input: unknown): Promise<ActionResult> {
   const user = await requireEditor();
   const parsed = vatRateSchema.safeParse(input);
 
@@ -72,6 +76,10 @@ export async function saveVatRate(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteVatRate(id: string): Promise<ActionResult> {
+  return inRequest(() => deleteVatRateInScope(id));
+}
+
+async function deleteVatRateInScope(id: string): Promise<ActionResult> {
   const user = await requireEditor();
 
   await getDb()
@@ -103,6 +111,10 @@ const sellerVatSchema = z.object({
  * lapse — reference data like the rates, and edited the same way.
  */
 export async function saveSellerVatNumber(input: unknown): Promise<ActionResult> {
+  return inRequest(() => saveSellerVatNumberInScope(input));
+}
+
+async function saveSellerVatNumberInScope(input: unknown): Promise<ActionResult> {
   const user = await requireEditor();
   const parsed = sellerVatSchema.safeParse(input);
 
@@ -134,6 +146,10 @@ export async function saveSellerVatNumber(input: unknown): Promise<ActionResult>
 }
 
 export async function deleteSellerVatNumber(id: string): Promise<ActionResult> {
+  return inRequest(() => deleteSellerVatNumberInScope(id));
+}
+
+async function deleteSellerVatNumberInScope(id: string): Promise<ActionResult> {
   const user = await requireEditor();
 
   await getDb()
@@ -159,6 +175,10 @@ const skuSchema = z.object({
 });
 
 export async function saveSkuMapping(input: unknown): Promise<ActionResult> {
+  return inRequest(() => saveSkuMappingInScope(input));
+}
+
+async function saveSkuMappingInScope(input: unknown): Promise<ActionResult> {
   const user = await requireEditor();
   const parsed = skuSchema.safeParse(input);
 
@@ -207,6 +227,10 @@ export async function saveSkuMapping(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteSkuMapping(id: string): Promise<ActionResult> {
+  return inRequest(() => deleteSkuMappingInScope(id));
+}
+
+async function deleteSkuMappingInScope(id: string): Promise<ActionResult> {
   const user = await requireEditor();
 
   await getDb()
@@ -247,6 +271,10 @@ const allegroCurrencySchema = z.object({
  * instead of pasted.
  */
 export async function saveAllegroCurrency(input: unknown): Promise<ActionResult> {
+  return inRequest(() => saveAllegroCurrencyInScope(input));
+}
+
+async function saveAllegroCurrencyInScope(input: unknown): Promise<ActionResult> {
   const user = await requireEditor();
   const parsed = allegroCurrencySchema.safeParse(input);
 
@@ -293,6 +321,10 @@ export async function saveAllegroCurrency(input: unknown): Promise<ActionResult>
 }
 
 export async function deleteAllegroCurrency(currency: string): Promise<ActionResult> {
+  return inRequest(() => deleteAllegroCurrencyInScope(currency));
+}
+
+async function deleteAllegroCurrencyInScope(currency: string): Promise<ActionResult> {
   const user = await requireEditor();
   const db = getDb();
 
@@ -326,6 +358,10 @@ export async function deleteAllegroCurrency(currency: string): Promise<ActionRes
 }
 
 export async function saveChannelRule(id: string, rawValue: string): Promise<ActionResult> {
+  return inRequest(() => saveChannelRuleInScope(id, rawValue));
+}
+
+async function saveChannelRuleInScope(id: string, rawValue: string): Promise<ActionResult> {
   const user = await requireEditor();
 
   let value: unknown;
@@ -350,6 +386,10 @@ export async function saveChannelRule(id: string, rawValue: string): Promise<Act
 }
 
 export async function refreshRates(full = false): Promise<ActionResult> {
+  return inRequest(() => refreshRatesInScope(full));
+}
+
+async function refreshRatesInScope(full = false): Promise<ActionResult> {
   const user = await requireEditor();
 
   try {
@@ -372,6 +412,10 @@ export async function refreshRates(full = false): Promise<ActionResult> {
 
 /** Restores anything a tenant is missing, without overwriting edited values. */
 export async function restoreDefaults(): Promise<ActionResult> {
+  return inRequest(() => restoreDefaultsInScope());
+}
+
+async function restoreDefaultsInScope(): Promise<ActionResult> {
   const user = await requireEditor();
   const result = await seedReferenceData(user.tenantId);
   const added =

@@ -49,20 +49,20 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
   // test that is really running.
   const db = () => getDb();
 
-  beforeAll(async () => {
+  beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Delete test", slug: `del-${process.pid}` })
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;
-  });
+  }));
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (session.tenantId) {
       await db().delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
     }
-  });
+  }));
 
   /** Uploads the same fixture again, salting the checksum so it is not a duplicate. */
   async function upload(salt: string) {

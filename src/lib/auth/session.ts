@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
-import { enterTenant } from "@/lib/db/tenant";
+import { withTenant } from "@/lib/db/tenant";
 import { landingRoute } from "@/lib/navigation";
 
 export type CurrentUser = {
@@ -17,6 +17,31 @@ export type CurrentUser = {
 };
 
 /**
+ * Runs one page, Server Action or route handler as one unit of work, on a
+ * transaction that has told Postgres which company it is for.
+ *
+ * It reads the session itself rather than taking the company as an argument,
+ * because the company is not known until the session is read and the body
+ * cannot enclose itself. Reading it twice — here and again in the body's own
+ * `requireUser` — costs a JWT verification, not a query.
+ *
+ * Nobody signed in is left to the body: its own check redirects or refuses,
+ * with the wording that belongs to it, and there is nothing to scope anyway.
+ *
+ * Hence the shape every page, action and route handler has: the exported
+ * function is a door, one line long, and the work sits beside it in a function
+ * of the same name ending `InScope`. Wrapping the body in place would have
+ * re-indented every one of them and buried the work a level deeper; this way
+ * the work reads exactly as it did, and what changed is visible in one line.
+ * `tests/tenant-scope-coverage.test.ts` fails on a door that forgets to open.
+ */
+export function inRequest<T>(body: () => Promise<T>): Promise<T> {
+  return auth().then((session) =>
+    session?.tenantId ? withTenant(session.tenantId, body) : body(),
+  );
+}
+
+/**
  * The real access check. `proxy.ts` only looks at whether a cookie exists, so
  * every page behind the dashboard has to come through here.
  */
@@ -26,11 +51,6 @@ export async function requireUser(): Promise<CurrentUser> {
   if (!session?.user?.id || !session.user.email || !session.tenantId) {
     redirect("/signin");
   }
-
-  // Every page and every Server Action comes through here, so this is where
-  // the company gets named for the rest of the request. Doing it once, at the
-  // check nobody can skip, beats asking two dozen call sites to remember.
-  enterTenant(session.tenantId);
 
   return {
     id: session.user.id,

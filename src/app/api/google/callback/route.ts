@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { enterTenant } from "@/lib/db/tenant";
+import { inRequest } from "@/lib/auth/session";
 import { saveConnection } from "@/lib/google/connection";
 import { accountEmail, exchangeCode } from "@/lib/google/oauth";
 
@@ -15,15 +15,17 @@ function back(request: Request, outcome: string): NextResponse {
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  return inRequest(() => finishConnect(request));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function finishConnect(request: Request): Promise<NextResponse> {
   const session = await auth();
 
   if (!session?.user?.id || !session.tenantId) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
-
-  // Named here rather than by requireUser: a route handler answers the
-  // browser directly and never passes through it.
-  enterTenant(session.tenantId);
 
   // The connection is a company setting, so it is the same permission that
   // started the flow — checked again on return, because the redirect back is

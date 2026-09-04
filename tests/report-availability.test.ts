@@ -11,6 +11,8 @@ import { parseSpreadsheet } from "@/lib/ingest/parse";
 import { availablePeriods } from "@/lib/reports/queries";
 import { ingestSourceFile } from "@/lib/uploads/ingest";
 
+import { inRequest } from "./helpers/request-scope";
+
 /**
  * Off-Amazon Sales needs Allegro, Cdiscount and Shopify together, and the card
  * that offers it goes quiet until all three are in. This walks that path with
@@ -51,9 +53,9 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
   const db = () => getDb();
   let tenantId = "";
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-  });
+  }));
 
   async function upload(relative: string) {
     const file = path.resolve(process.cwd(), relative);
@@ -93,7 +95,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
     return classified.period.label;
   }
 
-  it("names the missing channels, then offers the period once they are all in", async () => {
+  it("names the missing channels, then offers the period once they are all in", inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Availability test", slug: `avail-${process.pid}` })
@@ -127,9 +129,9 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
         expect(state.off_amazon_sales.blocked).toEqual([]);
       }
     }
-  }, 300_000);
+  }), 300_000);
 
-  it("will not offer the Zoho invoice until all ten marketplaces are in", async () => {
+  it("will not offer the Zoho invoice until all ten marketplaces are in", inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({
@@ -164,5 +166,5 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
       await db().delete(schema.tenants).where(eq(schema.tenants.id, tenant.id));
       tenantId = previous;
     }
-  }, 300_000);
+  }), 300_000);
 });

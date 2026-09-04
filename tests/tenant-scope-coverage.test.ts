@@ -12,22 +12,21 @@ import { describe, expect, it } from "vitest";
  * without naming a company fails this test on the day it is written, which is
  * the only day it is cheap to fix.
  *
- * Naming happens one of two ways: through `requireUser` and the two checks
- * built on it, which every page and Server Action already goes through, or by
- * saying so directly for the handlers that answer the browser themselves.
+ * Almost every one of them says so the same way: the exported function is a
+ * door one line long, `return inRequest(() => …InScope(…))`, and the work sits
+ * beside it. The nightly job is the exception, and says `acrossTenants` and
+ * `withTenant` outright, because it is the one thing here that really does
+ * walk every company.
+ *
+ * The permission checks are no longer enough on their own. `requireUser` reads
+ * the session; it cannot enclose the page that called it, and a transaction
+ * has to enclose something.
  */
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-/** Calling one of these means the request now has a company. */
-const ENTERS_SCOPE = [
-  /\brequireUser\s*\(/,
-  /\brequireAccess\s*\(/,
-  /\brequireSection\s*\(/,
-  /\benterTenant\s*\(/,
-  /\bwithTenant\s*\(/,
-  /\bacrossTenants\s*\(/,
-];
+/** Calling one of these means the work now runs on a transaction that named a company. */
+const ENTERS_SCOPE = [/\binRequest\s*\(/, /\bwithTenant\s*\(/, /\bacrossTenants\s*\(/];
 
 /**
  * The doors that open before anyone knows the company, or that touch no data

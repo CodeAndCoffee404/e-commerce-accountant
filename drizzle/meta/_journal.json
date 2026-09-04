@@ -162,6 +162,13 @@
       "when": 1788540228215,
       "tag": "0022_tenant_on_run_children",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788542689865,
+      "tag": "0023_row_level_security",
+      "breakpoints": true
     }
   ]
 }

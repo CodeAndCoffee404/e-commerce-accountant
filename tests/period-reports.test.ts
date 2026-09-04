@@ -8,6 +8,8 @@ import { defaultSchedule } from "@/lib/periods/schedule";
 import { availablePeriods } from "@/lib/reports/queries";
 import { runReport } from "@/lib/reports/run";
 
+import { inRequest } from "./helpers/request-scope";
+
 /**
  * A quarter holds no files of its own, so everything about it is assembled:
  * which uploads count towards it, and whether it is finished enough to build.
@@ -37,13 +39,13 @@ const FINISHED = periodContaining(
 
 const created: string[] = [];
 
-afterAll(async () => {
+afterAll(inRequest(async () => {
   if (!HAS_DB) return;
 
   for (const tenantId of created) {
     await getDb().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   }
-});
+}));
 
 async function tenantWithQuarters(): Promise<string> {
   const db = getDb();
@@ -112,7 +114,7 @@ function monthsOf(period: { start: string; end: string }): { start: string; end:
 }
 
 describe.skipIf(!HAS_DB)("a quarter assembled from its months", () => {
-  it("is offered once it is over, and its months are what feed it", async () => {
+  it("is offered once it is over, and its months are what feed it", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
 
     for (const month of monthsOf(FINISHED)) {
@@ -122,9 +124,9 @@ describe.skipIf(!HAS_DB)("a quarter assembled from its months", () => {
     const state = await availablePeriods(tenantId);
 
     expect(state.sales_by_currency.ready).toContain(FINISHED.label);
-  });
+  }));
 
-  it("is not offered while it is still running, and says so by date", async () => {
+  it("is not offered while it is still running, and says so by date", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
 
     // Everything that could have arrived for the current quarter has arrived;
@@ -144,9 +146,9 @@ describe.skipIf(!HAS_DB)("a quarter assembled from its months", () => {
     expect(waiting).toBeDefined();
     expect(waiting!.missing).toEqual([]);
     expect(waiting!.endsOn).toBe(RUNNING.end);
-  });
+  }));
 
-  it("refuses to build while it is still running rather than reporting a short quarter", async () => {
+  it("refuses to build while it is still running rather than reporting a short quarter", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
 
     for (const month of monthsOf(RUNNING)) {
@@ -164,9 +166,9 @@ describe.skipIf(!HAS_DB)("a quarter assembled from its months", () => {
     expect(outcome.ok === false && outcome.message).toContain("not over yet");
     // Refused before a run row was written: there is nothing to explain.
     expect(outcome.runId).toBeNull();
-  });
+  }));
 
-  it("refuses a period that does not exist", async () => {
+  it("refuses a period that does not exist", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
     const outcome = await runReport({
       tenantId,
@@ -177,11 +179,11 @@ describe.skipIf(!HAS_DB)("a quarter assembled from its months", () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.ok === false && outcome.message).toContain("no period");
-  });
+  }));
 });
 
 describe.skipIf(!HAS_DB)("a granularity the client does not file", () => {
-  it("is not offered, even though the report could build it", async () => {
+  it("is not offered, even though the report could build it", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
 
     for (const month of monthsOf(FINISHED)) {
@@ -201,9 +203,9 @@ describe.skipIf(!HAS_DB)("a granularity the client does not file", () => {
     expect(state.sales_by_currency.blocked.map((entry) => entry.period)).not.toContain(
       FINISHED.label,
     );
-  });
+  }));
 
-  it("refuses to build it on request as well as hiding it", async () => {
+  it("refuses to build it on request as well as hiding it", inRequest(async () => {
     const tenantId = await tenantWithQuarters();
 
     for (const month of monthsOf(FINISHED)) {
@@ -226,11 +228,11 @@ describe.skipIf(!HAS_DB)("a granularity the client does not file", () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.ok === false && outcome.message).toContain("not prepared per quarter");
-  });
+  }));
 });
 
 describe.skipIf(!HAS_DB)("a channel that sent both a quarter and its months", () => {
-  it("is recorded once as a source, not four times", async () => {
+  it("is recorded once as a source, not four times", inRequest(async () => {
     // The sources are written before anything is generated, so this holds
     // whatever the build itself goes on to do — which here is fail for want of
     // a blob store. What is being checked is the selection, not the workbook.
@@ -268,5 +270,5 @@ describe.skipIf(!HAS_DB)("a channel that sent both a quarter and its months", ()
     // as well would report the quarter's revenue twice.
     expect(sources).toHaveLength(1);
     expect(sources[0].filename).toBe(`vat-${FINISHED.start}.csv`);
-  });
+  }));
 });

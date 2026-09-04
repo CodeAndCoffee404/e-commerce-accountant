@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { requireUser } from "@/lib/auth/session";
+import { inRequest, requireUser } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import {
@@ -34,6 +34,10 @@ export type SaveRoleAccessInput = z.input<typeof inputSchema>;
  * whose owner can no longer reach the screen that hands access out.
  */
 export async function saveRoleAccess(raw: SaveRoleAccessInput): Promise<AccessResult> {
+  return inRequest(() => saveRoleAccessInScope(raw));
+}
+
+async function saveRoleAccessInScope(raw: SaveRoleAccessInput): Promise<AccessResult> {
   const user = await requireUser();
 
   if (user.role !== "owner") {
@@ -94,6 +98,10 @@ export async function saveRoleAccess(raw: SaveRoleAccessInput): Promise<AccessRe
 
 /** Puts one role back on the built-in defaults, for every section. */
 export async function resetRoleAccess(role: unknown): Promise<AccessResult> {
+  return inRequest(() => resetRoleAccessInScope(role));
+}
+
+async function resetRoleAccessInScope(role: unknown): Promise<AccessResult> {
   const user = await requireUser();
 
   if (user.role !== "owner") {
