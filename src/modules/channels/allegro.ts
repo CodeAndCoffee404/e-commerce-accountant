@@ -162,11 +162,17 @@ const PROFILE: SimpleDataset = {
   periodColumn: "data",
 };
 
+/**
+ * Allegro reports a currency, not a country, so the currency decides where the
+ * sale is taxed and under which regime. The registration number is not here:
+ * it belongs to the company and is looked up from its own registrations by the
+ * pair this map produces.
+ */
 export const ALLEGRO_CURRENCY_MAP = {
-  PLN: { country: "PL", scheme: "REGULAR", sellerVat: "PL5263307678" },
-  CZK: { country: "CZ", scheme: "UNION-OSS", sellerVat: "EE102013089" },
-  EUR: { country: "SK", scheme: "UNION-OSS", sellerVat: "EE102013089" },
-  HUF: { country: "HU", scheme: "UNION-OSS", sellerVat: "EE102013089" },
+  PLN: { country: "PL", scheme: "REGULAR" },
+  CZK: { country: "CZ", scheme: "UNION-OSS" },
+  EUR: { country: "SK", scheme: "UNION-OSS" },
+  HUF: { country: "HU", scheme: "UNION-OSS" },
 } as const;
 
 export const allegroModule: ChannelModule = {
@@ -179,7 +185,7 @@ export const allegroModule: ChannelModule = {
       channel: "allegro",
       key: "currency_map",
       value: ALLEGRO_CURRENCY_MAP,
-      note: "The currency decides the arrival country, the rate and the seller VAT number.",
+      note: "The currency decides the arrival country and the scheme; the registration follows from the pair.",
     },
     {
       channel: "allegro",

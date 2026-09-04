@@ -48,7 +48,10 @@ import type { DeadlineRuleRow } from "@/lib/reports/deadlines-queries";
 
 import type { RoleAccessMatrix } from "@/lib/access/queries";
 
+import type { CompanyIdentity } from "@/lib/company/queries";
+
 import { AccessCard } from "./access-card";
+import { CompanyCard } from "./company-card";
 import { AuditCard } from "./audit-card";
 import { DriveCard } from "./drive-card";
 import { MembersCard } from "./members-card";
@@ -74,6 +77,7 @@ export type CompanySettings = {
 
 export function SettingsView({
   company,
+  identity,
   team,
   audit,
   selfEmail,
@@ -81,6 +85,7 @@ export function SettingsView({
   isOwner,
 }: {
   company: CompanySettings | null;
+  identity: CompanyIdentity | null;
   team: { members: Member[]; roleAccess: RoleAccessMatrix } | null;
   audit: AuditRow[] | null;
   selfEmail: string;
@@ -216,6 +221,15 @@ export function SettingsView({
                 canEdit={canEdit}
               />
             ),
+          },
+        ]
+      : []),
+    ...(identity
+      ? [
+          {
+            key: "company",
+            label: "Company",
+            children: <CompanyCard identity={identity} isOwner={isOwner} />,
           },
         ]
       : []),
@@ -484,7 +498,7 @@ function Skus({
   );
 }
 
-type AllegroCurrencyRule = { country: string; scheme: string; sellerVat: string };
+type AllegroCurrencyRule = { country: string; scheme: string };
 
 const SCHEME_OPTIONS = [
   { value: "REGULAR", label: "REGULAR" },
@@ -545,7 +559,6 @@ function AllegroCurrencies({
             width: 140,
             render: (value: string) => <Tag>{value}</Tag>,
           },
-          { title: "Seller VAT", dataIndex: "sellerVat" },
           {
             title: "",
             key: "actions",
@@ -601,7 +614,6 @@ function AllegroCurrencies({
             type: "select",
             options: SCHEME_OPTIONS,
           },
-          { name: "sellerVat", label: "Seller VAT number", required: true, placeholder: "PL5263307678" },
         ]}
       />
     </Card>
@@ -708,9 +720,10 @@ function SellerVat({
           Add registration
         </Button>
         <Typography.Text type="secondary">
-          The registrations reports quote as the seller. Which one a row gets follows from the
-          channel rule for its country and scheme — a new registration usually means updating
-          that rule too.
+          The registrations reports quote as the seller. Which one a row gets follows from where
+          the sale is taxed and the scheme it is reported under, so this table is what the
+          reports print — a country and scheme missing from it makes those rows stop rather than
+          print somebody else&apos;s number.
         </Typography.Text>
       </Space>
 
@@ -723,6 +736,12 @@ function SellerVat({
         scroll={{ x: 760 }}
         columns={[
           { title: "Country", dataIndex: "country", width: 90 },
+          {
+            title: "Scheme",
+            dataIndex: "scheme",
+            width: 140,
+            render: (value: string) => <Tag>{value}</Tag>,
+          },
           { title: "VAT number", dataIndex: "vatNumber", width: 200 },
           { title: "From", dataIndex: "validFrom", width: 120 },
           {
@@ -773,7 +792,20 @@ function SellerVat({
         onClose={() => setEditing(null)}
         onSubmit={(values) => run(() => saveSellerVatNumber({ ...values, id: editing?.id }))}
         fields={[
-          { name: "country", label: "Country code", required: true, placeholder: "PL" },
+          {
+            name: "country",
+            label: "Country code",
+            required: true,
+            placeholder: "PL",
+            help: "For one-stop, the country the company registered in — not where the goods went.",
+          },
+          {
+            name: "scheme",
+            label: "Scheme",
+            required: true,
+            type: "select",
+            options: SCHEME_OPTIONS,
+          },
           { name: "vatNumber", label: "VAT number", required: true, placeholder: "PL5263307678" },
           { name: "validFrom", label: "Valid from", required: true, placeholder: "2026-01-01" },
           { name: "validTo", label: "Valid to", placeholder: "empty while in force" },

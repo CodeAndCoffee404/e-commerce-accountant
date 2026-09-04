@@ -133,9 +133,7 @@ const rules: RulesSnapshot = {
       key: "defaults",
       value: {
         domesticScheme: "REGULAR",
-        domesticSellerVat: "ESN0531416F",
         exportScheme: "UNION-OSS",
-        exportSellerVat: "EE102013089",
       },
     },
   ],

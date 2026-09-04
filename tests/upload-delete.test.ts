@@ -52,7 +52,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Delete test", slug: `del-${process.pid}` })
+      .values({ name: "Delete test" })
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;

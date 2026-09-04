@@ -35,7 +35,7 @@ const companies: string[] = [];
 async function company(name: string): Promise<string> {
   const [row] = await getDb()
     .insert(schema.tenants)
-    .values({ name: `Isolation ${name} ${stamp}`, slug: `isolation-${name}-${stamp}` })
+    .values({ name: `Isolation ${name} ${stamp}` })
     .returning({ id: schema.tenants.id });
 
   companies.push(row.id);

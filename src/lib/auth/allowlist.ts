@@ -10,7 +10,7 @@ import { GEYSER } from "@/modules/companies/geyser";
  * The MVP serves one client, so a sign-in that is bootstrapped rather than
  * invited lands in this tenant. Multi-tenant sign-up gets its own flow later.
  */
-export const DEFAULT_TENANT = { name: "Geyser", slug: "geyser" } as const;
+export const DEFAULT_TENANT = { name: "Geyser" } as const;
 
 export type Access = {
   tenantId: string;
@@ -18,7 +18,7 @@ export type Access = {
 };
 
 /** A company this person may work in, for the chooser and the switcher. */
-export type Company = { id: string; name: string; slug: string };
+export type Company = { id: string; name: string };
 
 /**
  * Emails from `AUTH_BOOTSTRAP_EMAILS` may sign in even though nobody has
@@ -157,7 +157,6 @@ export async function companiesFor(email: string): Promise<Company[]> {
       .select({
         id: schema.tenants.id,
         name: schema.tenants.name,
-        slug: schema.tenants.slug,
       })
       .from(schema.allowedEmails)
       .innerJoin(schema.tenants, eq(schema.tenants.id, schema.allowedEmails.tenantId))
@@ -204,11 +203,16 @@ export async function roleFor(email: string, tenantId: string): Promise<Membersh
   return row?.role ?? null;
 }
 
+/**
+ * Found by its profile, not by its name: the name is the company's own to
+ * change, and a bootstrap sign-in that could not find the company because
+ * somebody renamed it would make a second one beside it.
+ */
 async function ensureDefaultTenant(): Promise<string> {
   const [existing] = await getDb()
     .select({ id: schema.tenants.id })
     .from(schema.tenants)
-    .where(eq(schema.tenants.slug, DEFAULT_TENANT.slug))
+    .where(eq(schema.tenants.profileKey, GEYSER.key))
     .limit(1);
 
   if (existing) return existing.id;
@@ -217,7 +221,6 @@ async function ensureDefaultTenant(): Promise<string> {
     .insert(schema.tenants)
     .values({
       name: DEFAULT_TENANT.name,
-      slug: DEFAULT_TENANT.slug,
       profileKey: GEYSER.key,
     })
     .returning({ id: schema.tenants.id });

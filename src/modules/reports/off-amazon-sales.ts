@@ -2,7 +2,15 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
-import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
+import {
+  allegroCurrencyRule,
+  channelRule,
+  describeRegistration,
+  type SellerRegistration,
+  sellerVatOn,
+  splitGross,
+  vatRateOn,
+} from "@/lib/reports/rules";
 import type { ShopifyProfile } from "@/modules/companies/types";
 
 import {
@@ -61,6 +69,17 @@ function reportDate(date: string | null): string {
   return date === null ? "" : `${date} 00:00:00`;
 }
 
+/**
+ * The registration a sale reported under `scheme`, taxed in `country`, takes.
+ *
+ * A scheme this does not know becomes a REGULAR registration in that country,
+ * which the company will not hold — so the row is skipped with the scheme
+ * named, rather than printed with whichever number happened to be nearest.
+ */
+function registrationFor(scheme: string, country: string): SellerRegistration {
+  return scheme === "UNION-OSS" ? { scheme } : { scheme: "REGULAR", country };
+}
+
 function amount(value: Decimal): string {
   return value.toFixed();
 }
@@ -83,7 +102,7 @@ export function generateOffAmazonSales(
         ? allegroRow(row, context, skipped, warnings)
         : row.dataset === "cdiscount"
           ? cdiscountRow(row, context, skipped, warnings)
-          : row.dataset === "shopify_geyser"
+          : row.dataset === shop.dataset
             ? shopifyRow(shop, row, context, skipped, warnings)
             : skip(skipped, `Channel ${row.dataset} is not part of this report`);
 
@@ -155,6 +174,16 @@ function allegroRow(
     return skip(skipped, "Allegro: no VAT rate");
   }
 
+  const on = row.occurredOn ?? context.period.end;
+  const registration = registrationFor(rule.scheme, rule.country);
+  const sellerVat = sellerVatOn(context.rules, registration, on);
+
+  if (!sellerVat) {
+    warnings.push(`Allegro: this company has no ${describeRegistration(registration)}`);
+
+    return skip(skipped, `Allegro: no ${describeRegistration(registration)}`);
+  }
+
   // A refund is negative, whatever sign the statement used. Single rule across
   // every channel, agreed in PLAN §1.
   const total = type === "REFUND" ? row.gross.abs().negated() : row.gross;
@@ -172,7 +201,7 @@ function allegroRow(
     amount(total),
     departure,
     rule.country,
-    rule.sellerVat,
+    sellerVat,
     "",
     rule.scheme,
   ];
@@ -225,7 +254,6 @@ function cdiscountRow(
     departureCountry: string;
     arrivalCountry: string;
     scheme: string;
-    sellerVat: string;
   }>(context.rules, "cdiscount", "defaults");
 
   if (!defaults) {
@@ -246,6 +274,15 @@ function cdiscountRow(
     return skip(skipped, "Cdiscount: no VAT rate");
   }
 
+  const registration = registrationFor(defaults.scheme, defaults.arrivalCountry);
+  const sellerVat = sellerVatOn(context.rules, registration, row.occurredOn ?? context.period.end);
+
+  if (!sellerVat) {
+    warnings.push(`Cdiscount: this company has no ${describeRegistration(registration)}`);
+
+    return skip(skipped, `Cdiscount: no ${describeRegistration(registration)}`);
+  }
+
   const total = type === "REFUND" ? row.gross.abs().negated() : row.gross;
   // Cdiscount reports its own VAT column as zero, so it is recomputed from the
   // gross rather than trusted.
@@ -262,7 +299,7 @@ function cdiscountRow(
     amount(total),
     defaults.departureCountry,
     defaults.arrivalCountry,
-    defaults.sellerVat,
+    sellerVat,
     "",
     defaults.scheme,
   ];
@@ -326,10 +363,8 @@ function shopifyRow(
 
   const defaults = channelRule<{
     domesticScheme: string;
-    domesticSellerVat: string;
     exportScheme: string;
-    exportSellerVat: string;
-  }>(context.rules, "shopify_geyser", "defaults");
+  }>(context.rules, shop.dataset, "defaults");
 
   if (!defaults) {
     warnings.push("Shopify: the defaults rule is missing");
@@ -363,7 +398,19 @@ function shopifyRow(
   const departure = shop.departureCountry;
   const domestic = isDomestic(shop, arrival);
   const scheme = domestic ? defaults.domesticScheme : defaults.exportScheme;
-  const sellerVat = domestic ? defaults.domesticSellerVat : defaults.exportSellerVat;
+  // Sold inside the departure country, the sale is taxed there and takes the
+  // registration held there — not one in the country the order was placed
+  // from, which for a domestic order is the same place anyway.
+  const registration = registrationFor(scheme, departure);
+  const sellerVat = sellerVatOn(context.rules, registration, row.occurredOn ?? context.period.end);
+
+  if (!sellerVat) {
+    warnings.push(
+      `Shopify: this company has no ${describeRegistration(registration)}, row ${row.sourceRowNumber}`,
+    );
+
+    return skip(skipped, `Shopify: no ${describeRegistration(registration)}`);
+  }
 
   const labelled = parseShopifyTaxRate(row.raw["Tax 1 Name"]);
   const fallback = vatRateOn(context.rules, arrival, row.occurredOn ?? context.period.end);

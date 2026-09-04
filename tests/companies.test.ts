@@ -42,7 +42,7 @@ const people: string[] = [];
 async function company(name: string): Promise<string> {
   const [row] = await getDb()
     .insert(schema.tenants)
-    .values({ name: `${name} ${stamp}`, slug: `${name}-${stamp}` })
+    .values({ name: `${name} ${stamp}` })
     .returning({ id: schema.tenants.id });
 
   tenants.push(row.id);

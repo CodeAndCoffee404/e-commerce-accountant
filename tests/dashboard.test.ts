@@ -62,7 +62,7 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Close test", slug: `close-${process.pid}` })
+      .values({ name: "Close test" })
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;

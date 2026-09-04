@@ -26,7 +26,6 @@ export type LedgerRow = {
 export type AllegroCurrencyRule = {
   country: string;
   scheme: string;
-  sellerVat: string;
 };
 
 /**
@@ -37,7 +36,14 @@ export type AllegroCurrencyRule = {
  */
 export type RulesSnapshot = {
   vatRates: { country: string; rate: string; validFrom: string; validTo: string | null }[];
-  sellerVatNumbers: { country: string; vatNumber: string }[];
+  sellerVatNumbers: {
+    country: string;
+    /** `REGULAR` or `UNION-OSS`: which regime this registration is used under. */
+    scheme: string;
+    vatNumber: string;
+    validFrom: string;
+    validTo: string | null;
+  }[];
   skuMappings: {
     channel: string;
     sourceSku: string;

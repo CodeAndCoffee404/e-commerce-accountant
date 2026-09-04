@@ -58,6 +58,56 @@ export function vatRateOn(
   return new Decimal(candidates[0].rate).dividedBy(100);
 }
 
+/**
+ * Which registration a sale is reported under.
+ *
+ * `REGULAR` is a number the company holds in one particular country, so the
+ * country is part of naming it. One-stop is not: a company registers for it in
+ * a single member state and reports every distance sale there, whatever country
+ * the goods went to — so asking for "the OSS registration of Czechia" would be
+ * asking for something that does not exist. The shape says which is which
+ * rather than taking a country and quietly ignoring it.
+ */
+export type SellerRegistration =
+  | { scheme: "REGULAR"; country: string }
+  | { scheme: "UNION-OSS" };
+
+/**
+ * The company's own VAT registration for a sale, or null when it holds none.
+ *
+ * Null rather than a throw, and never a fallback to some other registration: a
+ * number from the wrong regime looks exactly as plausible on an invoice as the
+ * right one, and would be found by a tax office rather than by us. Callers turn
+ * null into a skipped row whose reason names what was missing.
+ *
+ * Periods work as they do for rates: a report of an old month prints the
+ * registration in force then, and where several overlap the latest one wins.
+ */
+export function sellerVatOn(
+  rules: RulesSnapshot,
+  registration: SellerRegistration,
+  on: string,
+): string | null {
+  const candidates = rules.sellerVatNumbers
+    .filter(
+      (entry) =>
+        entry.scheme === registration.scheme &&
+        (registration.scheme !== "REGULAR" || entry.country === registration.country) &&
+        entry.validFrom <= on &&
+        (entry.validTo === null || entry.validTo >= on),
+    )
+    .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+
+  return candidates[0]?.vatNumber ?? null;
+}
+
+/** How a missing registration reads in the skipped list and in the warnings. */
+export function describeRegistration(registration: SellerRegistration): string {
+  return registration.scheme === "REGULAR"
+    ? `REGULAR VAT registration in ${registration.country}`
+    : "UNION-OSS VAT registration";
+}
+
 export type SkuDecision =
   | { kind: "ignore" }
   | { kind: "map"; targetSku: string; itemName: string }

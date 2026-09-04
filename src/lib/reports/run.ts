@@ -634,7 +634,10 @@ async function loadRules(tenantId: string): Promise<RulesSnapshot> {
     db
       .select({
         country: schema.sellerVatNumbers.country,
+        scheme: schema.sellerVatNumbers.scheme,
         vatNumber: schema.sellerVatNumbers.vatNumber,
+        validFrom: schema.sellerVatNumbers.validFrom,
+        validTo: schema.sellerVatNumbers.validTo,
       })
       .from(schema.sellerVatNumbers)
       .where(eq(schema.sellerVatNumbers.tenantId, tenantId)),

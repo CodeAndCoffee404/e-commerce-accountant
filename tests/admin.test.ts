@@ -48,8 +48,20 @@ const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRE
 );
 
 const stamp = `${process.pid}-${Date.now()}`;
-const slugs: string[] = [];
+/** The companies this file made, by the only thing that identifies one. */
+const made: { id: string; name: string }[] = [];
 const people: string[] = [];
+
+/** The id of the company just created, found by the name this file gave it. */
+async function idOf(name: string): Promise<string> {
+  const [row] = await acrossTenants(() =>
+    getDb().select({ id: schema.tenants.id }).from(schema.tenants).where(eq(schema.tenants.name, name)),
+  );
+
+  made.push({ id: row.id, name });
+
+  return row.id;
+}
 
 /**
  * Standing above the companies is a row, not a claim in the session — which is
@@ -79,8 +91,8 @@ async function admin(above = true): Promise<string> {
 describe.skipIf(!HAS_DB)("the company list", () => {
   afterAll(
     inRequest(async () => {
-      for (const slug of slugs) {
-        await getDb().delete(schema.tenants).where(eq(schema.tenants.slug, slug));
+      for (const company of made) {
+        await getDb().delete(schema.tenants).where(eq(schema.tenants.id, company.id));
       }
       for (const id of people) {
         await getDb().delete(schema.users).where(eq(schema.users.id, id));
@@ -97,7 +109,7 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     // The guard redirects rather than throwing a refusal: a screen someone is
     // not meant to know about should not announce itself.
     await expect(
-      createCompany({ name: "No", slug: "no", profileKey: "geyser", adminEmail: "a@b.co" }),
+      createCompany({ name: "No", profileKey: "geyser", adminEmail: "a@b.co" }),
     ).rejects.toThrow(/redirected/);
     expect(redirects.at(-1)).toBe("/dashboard");
 
@@ -110,25 +122,16 @@ describe.skipIf(!HAS_DB)("the company list", () => {
   it("makes a company with its reference data and its first owner", async () => {
     await admin();
 
-    const slug = `made-${stamp}`;
-
-    slugs.push(slug);
-
-    const made = await createCompany({
-      name: `Made ${stamp}`,
-      slug,
+    const name = `Made ${stamp}`;
+    const result = await createCompany({
+      name,
       profileKey: "geyser",
       adminEmail: `Owner-${stamp}@Example.Invalid`,
     });
 
-    expect(made.ok).toBe(true);
+    expect(result.ok).toBe(true);
 
-    const [company] = await acrossTenants(() =>
-      getDb()
-        .select({ id: schema.tenants.id })
-        .from(schema.tenants)
-        .where(eq(schema.tenants.slug, slug)),
-    );
+    const company = { id: await idOf(name) };
 
     const [invited, rates] = await acrossTenants(async () => [
       await getDb()
@@ -148,34 +151,34 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     expect(rates.length).toBeGreaterThan(0);
   });
 
-  it("refuses a short name that is taken", async () => {
+  it("lets two companies share a name and keeps them apart anyway", async () => {
     await admin();
 
-    const slug = `twice-${stamp}`;
+    // The model this is here to hold: a name is a label its owner may change,
+    // so it cannot be what tells companies apart. Refusing the second one
+    // would be treating the name as an identifier again.
+    const name = `Twice ${stamp}`;
 
-    slugs.push(slug);
+    expect((await createCompany({ name, profileKey: "geyser", adminEmail: "a@b.co" })).ok).toBe(true);
+    expect((await createCompany({ name, profileKey: "geyser", adminEmail: "c@d.co" })).ok).toBe(true);
 
-    expect((await createCompany({ name: "First", slug, profileKey: "geyser", adminEmail: "a@b.co" })).ok).toBe(true);
+    const rows = await acrossTenants(() =>
+      getDb().select({ id: schema.tenants.id }).from(schema.tenants).where(eq(schema.tenants.name, name)),
+    );
 
-    const second = await createCompany({ name: "Second", slug, profileKey: "geyser", adminEmail: "c@d.co" });
+    expect(rows).toHaveLength(2);
+    expect(rows[0].id).not.toBe(rows[1].id);
 
-    expect(second.ok).toBe(false);
-    expect(second.ok === false && second.message).toContain(slug);
+    for (const row of rows) made.push({ id: row.id, name });
   });
 
   it("leaves a membership behind when it steps into a company", async () => {
     const id = await admin();
-    const slug = `entered-${stamp}`;
+    const name = `Entered ${stamp}`;
 
-    slugs.push(slug);
-    await createCompany({ name: `Entered ${stamp}`, slug, profileKey: "geyser", adminEmail: "a@b.co" });
+    await createCompany({ name, profileKey: "geyser", adminEmail: "a@b.co" });
 
-    const [company] = await acrossTenants(() =>
-      getDb()
-        .select({ id: schema.tenants.id })
-        .from(schema.tenants)
-        .where(eq(schema.tenants.slug, slug)),
-    );
+    const company = { id: await idOf(name) };
 
     expect((await enterCompany(company.id)).ok).toBe(true);
 
@@ -202,17 +205,18 @@ describe.skipIf(!HAS_DB)("the company list", () => {
   it("counts what it lists without reading anybody's rows", async () => {
     await admin();
 
+    const ids = new Set(made.map((company) => company.id));
     const listed = await allCompanies();
-    const mine = listed.filter((company) => slugs.includes(company.slug));
+    const mine = listed.filter((company) => ids.has(company.id));
 
-    expect(mine.length).toBe(slugs.length);
+    expect(mine.length).toBe(ids.size);
 
     // The company just entered has two people on its list — the owner it was
     // created with and the admin who stepped in — and one it has not been
     // entered has one. A count that ignored what it was counting would not
     // tell those apart.
-    const entered = mine.find((company) => company.slug === `entered-${stamp}`);
-    const untouched = mine.find((company) => company.slug === `made-${stamp}`);
+    const entered = mine.find((company) => company.name === `Entered ${stamp}`);
+    const untouched = mine.find((company) => company.name === `Made ${stamp}`);
 
     expect(entered?.people).toBe(2);
     expect(untouched?.people).toBe(1);

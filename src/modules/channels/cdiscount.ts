@@ -89,7 +89,6 @@ export const cdiscountModule: ChannelModule = {
         departureCountry: "FR",
         arrivalCountry: "FR",
         scheme: "REGULAR",
-        sellerVat: "FR23888800463",
       },
       note: "Cdiscount sells in France only.",
     },

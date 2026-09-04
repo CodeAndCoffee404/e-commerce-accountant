@@ -73,6 +73,7 @@ export async function seedReferenceData(
         sellerVatNumbers.map((entry) => ({
           tenantId,
           country: entry.country,
+          scheme: entry.scheme,
           vatNumber: entry.vatNumber,
           validFrom: RULES_EFFECTIVE_FROM,
           note: entry.note ?? null,

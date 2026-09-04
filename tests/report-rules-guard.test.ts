@@ -56,7 +56,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Rules guard test", slug: `rules-${process.pid}` })
+      .values({ name: "Rules guard test" })
       .returning({ id: schema.tenants.id });
 
     tenantId = tenant.id;

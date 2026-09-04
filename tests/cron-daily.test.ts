@@ -79,7 +79,7 @@ describe.skipIf(!HAS_DB)("what the scheduler does once it is in", () => {
     const suffix = Date.now();
     const [tenant] = await getDb()
       .insert(schema.tenants)
-      .values({ name: `Cron ${suffix}`, slug: `cron-${suffix}` })
+      .values({ name: `Cron ${suffix}` })
       .returning({ id: schema.tenants.id });
 
     created.push(tenant.id);
@@ -87,22 +87,33 @@ describe.skipIf(!HAS_DB)("what the scheduler does once it is in", () => {
     const first = await call(`Bearer ${SECRET}`);
     const body = (await first.json()) as {
       opened: { tenant: string; periods: string[] }[];
-      failed: unknown[];
+      failed: { tenant: string; error: string }[];
       date: string;
     };
 
-    expect(first.status).toBe(200);
-    expect(body.failed).toEqual([]);
     expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The status still says whether the run as a whole went through — checked
+    // where that is a question this test can answer.
+    expect(first.status).toBe(body.failed.length === 0 ? 200 : 500);
+
+    // This company's outcome, not the whole run's. The job walks every company
+    // in the database, and the other test files are creating and deleting
+    // theirs at the same time — a company that vanishes between the listing
+    // and its turn is a failure of the run, correctly, and has nothing to do
+    // with what this test is asking.
+    expect(body.failed.map((entry) => entry.tenant)).not.toContain(`Cron ${suffix}`);
 
     const mine = body.opened.find((entry) => entry.tenant === `Cron ${suffix}`);
 
     expect(mine?.periods).toHaveLength(2);
 
     const second = await call(`Bearer ${SECRET}`);
-    const repeat = (await second.json()) as { opened: { tenant: string }[] };
+    const repeat = (await second.json()) as {
+      opened: { tenant: string }[];
+      failed: { tenant: string }[];
+    };
 
-    expect(second.status).toBe(200);
+    expect(repeat.failed.map((entry) => entry.tenant)).not.toContain(`Cron ${suffix}`);
     expect(repeat.opened.find((entry) => entry.tenant === `Cron ${suffix}`)).toBeUndefined();
   });
 });

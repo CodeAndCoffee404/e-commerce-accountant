@@ -95,6 +95,10 @@ async function deleteVatRateInScope(id: string): Promise<ActionResult> {
 const sellerVatSchema = z.object({
   id: z.string().uuid().optional(),
   country: z.string().trim().min(2).max(2).toUpperCase(),
+  // With the country, this is what a report looks the number up by. One-stop
+  // is held in one member state and covers every distance sale, so for those
+  // the country is where the company registered, not where the goods went.
+  scheme: z.enum(["REGULAR", "UNION-OSS"]),
   vatNumber: z
     .string()
     .trim()
@@ -252,18 +256,14 @@ const allegroCurrencySchema = z.object({
     .toUpperCase(),
   country: z.string().trim().length(2, "A country is a 2-letter code").toUpperCase(),
   scheme: z.enum(["REGULAR", "UNION-OSS"]),
-  sellerVat: z
-    .string()
-    .trim()
-    .min(4, "A VAT number has at least 4 characters")
-    .max(24)
-    .regex(/^[A-Za-z0-9 -]+$/, "A VAT number is letters, digits, spaces and dashes"),
 });
 
 /**
  * Adds or edits one entry of `allegro / currency_map` — the currency decides
- * the arrival country, the VAT scheme and the seller VAT number, so the three
- * are kept together instead of asking someone to hand-edit the JSON.
+ * the arrival country and the VAT scheme, so the two are kept together instead
+ * of asking someone to hand-edit the JSON. The registration number is not one
+ * of them: it belongs to the company and is edited on its own screen, then
+ * looked up by the pair this map produces.
  *
  * The row is one JSON blob shared by every currency (see `channelRules` on
  * the schema), so this reads it, merges the one key that changed, and writes

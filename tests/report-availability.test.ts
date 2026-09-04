@@ -98,7 +98,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
   it("names the missing channels, then offers the period once they are all in", inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Availability test", slug: `avail-${process.pid}` })
+      .values({ name: "Availability test" })
       .returning({ id: schema.tenants.id });
 
     tenantId = tenant.id;
@@ -135,8 +135,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
     const [tenant] = await db()
       .insert(schema.tenants)
       .values({
-        name: "Zoho availability test",
-        slug: `zoho-avail-${process.pid}`,
+        name: "Zoho availability test"
       })
       .returning({ id: schema.tenants.id });
 

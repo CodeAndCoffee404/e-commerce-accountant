@@ -26,12 +26,9 @@ export type AdminResult = { ok: true; message: string } | { ok: false; message: 
 
 const newCompanySchema = z.object({
   profileKey: z.string().trim().min(1),
+  // Not unique, and nothing is keyed to it: the company's own owner renames it
+  // afterwards. What tells two companies apart is the id the row is given.
   name: z.string().trim().min(2).max(120),
-  slug: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9][a-z0-9-]{1,60}$/, "Letters, digits and dashes."),
   adminEmail: z.string().trim().email(),
 });
 
@@ -41,7 +38,7 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
 
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
-  const { name, slug, adminEmail, profileKey } = parsed.data;
+  const { name, adminEmail, profileKey } = parsed.data;
 
   // Before anything is written: a company whose profile does not exist cannot
   // have reports built, and would be seeded from somebody else's values.
@@ -56,23 +53,22 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
   return acrossTenants(async () => {
     const db = getDb();
 
-    const [taken] = await db
-      .select({ id: schema.tenants.id })
-      .from(schema.tenants)
-      .where(eq(schema.tenants.slug, slug))
-      .limit(1);
-
-    if (taken) return { ok: false, message: `The short name "${slug}" is already in use.` };
-
-    // Checked above and again here by the database: two admins submitting the
-    // same short name at once would otherwise get an error blaming the network.
+    // No check that two companies do not share a name: the name is a label its
+    // owner may change, and two companies called the same thing are still two
+    // companies, told apart by the id this insert returns.
+    //
+    // A profile, on the other hand, should belong to one company — it carries
+    // the Zoho customer name and invoice prefixes, so two companies sharing one
+    // would number their invoices in the same series. That is not refused here
+    // yet, and cannot usefully be until a second profile exists: every row and
+    // every fixture today is on `geyser` by default, so a refusal keyed on
+    // "already in use" would refuse the first legitimate company too. The
+    // screen shows which profile each company is built from so the collision
+    // is at least visible. See docs/EXTENDING.md.
     const [company] = await db
       .insert(schema.tenants)
-      .values({ name, slug, profileKey })
-      .onConflictDoNothing({ target: schema.tenants.slug })
+      .values({ name, profileKey })
       .returning({ id: schema.tenants.id });
-
-    if (!company) return { ok: false, message: `The short name "${slug}" is already in use.` };
 
     // Reference data comes with the company, and from its own profile — an
     // empty rate table lets the first report run and quietly produce nothing,
@@ -91,7 +87,7 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
         action: "company.created",
         entity: "tenant",
         entityId: company.id,
-        payload: { name, slug, profileKey, admin: normaliseEmail(adminEmail) },
+        payload: { name, profileKey, admin: normaliseEmail(adminEmail) },
       },
     );
 

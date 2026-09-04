@@ -124,8 +124,16 @@ export const membershipRole = pgEnum("membership_role", [
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * What this company is called, and nothing more than that.
+   *
+   * Its own owner changes it — a company is renamed, bought, or was simply
+   * typed in wrong — so nothing may be keyed to it. Everything that has to
+   * point at a company points at `id`: the rows it owns, the folders its files
+   * live under, who may come in. Two companies may share a name; they are
+   * still two companies.
+   */
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /**
    * Which company profile in `src/modules/companies` this one is built from.
@@ -495,13 +503,29 @@ export const sellerVatNumbers = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     country: text("country").notNull(),
+    /**
+     * Which regime this registration is used under: `REGULAR` for a number the
+     * company is registered with in that country, `UNION-OSS` for the one-stop
+     * registration it reports distance sales under.
+     *
+     * The pair decides the number a report prints, which is why it is here and
+     * not merely in the note: a company can hold both a local registration and
+     * an OSS one, and the same sale takes one or the other depending on where
+     * it went.
+     */
+    scheme: text("scheme").notNull().default("REGULAR"),
     vatNumber: text("vat_number").notNull(),
     validFrom: date("valid_from").notNull(),
     validTo: date("valid_to"),
     note: text("note"),
   },
   (table) => [
-    uniqueIndex("seller_vat_period_idx").on(table.tenantId, table.country, table.validFrom),
+    uniqueIndex("seller_vat_period_idx").on(
+      table.tenantId,
+      table.country,
+      table.scheme,
+      table.validFrom,
+    ),
     tenantIsolation(),
   ],
 );

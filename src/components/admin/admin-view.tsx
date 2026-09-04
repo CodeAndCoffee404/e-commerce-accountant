@@ -81,7 +81,7 @@ export function AdminView({
                 </Space>
               ),
             },
-            { title: "Short name", dataIndex: "slug" },
+            { title: "Profile", dataIndex: "profileKey", render: (key: string) => <Tag>{key}</Tag> },
             { title: "People", dataIndex: "people", align: "right" },
             {
               title: "Last upload",
@@ -134,16 +134,9 @@ export function AdminView({
             <Input placeholder="Company name" style={{ minWidth: 200 }} />
           </Form.Item>
           <Form.Item
-            name="slug"
-            rules={[{ required: true, message: "A short name is required." }]}
-            tooltip="Lower case, no spaces. It never changes and never appears to customers."
-          >
-            <Input placeholder="short-name" style={{ minWidth: 160 }} />
-          </Form.Item>
-          <Form.Item
             name="profileKey"
             rules={[{ required: true, message: "A profile is required." }]}
-            tooltip="Which profile in the code its reports are built from. Added by a developer first."
+            tooltip="Which profile in the code its reports are built from. Added by a developer first, and one company each — the profile carries what its invoices are numbered and named."
           >
             <Select
               placeholder="Profile"

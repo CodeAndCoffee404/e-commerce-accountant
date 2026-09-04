@@ -49,7 +49,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Report settings test", slug: `rset-${process.pid}` })
+      .values({ name: "Report settings test" })
       .returning({ id: schema.tenants.id });
 
     tenantId = tenant.id;

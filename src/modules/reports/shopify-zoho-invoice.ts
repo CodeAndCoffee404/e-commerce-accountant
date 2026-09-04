@@ -71,9 +71,7 @@ function identify(row: LedgerRow): { key: string; name: string } | null {
 
 type ShopifyDefaults = {
   domesticScheme: string;
-  domesticSellerVat: string;
   exportScheme: string;
-  exportSellerVat: string;
 };
 
 /**

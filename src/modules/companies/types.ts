@@ -61,7 +61,13 @@ export type AllegroProfile = {
 /** What a company's reference tables are filled with on the day it is created. */
 export type CompanySeeds = {
   vatRates: readonly { country: string; rate: string; note?: string }[];
-  sellerVatNumbers: readonly { country: string; vatNumber: string; note?: string }[];
+  sellerVatNumbers: readonly {
+    country: string;
+    /** `REGULAR` or `UNION-OSS`. With the country, this is what a report looks up. */
+    scheme: string;
+    vatNumber: string;
+    note?: string;
+  }[];
   skuMappings: readonly {
     channel: string;
     sourceSku: string;

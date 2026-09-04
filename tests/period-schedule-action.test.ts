@@ -65,7 +65,7 @@ async function asOwnerOfFreshTenant(): Promise<string> {
 
   const [tenant] = await getDb()
     .insert(schema.tenants)
-    .values({ name: `Schedule ${suffix}`, slug: `schedule-${suffix}` })
+    .values({ name: `Schedule ${suffix}` })
     .returning({ id: schema.tenants.id });
 
   // The person and their membership, not just the session: the role is read

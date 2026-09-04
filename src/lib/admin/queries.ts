@@ -16,7 +16,8 @@ import { acrossTenants } from "@/lib/db/tenant";
 export type CompanySummary = {
   id: string;
   name: string;
-  slug: string;
+  /** Which profile it is built from — the one thing about it that cannot change. */
+  profileKey: string;
   /** How many addresses may currently come in — the access list, not arrivals. */
   people: number;
   lastUploadAt: Date | null;
@@ -29,7 +30,11 @@ export async function allCompanies(): Promise<CompanySummary[]> {
 
     const [companies, people, uploads, reports] = await Promise.all([
       db
-        .select({ id: schema.tenants.id, name: schema.tenants.name, slug: schema.tenants.slug })
+        .select({
+          id: schema.tenants.id,
+          name: schema.tenants.name,
+          profileKey: schema.tenants.profileKey,
+        })
         .from(schema.tenants)
         .orderBy(schema.tenants.name),
 

@@ -86,7 +86,7 @@ export function CompanyChooser({
             <List.Item.Meta
               avatar={<BankOutlined />}
               title={company.name}
-              description={chosen === company.id ? "Opening…" : company.slug}
+              description={chosen === company.id ? "Opening…" : null}
             />
           </List.Item>
         )}
