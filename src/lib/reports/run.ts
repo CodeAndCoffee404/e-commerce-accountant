@@ -13,7 +13,7 @@ import { DATASET_NAMES } from "@/modules/channels/registry";
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
-import type { ReportDefinition } from "@/modules/reports/types";
+import type { ReportDefinition, UnmappedSku } from "@/modules/reports/types";
 import { loadReportSettings } from "./queries";
 import { channelRule } from "./rules";
 import { preparedGranularities, requiredDatasets } from "./settings";
@@ -38,7 +38,7 @@ export type RunOutcome =
       ok: false;
       runId: string | null;
       message: string;
-      needsSkuMapping?: string[];
+      needsSkuMapping?: UnmappedSku[];
       needsCurrencyMapping?: string[];
     };
 
@@ -50,11 +50,15 @@ export type RunOutcome =
  * toast.
  */
 class NeedsSkuMappingError extends Error {
-  constructor(public readonly skus: string[]) {
+  constructor(public readonly skus: UnmappedSku[]) {
     super(
       skus.length === 1
-        ? `1 SKU used this period isn't in SKU mapping yet: ${skus[0]}.`
-        : `${skus.length} SKUs used this period aren't in SKU mapping yet.`,
+        ? skus[0].problem === "mismatch"
+          ? `SKU mapping disagrees about what ${skus[0].sourceSku} is: it arrived as ` +
+            `"${skus[0].sourceName}".`
+          : `1 SKU used this period isn't in SKU mapping yet: ${skus[0].sourceSku}.`
+        : `${skus.length} SKUs used this period aren't in SKU mapping yet, or no longer ` +
+          "match what it says they are.",
     );
   }
 }

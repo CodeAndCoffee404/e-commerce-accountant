@@ -83,6 +83,33 @@ export type ReportDefinition = {
  * interface and never learns their names — a new report is a new module and a
  * registry line, not a change to anything that already works.
  */
+/**
+ * One question SKU mapping could not answer, on its way to the person who can.
+ *
+ * It carries the pair rather than the code alone because for a channel that
+ * reports an item name the mapping is a pair: a code and the name it is
+ * expected to arrive with. `unmapped` is no row at all, `mismatch` is rows
+ * that exist and disagree — a different question, needing a different answer,
+ * and telling them apart is what keeps the gate from asking the same thing
+ * forever.
+ */
+export type UnmappedSku = {
+  /** Stable identity of the pair, for lists and for drafts against them. */
+  key: string;
+  /** What to store as `source_sku` when the person answers. */
+  sourceSku: string;
+  /** The name that arrived with it; empty where the channel reports none. */
+  sourceName: string;
+  problem: "unmapped" | "mismatch";
+  /** What the rows under that code expect instead. Empty unless a mismatch. */
+  expectedNames: string[];
+};
+
+/** One SKU with no name to check it against — every channel but Shopify. */
+export function unmappedCode(sourceSku: string): UnmappedSku {
+  return { key: sourceSku, sourceSku, sourceName: "", problem: "unmapped", expectedNames: [] };
+}
+
 export type ReportModule = {
   definition: ReportDefinition;
   /**
@@ -94,14 +121,14 @@ export type ReportModule = {
    */
   validate?: (rows: readonly LedgerRow[], settings: ReportSettings) => string | null;
   /**
-   * Distinct SKUs this period's rows would carry into the report that have no
-   * row in SKU mapping yet — the module's own idea of which of its SKUs
-   * matter, since only some modules invoice by SKU at all. Checked after the
-   * ledger loads and before anything builds, same as `validate`, so an
-   * unmapped SKU is caught once rather than discovered afterwards in the
-   * workbook, silently carrying its raw code.
+   * SKUs this period's rows would carry into the report that SKU mapping
+   * cannot answer for — the module's own idea of which of its SKUs matter,
+   * since only some modules invoice by SKU at all. Checked after the ledger
+   * loads and before anything builds, same as `validate`, so the question is
+   * asked once rather than discovered afterwards in the workbook, silently
+   * carrying a raw code or the wrong product's name.
    */
-  unmappedSkus?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => string[];
+  unmappedSkus?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => UnmappedSku[];
   /**
    * Distinct currencies this period's rows would carry into the report that
    * have no rule to say what they mean — same idea as `unmappedSkus`, for

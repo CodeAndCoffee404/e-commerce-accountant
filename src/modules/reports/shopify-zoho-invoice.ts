@@ -14,6 +14,7 @@ import type {
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
 import { parseShopifyTaxRate } from "./off-amazon-sales";
+import { type UnmappedSku } from "./types";
 import type { ReportModule } from "./types";
 
 /**
@@ -36,6 +37,26 @@ import type { ReportModule } from "./types";
  * each order's `Source` once, up front, and every row looks it up by order
  * number rather than trusting its own (possibly blank) `raw["Source"]`.
  */
+
+/**
+ * What a line item is, as far as SKU mapping is concerned.
+ *
+ * Shopify writes `Lineitem sku` when the product has one and leaves it blank
+ * when it does not — 51 of July's 72 lines carried one — so the code alone
+ * cannot be the key for every line. Where there is a code it is the key and
+ * the name checks it; where there is none the name is the key, and a mapping
+ * row for it stores the same text in both columns.
+ *
+ * Both passes below identify a line through this, so `unmappedSkus` asks
+ * about exactly the lines `generate` would otherwise get wrong.
+ */
+function identify(row: LedgerRow): { key: string; name: string } | null {
+  const name = row.raw["Lineitem name"]?.trim() ?? "";
+  const code = row.sku?.trim() ?? "";
+  const key = code === "" ? name : code;
+
+  return key === "" ? null : { key, name };
+}
 
 type ShopifyDefaults = {
   departureCountry: string;
@@ -181,10 +202,13 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const name = row.raw["Lineitem name"]?.trim();
+    const item = identify(row);
 
-    if (!name) {
-      skip("Shopify invoice: line item has no name");
+    if (!item) {
+      warnings.push(
+        `Shopify invoice: a line item with neither a SKU nor a name, row ${row.sourceRowNumber}`,
+      );
+      skip("Shopify invoice: line item has neither a SKU nor a name");
       continue;
     }
 
@@ -200,10 +224,23 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const decision = decideSku(context.rules, "shopify_geyser", name);
+    const decision = decideSku(context.rules, "shopify_geyser", item.key, item.name);
 
     if (decision.kind === "ignore") {
       skip("Shopify invoice: item is on the ignore list");
+      continue;
+    }
+
+    // Unreachable in a normal build — `unmappedSkus` stops the run and asks
+    // first — but if it is ever reached, a mapping that disagrees about what
+    // the code is must not decide what to bill. Left visible rather than
+    // dropped quietly.
+    if (decision.kind === "mismatch") {
+      warnings.push(
+        `Shopify invoice: ${item.key} arrived as "${item.name}", but SKU mapping expects ` +
+          `${decision.expectedNames.map((expected) => `"${expected}"`).join(" or ")}`,
+      );
+      skip("Shopify invoice: the mapping disagrees about what this SKU is");
       continue;
     }
 
@@ -211,7 +248,7 @@ export function generateShopifyZohoInvoice(
     // genuinely different prices are two invoice lines, same reasoning as
     // the Amazon invoice.
     const unitPrice = row.gross.dividedBy(quantity);
-    const sku = decision.kind === "map" ? decision.targetSku : name;
+    const sku = decision.kind === "map" ? decision.targetSku : item.key;
     const itemName = decision.kind === "map" ? decision.itemName : "";
     const key = `${sku}|${unitPrice.toFixed(10)}`;
     const existing = productAgg.get(key);
@@ -377,15 +414,16 @@ export function generateShopifyZohoInvoice(
 }
 
 /**
- * Distinct Shopify line-item names this period's invoice would bill under
- * that have no row in SKU mapping yet. Shopify's own `Lineitem sku` column is
- * blank in every real export seen so far, so the mapping key is the item's
- * name instead — this mirrors that exactly, and mirrors `generate`'s own row
- * filter for the same reason the other invoices do: a looser or stricter
- * check here would risk silently changing what actually gets invoiced.
+ * The line items this period's invoice would bill that SKU mapping cannot
+ * answer for: no row at all, or rows that disagree about what the code is.
+ *
+ * It mirrors `generate`'s own row filter exactly, for the reason the other
+ * invoices do — a looser or stricter check here would silently change what
+ * actually gets invoiced — and identifies a line the same way, so what is
+ * asked about is precisely what would otherwise go out wrong.
  */
-function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
-  const found = new Set<string>();
+function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
+  const found = new Map<string, UnmappedSku>();
   const sources = orderSourceMap(rows);
 
   for (const row of rows) {
@@ -395,16 +433,30 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[
 
     if (isExcludedRow(row, rules, sources, arrival)) continue;
 
-    const name = row.raw["Lineitem name"]?.trim();
+    const item = identify(row);
 
-    if (!name) continue;
+    if (!item) continue;
     if (row.gross === null) continue;
     if (row.quantity === null || row.quantity.isZero()) continue;
 
-    if (decideSku(rules, "shopify_geyser", name).kind === "passthrough") found.add(name);
+    const decision = decideSku(rules, "shopify_geyser", item.key, item.name);
+
+    if (decision.kind !== "passthrough" && decision.kind !== "mismatch") continue;
+
+    // The pair is the identity, not the code: one code can be two products,
+    // and each needs its own answer.
+    const key = `${item.key}\u0000${item.name}`;
+
+    found.set(key, {
+      key,
+      sourceSku: item.key,
+      sourceName: item.name,
+      problem: decision.kind === "mismatch" ? "mismatch" : "unmapped",
+      expectedNames: decision.kind === "mismatch" ? decision.expectedNames : [],
+    });
   }
 
-  return [...found].sort();
+  return [...found.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export const shopifyZohoInvoiceModule: ReportModule = {

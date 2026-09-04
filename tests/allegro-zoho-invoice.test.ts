@@ -225,7 +225,9 @@ describe("allegroZohoInvoiceModule.unmappedSkus", () => {
       row({ gross: new Decimal("1"), raw: { oferta: "999;Thing;1 szt." } }),
     ];
 
-    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual(["999"]);
+    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      { key: "999", sourceSku: "999", sourceName: "", problem: "unmapped", expectedNames: [] },
+    ]);
   });
 
   it("does not flag a mapped or an ignored SKU", () => {

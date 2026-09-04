@@ -45,7 +45,14 @@ const emptyRules: RulesSnapshot = {
   channelRules: [],
 };
 
-const unmappedSkus = amazonZohoInvoiceModule.unmappedSkus!;
+const askAbout = amazonZohoInvoiceModule.unmappedSkus!;
+
+/**
+ * Amazon reports a code and no name to check it against, so every question it
+ * raises is the same shape. The codes are what these are about.
+ */
+const unmappedSkus = (...args: Parameters<typeof askAbout>) =>
+  askAbout(...args).map((sku) => sku.sourceSku);
 
 describe("amazonZohoInvoiceModule.unmappedSkus", () => {
   it("flags a SKU that would invoice but has no mapping row", () => {

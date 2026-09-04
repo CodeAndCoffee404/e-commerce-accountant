@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import { saveAllegroCurrency, saveSkuMapping } from "@/lib/reference/actions";
 import { buildReport } from "@/lib/reports/actions";
 import type { ReportTypeId } from "@/lib/reports/definitions";
+import type { UnmappedSku } from "@/modules/reports/types";
 
 /**
  * Which channel's SKU mapping a report's unmapped-SKU gate saves into — the
@@ -63,7 +64,7 @@ export function useBuildQueue({
   // own progress rather than the other's.
   const [queueSource, setQueueSource] = useState<string | null>(null);
 
-  const [skuGate, setSkuGate] = useState<{ target: Target; skus: string[] } | null>(null);
+  const [skuGate, setSkuGate] = useState<{ target: Target; skus: UnmappedSku[] } | null>(null);
   const [skuDrafts, setSkuDrafts] = useState<
     Record<string, { targetSku: string; itemName: string; ignored: boolean }>
   >({});
@@ -194,12 +195,15 @@ export function useBuildQueue({
     void (async () => {
       try {
         for (const sku of skuGate.skus) {
-          const draft = skuDrafts[sku];
+          const draft = skuDrafts[sku.key];
           const ignored = draft?.ignored ?? false;
 
           const result = await saveSkuMapping({
             channel,
-            sourceSku: sku,
+            sourceSku: sku.sourceSku,
+            // Saved as it arrived, so the next build checks the mapping
+            // against the same text that raised the question.
+            sourceName: sku.sourceName,
             targetSku: ignored ? null : (draft?.targetSku.trim() ?? null),
             itemName: ignored ? null : (draft?.itemName.trim() ?? null),
             isIgnored: ignored,
@@ -301,11 +305,17 @@ export function useBuildQueue({
 }
 
 /**
- * Stops a build that found SKUs with no row in SKU mapping yet, and asks for
- * each one before trying again — an unmapped SKU otherwise still reaches the
- * invoice under its own raw code, silently. Only the owner can save a
- * mapping (SKU mapping is company settings, same rule as everywhere else in
- * Settings), so an accountant sees the list without the form.
+ * Stops a build that found SKUs SKU mapping cannot answer for, and asks about
+ * each before trying again — otherwise an unmapped SKU reaches the invoice
+ * under its own raw code, and a stale mapping bills one product as another,
+ * both silently. Only the owner can save a mapping (SKU mapping is company
+ * settings, same rule as everywhere else in Settings), so an accountant sees
+ * the list without the form.
+ *
+ * A mismatch is answered by adding a row for the pair that arrived, not by
+ * overwriting the one that disagreed: one code can legitimately cover two
+ * products, and this cannot tell that case from a rename. The old row stays
+ * until someone decides it is wrong, in Settings.
  */
 function SkuGateModal({
   gate,
@@ -317,7 +327,7 @@ function SkuGateModal({
   onSkip,
   onSave,
 }: {
-  gate: { target: Target; skus: string[] } | null;
+  gate: { target: Target; skus: UnmappedSku[] } | null;
   drafts: Record<string, { targetSku: string; itemName: string; ignored: boolean }>;
   setDrafts: (
     updater: (
@@ -332,20 +342,22 @@ function SkuGateModal({
   onSave: () => void;
 }) {
   const skus = gate?.skus ?? [];
+  const mismatches = skus.filter((sku) => sku.problem === "mismatch").length;
+  const named = skus.some((sku) => sku.sourceName !== "");
 
-  const draftOf = (sku: string) => drafts[sku] ?? { targetSku: "", itemName: "", ignored: false };
+  const draftOf = (key: string) => drafts[key] ?? { targetSku: "", itemName: "", ignored: false };
 
   const decided = skus.filter((sku) => {
-    const draft = draftOf(sku);
+    const draft = draftOf(sku.key);
 
     return draft.ignored || (draft.targetSku.trim() !== "" && draft.itemName.trim() !== "");
   }).length;
 
-  const setField = (sku: string, field: "targetSku" | "itemName", value: string) =>
-    setDrafts((current) => ({ ...current, [sku]: { ...draftOf(sku), [field]: value } }));
+  const setField = (key: string, field: "targetSku" | "itemName", value: string) =>
+    setDrafts((current) => ({ ...current, [key]: { ...draftOf(key), [field]: value } }));
 
-  const setIgnored = (sku: string, ignored: boolean) =>
-    setDrafts((current) => ({ ...current, [sku]: { ...draftOf(sku), ignored } }));
+  const setIgnored = (key: string, ignored: boolean) =>
+    setDrafts((current) => ({ ...current, [key]: { ...draftOf(key), ignored } }));
 
   return (
     <Modal
@@ -364,53 +376,98 @@ function SkuGateModal({
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Typography.Text type="secondary">
             {skus.length === 1 ? "This SKU appears" : "These SKUs appear"} in {gate.target.periodLabel}
-            &rsquo;s {SKU_MAPPING_CHANNEL_LABEL[gate.target.reportType] ?? "Amazon"} rows and{" "}
-            {skus.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in SKU mapping yet. Give{" "}
+            &rsquo;s {SKU_MAPPING_CHANNEL_LABEL[gate.target.reportType] ?? "Amazon"} rows, and SKU
+            mapping cannot say what to invoice {skus.length === 1 ? "it" : "each of them"} as. Give{" "}
             {skus.length === 1 ? "it" : "each one"} an invoice code and item name, or mark it
             ignored — an ignored SKU is dropped from the invoice entirely.
           </Typography.Text>
 
+          {mismatches > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                mismatches === 1
+                  ? "One of these no longer matches what SKU mapping says it is"
+                  : `${mismatches} of these no longer match what SKU mapping says they are`
+              }
+              description={
+                "The code is mapped, but to a different item name than the one that arrived — a " +
+                "renamed product, or one code covering two. Answering here adds a row for the " +
+                "name that arrived and leaves the old one alone; delete it in Settings if it is " +
+                "the one that is wrong."
+              }
+            />
+          ) : null}
+
           {canEdit ? (
             <>
-              <Table
-                dataSource={skus.map((sku) => ({ sku }))}
-                rowKey="sku"
+              <Table<UnmappedSku>
+                dataSource={skus}
+                rowKey="key"
                 size="small"
                 pagination={false}
                 columns={[
                   {
                     title: "Source SKU",
-                    dataIndex: "sku",
+                    key: "sourceSku",
                     width: 160,
-                    render: (sku: string) => (
-                      <Typography.Text code style={{ opacity: draftOf(sku).ignored ? 0.5 : 1 }}>
-                        {sku}
+                    render: (_, sku) => (
+                      <Typography.Text code style={{ opacity: draftOf(sku.key).ignored ? 0.5 : 1 }}>
+                        {sku.sourceSku}
                       </Typography.Text>
                     ),
                   },
+                  // Only where the channel reports one. Amazon and Allegro
+                  // send a code and nothing to check it against, and an empty
+                  // column would be all this said about them.
+                  ...(named
+                    ? [
+                        {
+                          title: "Arrived as",
+                          key: "sourceName",
+                          width: 220,
+                          render: (_: unknown, sku: UnmappedSku) => (
+                            <Space direction="vertical" size={0}>
+                              <Typography.Text style={{ opacity: draftOf(sku.key).ignored ? 0.5 : 1 }}>
+                                {sku.sourceName || <Typography.Text type="secondary">—</Typography.Text>}
+                              </Typography.Text>
+                              {sku.problem === "mismatch" ? (
+                                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                                  mapped as{" "}
+                                  {sku.expectedNames
+                                    .map((expected) => expected || "(no name yet)")
+                                    .join(", ")}
+                                </Typography.Text>
+                              ) : null}
+                            </Space>
+                          ),
+                        },
+                      ]
+                    : []),
                   {
                     title: "Invoice SKU",
                     key: "targetSku",
-                    render: (_, { sku }: { sku: string }) => (
+                    render: (_, sku) => (
                       <Input
                         size="small"
                         placeholder="e.g. TS-001"
-                        disabled={draftOf(sku).ignored}
-                        value={draftOf(sku).targetSku}
-                        onChange={(event) => setField(sku, "targetSku", event.target.value)}
+                        disabled={draftOf(sku.key).ignored}
+                        value={draftOf(sku.key).targetSku}
+                        onChange={(event) => setField(sku.key, "targetSku", event.target.value)}
                       />
                     ),
                   },
                   {
                     title: "Item name",
                     key: "itemName",
-                    render: (_, { sku }: { sku: string }) => (
+                    render: (_, sku) => (
                       <Input
                         size="small"
                         placeholder="e.g. T-Shirt, Black, M"
-                        disabled={draftOf(sku).ignored}
-                        value={draftOf(sku).itemName}
-                        onChange={(event) => setField(sku, "itemName", event.target.value)}
+                        disabled={draftOf(sku.key).ignored}
+                        value={draftOf(sku.key).itemName}
+                        onChange={(event) => setField(sku.key, "itemName", event.target.value)}
                       />
                     ),
                   },
@@ -419,11 +476,11 @@ function SkuGateModal({
                     key: "ignored",
                     width: 64,
                     align: "center",
-                    render: (_, { sku }: { sku: string }) => (
+                    render: (_, sku) => (
                       <Switch
                         size="small"
-                        checked={draftOf(sku).ignored}
-                        onChange={(checked) => setIgnored(sku, checked)}
+                        checked={draftOf(sku.key).ignored}
+                        onChange={(checked) => setIgnored(sku.key, checked)}
                       />
                     ),
                   },
@@ -465,8 +522,11 @@ function SkuGateModal({
             <>
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {skus.map((sku) => (
-                  <li key={sku}>
-                    <Typography.Text code>{sku}</Typography.Text>
+                  <li key={sku.key}>
+                    <Typography.Text code>{sku.sourceSku}</Typography.Text>
+                    {sku.sourceName && sku.sourceName !== sku.sourceSku ? (
+                      <Typography.Text type="secondary"> — {sku.sourceName}</Typography.Text>
+                    ) : null}
                   </li>
                 ))}
               </ul>

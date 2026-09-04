@@ -105,11 +105,11 @@ const rules: RulesSnapshot = {
   ],
   sellerVatNumbers: [],
   skuMappings: [
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", sourceName: "", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", sourceName: "", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Kit - +1 Cartridge", sourceName: "", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
-    { channel: "shopify_geyser", sourceSku: "Geyser EURO Filter", sourceName: "", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 1 Cartridge", sourceName: "Geyser EURO Cartridge - 1 Cartridge", targetSku: "CART-1", itemName: "Geyser Euro Cartridge", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 2 Cartridges", sourceName: "Geyser EURO Cartridge - 2 Cartridges", targetSku: "CART-2", itemName: "Geyser Euro Cartridge 2-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "Geyser EURO Cartridge - 4 Cartridges", targetSku: "CART-4", itemName: "Geyser Euro Cartridge 4-Pack", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Kit - +1 Cartridge", sourceName: "Geyser EURO Kit - +1 Cartridge", targetSku: "FILTER-KIT", itemName: "Geyser Euro Filter", isIgnored: false },
+    { channel: "shopify_geyser", sourceSku: "Geyser EURO Filter", sourceName: "Geyser EURO Filter", targetSku: "FILTER", itemName: "Geyser Euro Filter Only", isIgnored: false },
   ],
   channelRules: [
     {
@@ -363,7 +363,7 @@ describe("generateShopifyZohoInvoice", () => {
       ...rules,
       skuMappings: [
         ...rules.skuMappings.filter((m) => m.sourceSku !== "Geyser EURO Cartridge - 4 Cartridges"),
-        { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "", targetSku: null, itemName: null, isIgnored: true },
+        { channel: "shopify_geyser", sourceSku: "Geyser EURO Cartridge - 4 Cartridges", sourceName: "Geyser EURO Cartridge - 4 Cartridges", targetSku: null, itemName: null, isIgnored: true },
       ],
     };
     const rows = [
@@ -411,7 +411,15 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual(["Geyser EURO New Thing"]);
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      {
+        key: "Geyser EURO New Thing\u0000Geyser EURO New Thing",
+        sourceSku: "Geyser EURO New Thing",
+        sourceName: "Geyser EURO New Thing",
+        problem: "unmapped",
+        expectedNames: [],
+      },
+    ]);
   });
 
   it("does not flag a mapped item, and ignores a draft order's items", () => {

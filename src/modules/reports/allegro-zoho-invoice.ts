@@ -13,6 +13,7 @@ import type {
 } from "@/lib/reports/types";
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
+import { unmappedCode, type UnmappedSku } from "./types";
 import type { ReportModule } from "./types";
 
 /**
@@ -567,7 +568,7 @@ function unmappedCurrencies(rows: readonly LedgerRow[], rules: RulesSnapshot): s
  * rather than sharing it, same reasoning as the Amazon module: a stricter or
  * looser check here would risk silently changing what actually invoices.
  */
-function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[] {
+function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
   const found = new Set<string>();
 
   for (const row of rows) {
@@ -582,7 +583,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): string[
     }
   }
 
-  return [...found].sort();
+  return [...found].sort().map(unmappedCode);
 }
 
 export const allegroZohoInvoiceModule: ReportModule = {
