@@ -52,6 +52,8 @@ function orderHead(args: {
   taxes: string;
   taxLabel: string;
   itemName: string;
+  /** Shopify writes this only when the product has one. */
+  sku?: string;
   price: string;
   qty: number;
   occurredOn?: string;
@@ -62,6 +64,7 @@ function orderHead(args: {
     occurredOn: args.occurredOn ?? "2026-01-15",
     quantity: new Decimal(args.qty),
     gross: new Decimal(args.price).times(args.qty),
+    sku: args.sku ?? null,
     raw: {
       Name: args.name,
       Total: args.total,
@@ -79,6 +82,7 @@ function orderHead(args: {
 function orderLine(args: {
   name: string;
   itemName: string;
+  sku?: string;
   price: string;
   qty: number;
   occurredOn?: string;
@@ -88,6 +92,7 @@ function orderLine(args: {
     occurredOn: args.occurredOn ?? "2026-01-15",
     quantity: new Decimal(args.qty),
     gross: new Decimal(args.price).times(args.qty),
+    sku: args.sku ?? null,
     raw: {
       Name: args.name,
       "Lineitem name": args.itemName,
@@ -420,6 +425,137 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
         expectedNames: [],
       },
     ]);
+  });
+
+  it("keys on the code when there is one, and on the name when there is not", () => {
+    // The real July shape: the same cartridge sold both ways, because Shopify
+    // only writes `Lineitem sku` for products that have one.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        sku: "9Z-0IH0-ECWV",
+        price: "45.90",
+        qty: 1,
+      }),
+      orderHead({
+        name: "#2",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    // Only the coded one is unknown: the mapping keyed by that name already
+    // covers the other, and asking again would be asking a settled question.
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+      {
+        key: "9Z-0IH0-ECWV\u0000Geyser EURO Cartridge - 1 Cartridge",
+        sourceSku: "9Z-0IH0-ECWV",
+        sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+        problem: "unmapped",
+        expectedNames: [],
+      },
+    ]);
+  });
+
+  it("asks separately about two products sold under one code", () => {
+    // QE-5795-1Z7V-stickerless is a filter at 89.90 and a kit at 45.90 in the
+    // same month. One question about the code would get one answer, and one
+    // of the two products would be invoiced as the other.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        sku: "QE-5795-1Z7V-stickerless",
+        price: "89.90",
+        qty: 1,
+      }),
+      orderHead({
+        name: "#2",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Kit - +1 Cartridge",
+        sku: "QE-5795-1Z7V-stickerless",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const asked = shopifyZohoInvoiceModule.unmappedSkus!(rows, rules);
+
+    expect(asked).toHaveLength(2);
+    expect(asked.map((item) => item.sourceName)).toEqual([
+      "Geyser EURO Filter",
+      "Geyser EURO Kit - +1 Cartridge",
+    ]);
+    expect(new Set(asked.map((item) => item.sourceSku))).toEqual(
+      new Set(["QE-5795-1Z7V-stickerless"]),
+    );
+  });
+
+  it("stops on a code whose item has been renamed, rather than billing the old name", () => {
+    const renamed = orderHead({
+      name: "#1",
+      country: "FR",
+      total: "45.90",
+      taxes: "7.65",
+      taxLabel: "FR TVA 20%",
+      itemName: "Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+      sku: "CODE-1",
+      price: "45.90",
+      qty: 1,
+    });
+
+    const mapped: RulesSnapshot = {
+      ...rules,
+      skuMappings: [
+        ...rules.skuMappings,
+        {
+          channel: "shopify_geyser",
+          sourceSku: "CODE-1",
+          sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+          targetSku: "CART-1",
+          itemName: "Geyser Euro Cartridge",
+          isIgnored: false,
+        },
+      ],
+    };
+
+    expect(shopifyZohoInvoiceModule.unmappedSkus!([renamed], mapped)).toEqual([
+      {
+        key: "CODE-1\u0000Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+        sourceSku: "CODE-1",
+        sourceName: "Geyser EURO Cartridge - 1 Cartridge (new packaging)",
+        problem: "mismatch",
+        expectedNames: ["Geyser EURO Cartridge - 1 Cartridge"],
+      },
+    ]);
+
+    // And the invoice does not quietly bill it as the old product either: a
+    // build that somehow got past the gate leaves the line out and says so.
+    const built = generateShopifyZohoInvoice([renamed], {
+      period: context.period,
+      rules: mapped,
+      fx: {},
+    });
+
+    expect(built.sheets[0].rows.some((line) => line[6] === "CART-1")).toBe(false);
+    expect(built.warnings.join(" ")).toContain("SKU mapping expects");
   });
 
   it("does not flag a mapped item, and ignores a draft order's items", () => {
