@@ -131,16 +131,12 @@ const rules: RulesSnapshot = {
       channel: "shopify_geyser",
       key: "defaults",
       value: {
-        departureCountry: "ES",
         domesticScheme: "REGULAR",
         domesticSellerVat: "ESN0531416F",
         exportScheme: "UNION-OSS",
         exportSellerVat: "EE102013089",
       },
     },
-    { channel: "shopify_geyser", key: "skipped_arrival_countries", value: ["CH"] },
-    { channel: "shopify_geyser", key: "country_aliases", value: { UK: "GB" } },
-    { channel: "shopify_geyser", key: "recompute_zero_tax_countries", value: ["GB"] },
   ],
 };
 

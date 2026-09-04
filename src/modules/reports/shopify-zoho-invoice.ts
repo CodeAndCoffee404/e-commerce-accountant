@@ -14,7 +14,16 @@ import type {
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
 import { parseShopifyTaxRate } from "./off-amazon-sales";
-import { notASale, notASaleReason, unpaidOrderWarning } from "./shopify-orders";
+import {
+  DEPARTURE_COUNTRY,
+  arrivalCountryOf,
+  isDomestic,
+  isSkippedCountry,
+  notASale,
+  notASaleReason,
+  recomputesZeroTax,
+  unpaidOrderWarning,
+} from "./shopify-orders";
 import type { ReportModule, UnmappedSku } from "./types";
 
 /**
@@ -59,61 +68,43 @@ function identify(row: LedgerRow): { key: string; name: string } | null {
 }
 
 type ShopifyDefaults = {
-  departureCountry: string;
   domesticScheme: string;
   domesticSellerVat: string;
   exportScheme: string;
   exportSellerVat: string;
 };
 
-/**
- * The four export markets big enough for their own Zoho ledger line.
- * Everything else pools into "VAT OSS Other countries" — a fixed list, not a
- * setting, by agreement (see the ТЗ discussion): it does not grow on its own
- * just because a new country shows up in a file.
- */
-const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
-
-const VAT_BUCKET_ORDER = ["ES", "DE", "FR", "IT", "PL", "OTHER"] as const;
-
 /** Where the shop's goods post in Zoho. The name is the account, exactly. */
 const SALES_ACCOUNT = "Shopify Geyser Sales";
 
 /**
- * The names of the Zoho accounts these lines post to, not labels: country in
- * the middle, scheme last, that capitalisation — the same shape the Amazon and
- * Allegro invoices use, so one country's tax lands on one account whichever
- * channel sold it. The pooled line has no country to place and keeps the name
- * all three share.
+ * The Zoho account an order's VAT posts to: country in the middle, scheme
+ * last, that capitalisation — the same shape the Amazon and Allegro invoices
+ * use, so one country's tax lands on one account whichever channel sold it.
+ *
+ * The domestic name is built from the departure country rather than spelled
+ * out, so it cannot drift away from where the goods actually ship from. The
+ * four export markets big enough for their own line are a fixed list by
+ * agreement: it does not grow on its own just because a new country shows up
+ * in a file, and everything else pools into one account with no country to
+ * place. Not the grouping a legacy-built invoice once used (Austria filed
+ * under "DE", Slovenia under "FR") — that was a manual mistake, not a rule.
  */
-const VAT_BUCKET_LABELS: Record<string, string> = {
-  ES: "VAT ES Regular",
-  DE: "VAT DE OSS",
-  FR: "VAT FR OSS",
-  IT: "VAT IT OSS",
-  PL: "VAT PL OSS",
-  OTHER: "VAT OSS Other countries",
-};
+const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
+const POOLED_VAT_ACCOUNT = "VAT OSS Other countries";
 
-function arrivalCountryOf(row: LedgerRow, rules: RulesSnapshot): string {
-  const aliases = channelRule<Record<string, string>>(rules, "shopify_geyser", "country_aliases") ?? {};
-  const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
+function vatAccount(arrival: string): string {
+  if (isDomestic(arrival)) return `VAT ${DEPARTURE_COUNTRY} Regular`;
 
-  return aliases[raw] ?? raw;
+  return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? `VAT ${arrival} OSS` : POOLED_VAT_ACCOUNT;
 }
 
-/**
- * Which VAT ledger line an order's country falls under: Spain's own domestic
- * line, one of the four breakout markets, or the shared "other" bucket. Not
- * the grouping a legacy-built invoice once used (Austria filed under "DE",
- * Slovenia under "FR") — that was confirmed to be a manual mistake, not a
- * rule, and is not reproduced here.
- */
-function vatBucketKey(arrival: string, departure: string): string {
-  if (arrival === departure) return "ES";
-
-  return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? arrival : "OTHER";
-}
+/** The order the accounts print in; only the ones with money in them show. */
+const VAT_ACCOUNT_ORDER = [
+  `VAT ${DEPARTURE_COUNTRY} Regular`,
+  ...OSS_BREAKOUT_COUNTRIES.map((country) => `VAT ${country} OSS`),
+  POOLED_VAT_ACCOUNT,
+];
 
 type OrderFacts = { source: string; total: Decimal | null; paymentMethod: string };
 
@@ -192,9 +183,7 @@ function isExcludedRow(
 
   if (why) return notASaleReason("Shopify invoice", why);
 
-  const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
-
-  if (skippedCountries.includes(arrival)) return `Shopify invoice: delivered to ${arrival}`;
+  if (isSkippedCountry(arrival)) return `Shopify invoice: delivered to ${arrival}`;
 
   return null;
 }
@@ -279,7 +268,7 @@ export function generateShopifyZohoInvoice(
     if (row.dataset !== "shopify_geyser") continue;
     if (row.gross === null || row.quantity === null || row.quantity.isZero()) continue;
 
-    const arrival = arrivalCountryOf(row, context.rules);
+    const arrival = arrivalCountryOf(row);
 
     if (isExcludedRow(row, context.rules, facts, arrival)) continue;
 
@@ -324,7 +313,7 @@ export function generateShopifyZohoInvoice(
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
-    const arrival = arrivalCountryOf(row, context.rules);
+    const arrival = arrivalCountryOf(row);
     const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     if (excludeReason) {
@@ -400,9 +389,6 @@ export function generateShopifyZohoInvoice(
    * ------------------------------------------------------------------ */
 
   const vatAgg = new Map<string, Decimal>();
-  const recompute =
-    channelRule<string[]>(context.rules, "shopify_geyser", "recompute_zero_tax_countries") ?? [];
-
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
@@ -410,7 +396,7 @@ export function generateShopifyZohoInvoice(
 
     if (!orderTotal) continue; // a continuation line — the order total lives on the first row
 
-    const arrival = arrivalCountryOf(row, context.rules);
+    const arrival = arrivalCountryOf(row);
     const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     // Already tallied in `skipped` above, once per line, in the product
@@ -458,7 +444,7 @@ export function generateShopifyZohoInvoice(
 
     const computedVat = rate === null ? null : splitGross(total, rate).vat;
     const vat =
-      reportedVat === null || (reportedVat.isZero() && recompute.includes(arrival))
+      reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(arrival))
         ? computedVat
         : reportedVat;
 
@@ -468,9 +454,9 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const bucket = vatBucketKey(arrival, defaults.departureCountry);
+    const account = vatAccount(arrival);
 
-    vatAgg.set(bucket, (vatAgg.get(bucket) ?? new Decimal(0)).plus(vat));
+    vatAgg.set(account, (vatAgg.get(account) ?? new Decimal(0)).plus(vat));
   }
 
   /* ------------------------------------------------------------------ *
@@ -507,14 +493,12 @@ export function generateShopifyZohoInvoice(
     }
   }
 
-  for (const bucket of VAT_BUCKET_ORDER) {
-    const amount = vatAgg.get(bucket);
+  for (const account of VAT_ACCOUNT_ORDER) {
+    const amount = vatAgg.get(account);
 
-    // Omitted, not printed as zero: a bucket nothing sold under this period
+    // Omitted, not printed as zero: an account nothing sold under this period
     // is not a real line on the invoice.
     if (!amount) continue;
-
-    const label = VAT_BUCKET_LABELS[bucket];
 
     output.push([
       invoiceDate,
@@ -529,10 +513,10 @@ export function generateShopifyZohoInvoice(
       // VAT lines this way.
       "",
       "",
-      label,
+      account,
       "1",
       amount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
-      label,
+      account,
     ]);
   }
 
@@ -565,7 +549,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): Unmappe
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
-    const arrival = arrivalCountryOf(row, rules);
+    const arrival = arrivalCountryOf(row);
 
     if (isExcludedRow(row, rules, facts, arrival)) continue;
 

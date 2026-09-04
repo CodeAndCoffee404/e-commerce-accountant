@@ -1,5 +1,7 @@
 import type Decimal from "decimal.js";
 
+import type { LedgerRow } from "@/lib/reports/types";
+
 /**
  * Which Shopify orders are sales, shared by the two reports that read them.
  *
@@ -82,4 +84,61 @@ export function notASaleReason(report: string, why: NotASale): string {
   return why === "giveaway"
     ? `${report}: made by hand, nothing paid`
     : `${report}: made by hand, marked paid by a means the shop does not accept`;
+}
+
+
+/* ------------------------------------------------------------------------ *
+ * Where the goods leave from, and what follows from it.
+ *
+ * One decision underlies everything both reports say about tax: whether the
+ * order stayed in the country the goods ship from. Domestic is the shop's home
+ * regime, REGULAR; anything crossing a border is UNION-OSS. Off-Amazon Sales
+ * turns that into the scheme and the seller's VAT number it prints; the
+ * invoice turns the same answer into which VAT account the line posts to.
+ *
+ * It lived in an editable rule while the invoice quietly hard-coded "ES" for
+ * the domestic account. Moving the warehouse in Settings would then have sent
+ * the new country's domestic VAT to Spain's account, silently. The country is
+ * a fact about the business, not a monthly setting — so it is here, and both
+ * uses read the same constant.
+ * ------------------------------------------------------------------------ */
+
+/** Geyser's Shopify shop ships from Spain, always. */
+export const DEPARTURE_COUNTRY = "ES";
+
+/** Sold and shipped without leaving the departure country: the home regime. */
+export function isDomestic(arrival: string): boolean {
+  return arrival === DEPARTURE_COUNTRY;
+}
+
+/** Shopify writes `UK`; reporting needs `GB`. */
+const COUNTRY_ALIASES: Readonly<Record<string, string>> = { UK: "GB" };
+
+/**
+ * Where the order went. Shipping address first, billing as the fallback, and
+ * whatever the ledger recorded last of all.
+ */
+export function arrivalCountryOf(row: LedgerRow): string {
+  const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
+
+  return COUNTRY_ALIASES[raw] ?? raw;
+}
+
+/** Switzerland is out of scope by agreement, and silently — no marker anywhere. */
+const SKIPPED_ARRIVAL_COUNTRIES: readonly string[] = ["CH"];
+
+export function isSkippedCountry(arrival: string): boolean {
+  return SKIPPED_ARRIVAL_COUNTRIES.includes(arrival);
+}
+
+/**
+ * Countries whose orders arrive with a zero tax that is known to be wrong.
+ * British orders carry no rate in the label either, so the VAT is computed
+ * from the order total instead. Everywhere else a zero means zero and must not
+ * be filled in.
+ */
+const RECOMPUTE_ZERO_TAX_COUNTRIES: readonly string[] = ["GB"];
+
+export function recomputesZeroTax(arrival: string): boolean {
+  return RECOMPUTE_ZERO_TAX_COUNTRIES.includes(arrival);
 }
