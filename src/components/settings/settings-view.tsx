@@ -378,7 +378,8 @@ function Skus({
         </Button>
         <Typography.Text type="secondary">
           Maps a channel SKU to the name and code the invoice should carry. An unmapped SKU still
-          reaches the invoice under its raw code. Ignored ones are sold but never invoiced.
+          reaches the invoice under its raw code. Ignored ones are sold but never invoiced. Where a
+          source name is set, a build stops rather than bill a code whose item no longer matches it.
         </Typography.Text>
       </Space>
 
@@ -390,8 +391,15 @@ function Skus({
         loading={pending}
         scroll={{ x: 900 }}
         columns={[
-          { title: "Channel", dataIndex: "channel", width: 100 },
-          { title: "Source SKU", dataIndex: "sourceSku", width: 260 },
+          { title: "Channel", dataIndex: "channel", width: 130 },
+          { title: "Source SKU", dataIndex: "sourceSku", width: 230 },
+          {
+            title: "Source name",
+            dataIndex: "sourceName",
+            width: 230,
+            render: (value: string) =>
+              value === "" ? <Typography.Text type="secondary">not checked</Typography.Text> : value,
+          },
           {
             title: "Invoice SKU",
             dataIndex: "targetSku",
@@ -458,6 +466,15 @@ function Skus({
         fields={[
           { name: "channel", label: "Channel", required: true },
           { name: "sourceSku", label: "Source SKU", required: true },
+          {
+            name: "sourceName",
+            label: "Source name",
+            // Required for Shopify and refused there if left blank, because
+            // Shopify's code is optional and its names change. Elsewhere
+            // there is no name to check against and blank is the answer.
+            required: (editing?.channel ?? "").startsWith("shopify"),
+            help: "The item name the channel sends with this code. Required for Shopify; leave blank elsewhere.",
+          },
           { name: "targetSku", label: "Invoice SKU" },
           { name: "itemName", label: "Item name" },
           { name: "isIgnored", label: "Ignored", type: "switch" },
@@ -817,6 +834,8 @@ type Field = {
   name: string;
   label: string;
   required?: boolean;
+  /** A line under the input, for a rule the label cannot carry on its own. */
+  help?: string;
   placeholder?: string;
   disabled?: boolean;
   type?: "switch" | "select";
@@ -859,6 +878,7 @@ function EditModal({
             key={field.name}
             name={field.name}
             label={field.label}
+            extra={field.help}
             rules={field.required ? [{ required: true, message: `${field.label} is required` }] : []}
             valuePropName={field.type === "switch" ? "checked" : "value"}
           >
