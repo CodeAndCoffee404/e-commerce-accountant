@@ -408,6 +408,33 @@ describe("generateShopifyZohoInvoice", () => {
     expect(built.warnings[0]).toContain("100% discount");
   });
 
+  it("refuses a means the shop does not take on an ordinary web order too", () => {
+    // The shop takes cards. That is about the shop, not about how the order
+    // was typed in — so it holds for a checkout order as much as a hand-made
+    // one. No such order exists in the client's three months, and the two
+    // things move independently.
+    const rows = [
+      orderHead({
+        name: "#171999",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        price: "89.90",
+        qty: 1,
+        source: "web",
+        paymentMethod: "manual",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+
+    expect(built.sheets[0].rows).toEqual([]);
+    expect(built.warnings).toHaveLength(1);
+    expect(built.warnings[0]).toContain("#171999");
+  });
+
   it("still drops a hand-made order with no money in it", () => {
     const rows = [
       orderHead({
