@@ -2,17 +2,39 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { and, eq } from "drizzle-orm";
 
+import type { MembershipRole } from "@/lib/db/schema";
+
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
 vi.mock("@/lib/audit/record", () => ({ record: async () => undefined }));
 
-const session = { id: "schedule-user", email: "owner@example.test", tenantId: "", role: "owner" };
+const session = {
+  id: "schedule-user",
+  email: "owner@example.test",
+  tenantId: "",
+  role: "owner" as MembershipRole,
+};
 
-vi.mock("@/lib/auth/session", () => ({ requireUser: async () => session }));
+/**
+ * Signed in, and nothing else stubbed.
+ *
+ * The action asks `requireAccess` what this role may do, and that answer comes
+ * from the real permission code reading the real table — so mocking the check
+ * itself would test the mock. Only the session is invented; `requireUser` then
+ * names the company for the queries below, exactly as it does in a request.
+ */
+vi.mock("@/auth", () => ({
+  auth: async () => ({
+    user: { id: session.id, email: session.email, name: "Test", image: null },
+    tenantId: session.tenantId,
+    role: session.role,
+  }),
+}));
 
 const { getDb, schema } = await import("@/lib/db");
 const { savePeriodSchedule } = await import("@/lib/periods/actions");
 const { loadPeriodConfiguration } = await import("@/lib/periods/ensure");
 const { PERIODS_CHANNEL, SCHEDULE_KEY } = await import("@/lib/periods/schedule");
+const { inRequest } = await import("./helpers/request-scope");
 
 /**
  * Saving the schedule is the only way a client turns a granularity on, and it
@@ -49,7 +71,7 @@ async function asOwnerOfFreshTenant(): Promise<string> {
 }
 
 describe.skipIf(!HAS_DB)("saving the period schedule", () => {
-  it("opens what it has just turned on, without waiting for the scheduler", async () => {
+  it("opens what it has just turned on, without waiting for the scheduler", inRequest(async () => {
     const tenantId = await asOwnerOfFreshTenant();
 
     const result = await savePeriodSchedule({
@@ -85,9 +107,9 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
       .where(eq(schema.periods.tenantId, tenantId));
 
     expect(after.filter((row) => row.granularity === "quarter")).toHaveLength(1);
-  });
+  }));
 
-  it("stores the schedule where the rest of the configuration lives", async () => {
+  it("stores the schedule where the rest of the configuration lives", inRequest(async () => {
     const tenantId = await asOwnerOfFreshTenant();
 
     await savePeriodSchedule({
@@ -118,9 +140,9 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
     const { schedule } = await loadPeriodConfiguration(tenantId);
 
     expect(schedule.fiscalYearStartMonth).toBe(4);
-  });
+  }));
 
-  it("refuses a schedule that opens nothing", async () => {
+  it("refuses a schedule that opens nothing", inRequest(async () => {
     await asOwnerOfFreshTenant();
 
     const result = await savePeriodSchedule({
@@ -132,9 +154,9 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("At least one period");
-  });
+  }));
 
-  it("refuses a month outside the calendar rather than moving the year to one", async () => {
+  it("refuses a month outside the calendar rather than moving the year to one", inRequest(async () => {
     await asOwnerOfFreshTenant();
 
     const result = await savePeriodSchedule({
@@ -145,9 +167,9 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
     });
 
     expect(result.ok).toBe(false);
-  });
+  }));
 
-  it("is the owner's alone", async () => {
+  it("refuses a role the owner has not given the schedule to", inRequest(async () => {
     await asOwnerOfFreshTenant();
     session.role = "accountant";
 
@@ -159,6 +181,8 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("Only the owner");
-  });
+    // The refusal names the role's permission, not ownership: since the owner
+    // can hand this section to a role, "only the owner" stopped being true.
+    expect(result.message).toContain("Your role cannot change the period schedule");
+  }));
 });

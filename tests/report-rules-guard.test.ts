@@ -7,6 +7,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Drive publishing is the one part of a run that reaches outside; it has its
 // own retry and is not what this is about.
+// The report writes its workbook to Blob storage, which wants credentials the
+// test environment has no reason to hold. The bytes are not what these tests
+// are about — the rows that produced them are — so the store is stubbed and
+// the run gets a key back, as it would in production.
+vi.mock("@vercel/blob", () => ({
+  put: async (key: string) => ({ pathname: key, url: `https://blob.test/${key}` }),
+  del: async () => undefined,
+}));
 vi.mock("@/lib/google/publish", () => ({ publishRun: async () => ({ uploaded: 0, failed: 0 }) }));
 
 const { getDb, schema } = await import("@/lib/db");
@@ -35,11 +43,16 @@ const CHANNELS = [
  * hundred warnings nobody reads. It has to refuse instead.
  */
 describe.skipIf(!HAS_DB)("building without the channel rules", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
   let tenantId = "";
 
   beforeAll(async () => {
-    const [tenant] = await db
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Rules guard test", slug: `rules-${process.pid}` })
       .returning({ id: schema.tenants.id });
@@ -58,7 +71,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
       if (!classified.ok) throw new Error(classified.message);
 
-      const [row] = await db
+      const [row] = await db()
         .insert(schema.sourceFiles)
         .values({
           tenantId,
@@ -84,7 +97,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
   }, 300_000);
 
   afterAll(async () => {
-    if (tenantId) await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+    if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   });
 
   it("refuses, and names the rules that are missing", async () => {
@@ -106,7 +119,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
     // Nothing was written: a failed run must not leave a workbook behind that
     // looks like a result.
-    const artifacts = await db
+    const artifacts = await db()
       .select({ id: schema.reportArtifacts.id })
       .from(schema.reportArtifacts)
       .innerJoin(
@@ -130,7 +143,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
     expect(outcome.ok).toBe(true);
 
-    const [run] = await db
+    const [run] = await db()
       .select({ stats: schema.reportRuns.stats, status: schema.reportRuns.status })
       .from(schema.reportRuns)
       .where(

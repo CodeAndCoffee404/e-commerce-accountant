@@ -5,6 +5,14 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+// The report writes its workbook to Blob storage, which wants credentials the
+// test environment has no reason to hold. The bytes are not what these tests
+// are about — the rows that produced them are — so the store is stubbed and
+// the run gets a key back, as it would in production.
+vi.mock("@vercel/blob", () => ({
+  put: async (key: string) => ({ pathname: key, url: `https://blob.test/${key}` }),
+  del: async () => undefined,
+}));
 vi.mock("@/lib/google/publish", () => ({ publishRun: async () => ({ uploaded: 0, failed: 0 }) }));
 
 const { getDb, schema } = await import("@/lib/db");
@@ -28,11 +36,16 @@ const PERIOD = "2026.07 July";
  * the two channels' rows.
  */
 describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
   let tenantId = "";
 
   beforeAll(async () => {
-    const [tenant] = await db
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Report settings test", slug: `rset-${process.pid}` })
       .returning({ id: schema.tenants.id });
@@ -41,7 +54,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
     await seedReferenceData(tenantId);
 
     // Cdiscount marked optional, exactly as the settings page stores it.
-    await db.insert(schema.channelRules).values({
+    await db().insert(schema.channelRules).values({
       tenantId,
       channel: "reports",
       key: "off_amazon_sales",
@@ -63,7 +76,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
 
       if (!classified.ok) throw new Error(classified.message);
 
-      const [row] = await db
+      const [row] = await db()
         .insert(schema.sourceFiles)
         .values({
           tenantId,
@@ -89,7 +102,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
   }, 300_000);
 
   afterAll(async () => {
-    if (tenantId) await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+    if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   });
 
   it("offers the period with two of three channels in", async () => {
@@ -112,7 +125,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
 
     expect(outcome.ok).toBe(true);
 
-    const [run] = await db
+    const [run] = await db()
       .select({ stats: schema.reportRuns.stats })
       .from(schema.reportRuns)
       .where(eq(schema.reportRuns.tenantId, tenantId));
@@ -123,7 +136,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
   }, 300_000);
 
   it("a disabled report vanishes from the cards and refuses to run", async () => {
-    await db.insert(schema.channelRules).values({
+    await db().insert(schema.channelRules).values({
       tenantId,
       channel: "reports",
       key: "sales_by_currency",

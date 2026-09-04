@@ -43,11 +43,16 @@ const CHANNELS = [
 ];
 
 describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
   let tenantId = "";
 
   afterAll(async () => {
-    if (tenantId) await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+    if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
   });
 
   async function upload(relative: string) {
@@ -62,7 +67,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
 
     if (!classified.ok) throw new Error(`${filename}: ${classified.message}`);
 
-    const [row] = await db
+    const [row] = await db()
       .insert(schema.sourceFiles)
       .values({
         tenantId,
@@ -89,7 +94,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
   }
 
   it("names the missing channels, then offers the period once they are all in", async () => {
-    const [tenant] = await db
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Availability test", slug: `avail-${process.pid}` })
       .returning({ id: schema.tenants.id });
@@ -125,7 +130,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
   }, 300_000);
 
   it("will not offer the Zoho invoice until all ten marketplaces are in", async () => {
-    const [tenant] = await db
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({
         name: "Zoho availability test",
@@ -156,7 +161,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
         },
       ]);
     } finally {
-      await db.delete(schema.tenants).where(eq(schema.tenants.id, tenant.id));
+      await db().delete(schema.tenants).where(eq(schema.tenants.id, tenant.id));
       tenantId = previous;
     }
   }, 300_000);

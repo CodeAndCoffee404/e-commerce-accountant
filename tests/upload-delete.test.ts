@@ -11,12 +11,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 // part that is genuinely intricate — runs for real.
 const session = { tenantId: "", userId: "test-user" };
 
-vi.mock("@/lib/auth/session", () => ({
-  requireUser: async () => ({
-    id: session.userId,
-    name: "Test",
-    email: "test@example.invalid",
-    image: null,
+// Signed in, and nothing else about access stubbed: the action asks the real
+// permission code what an owner may do, and `requireUser` names the company
+// for the queries below, exactly as it does in a request.
+vi.mock("@/auth", () => ({
+  auth: async () => ({
+    user: { id: session.userId, name: "Test", email: "test@example.invalid", image: null },
     tenantId: session.tenantId,
     role: "owner" as const,
   }),
@@ -32,6 +32,7 @@ const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { availablePeriods } = await import("@/lib/reports/queries");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { deleteUpload } = await import("@/lib/uploads/delete");
+const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -41,10 +42,15 @@ const FIXTURE = "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv
 const PERIOD = "2026.07 July";
 
 describe.skipIf(!HAS_DB)("deleting an upload", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
 
   beforeAll(async () => {
-    const [tenant] = await db
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Delete test", slug: `del-${process.pid}` })
       .returning({ id: schema.tenants.id });
@@ -54,7 +60,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
 
   afterAll(async () => {
     if (session.tenantId) {
-      await db.delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
+      await db().delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
     }
   });
 
@@ -71,7 +77,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
 
     if (!classified.ok) throw new Error(classified.message);
 
-    const [row] = await db
+    const [row] = await db()
       .insert(schema.sourceFiles)
       .values({
         tenantId: session.tenantId,
@@ -98,7 +104,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
   }
 
   function currentRows(fileId: string) {
-    return db
+    return db()
       .select({ id: schema.transactions.id })
       .from(schema.transactions)
       .where(
@@ -109,7 +115,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
       );
   }
 
-  it("puts the replaced upload back when the replacement is deleted", async () => {
+  it("puts the replaced upload back when the replacement is deleted", inRequest(async () => {
     const first = await upload("-first");
     const second = await upload("-second");
 
@@ -123,14 +129,14 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     expect(result.ok).toBe(true);
     expect(result.message).toContain(first.filename);
 
-    const [gone] = await db
+    const [gone] = await db()
       .select({ id: schema.sourceFiles.id })
       .from(schema.sourceFiles)
       .where(eq(schema.sourceFiles.id, second.id));
 
     expect(gone).toBeUndefined();
 
-    const [restored] = await db
+    const [restored] = await db()
       .select({
         status: schema.sourceFiles.status,
         supersededBy: schema.sourceFiles.supersededByFileId,
@@ -143,9 +149,9 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     expect(await currentRows(first.id)).toHaveLength(first.rows);
 
     await deleteUpload(first.id);
-  });
+  }));
 
-  it("restores nothing when a middle link of the chain is deleted", async () => {
+  it("restores nothing when a middle link of the chain is deleted", inRequest(async () => {
     // A replaced B replaced C is the history of one period corrected twice.
     // Deleting B — already replaced itself — must not resurrect A: C still
     // counts, and a period with two current files reports every figure twice.
@@ -165,7 +171,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     expect(await currentRows(c.id)).toHaveLength(c.rows);
     expect(await currentRows(a.id)).toHaveLength(0);
 
-    const [first] = await db
+    const [first] = await db()
       .select({
         status: schema.sourceFiles.status,
         supersededBy: schema.sourceFiles.supersededByFileId,
@@ -186,12 +192,12 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     expect(await currentRows(a.id)).toHaveLength(a.rows);
 
     await deleteUpload(a.id);
-  });
+  }));
 
-  it("refuses while a report was built from the file, and names it", async () => {
+  it("refuses while a report was built from the file, and names it", inRequest(async () => {
     const file = await upload("-used");
 
-    const [run] = await db
+    const [run] = await db()
       .insert(schema.reportRuns)
       .values({
         tenantId: session.tenantId,
@@ -203,7 +209,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
       })
       .returning({ id: schema.reportRuns.id });
 
-    await db
+    await db()
       .insert(schema.reportRunSources)
       .values({ tenantId: session.tenantId, reportRunId: run.id, sourceFileId: file.id });
 
@@ -217,15 +223,15 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     expect(await currentRows(file.id)).toHaveLength(file.rows);
 
     // And once the report goes, the file can go too.
-    await db.delete(schema.reportRuns).where(eq(schema.reportRuns.id, run.id));
+    await db().delete(schema.reportRuns).where(eq(schema.reportRuns.id, run.id));
 
     const allowed = await deleteUpload(file.id);
 
     expect(allowed.ok).toBe(true);
     expect(await currentRows(file.id)).toHaveLength(0);
-  });
+  }));
 
-  it("takes the period off the report cards once its last file is gone", async () => {
+  it("takes the period off the report cards once its last file is gone", inRequest(async () => {
     const file = await upload("-last");
 
     let state = await availablePeriods(session.tenantId);
@@ -238,5 +244,5 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
     state = await availablePeriods(session.tenantId);
     expect(state.off_amazon_sales.ready).toEqual([]);
     expect(state.off_amazon_sales.blocked).toEqual([]);
-  });
+  }));
 }, 300_000);
