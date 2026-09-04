@@ -68,7 +68,14 @@ export type SkuDecision =
    * a different item name than the one the source just sent. Never invoiced —
    * a mapping that no longer describes what arrived is not a mapping.
    */
-  | { kind: "mismatch"; expectedNames: string[] };
+  | { kind: "mismatch"; expectedNames: string[] }
+  /**
+   * A row was found and it does not say what to bill: no invoice code, or no
+   * item name. Never invoiced either — falling back to the channel's own code
+   * puts a raw Shopify string where the client's catalogue should be, and an
+   * empty item name is a line Zoho cannot match to anything.
+   */
+  | { kind: "incomplete" };
 
 /**
  * Names are compared as a person would read them: case and spacing are not
@@ -115,6 +122,13 @@ export function decideSku(
   if (!mapping) return { kind: "mismatch", expectedNames: candidates.map((e) => e.sourceName) };
 
   if (mapping.isIgnored) return { kind: "ignore" };
+
+  // Only where the mapping is being checked — the channels that send a name to
+  // check it against. Elsewhere a half-filled row still falls back to the raw
+  // code, exactly as it always has.
+  if (sourceName !== undefined && (!mapping.targetSku || !mapping.itemName)) {
+    return { kind: "incomplete" };
+  }
 
   return {
     kind: "map",

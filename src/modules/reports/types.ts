@@ -89,9 +89,9 @@ export type ReportDefinition = {
  * It carries the pair rather than the code alone because for a channel that
  * reports an item name the mapping is a pair: a code and the name it is
  * expected to arrive with. `unmapped` is no row at all, `mismatch` is rows
- * that exist and disagree — a different question, needing a different answer,
- * and telling them apart is what keeps the gate from asking the same thing
- * forever.
+ * that exist and disagree, `incomplete` is a row that does not say what to
+ * bill — each a different question needing a different answer, and telling
+ * them apart is what keeps the gate from asking the same thing forever.
  */
 export type UnmappedSku = {
   /** Stable identity of the pair, for lists and for drafts against them. */
@@ -100,7 +100,7 @@ export type UnmappedSku = {
   sourceSku: string;
   /** The name that arrived with it; empty where the channel reports none. */
   sourceName: string;
-  problem: "unmapped" | "mismatch";
+  problem: "unmapped" | "mismatch" | "incomplete";
   /** What the rows under that code expect instead. Empty unless a mismatch. */
   expectedNames: string[];
 };

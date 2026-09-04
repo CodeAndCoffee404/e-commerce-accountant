@@ -76,6 +76,9 @@ const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
 
 const VAT_BUCKET_ORDER = ["ES", "DE", "FR", "IT", "PL", "OTHER"] as const;
 
+/** Where the shop's goods post in Zoho. The name is the account, exactly. */
+const SALES_ACCOUNT = "Shopify Geyser Sales";
+
 /**
  * The names of the Zoho accounts these lines post to, not labels: country in
  * the middle, scheme last, that capitalisation — the same shape the Amazon and
@@ -359,15 +362,19 @@ export function generateShopifyZohoInvoice(
     }
 
     // Unreachable in a normal build — `unmappedSkus` stops the run and asks
-    // first — but if it is ever reached, a mapping that disagrees about what
-    // the code is must not decide what to bill. Left visible rather than
-    // dropped quietly.
-    if (decision.kind === "mismatch") {
+    // first — but if it is ever reached, nothing here may invent what to bill.
+    // A raw Shopify code in the SKU column and a blank Item Name are both a
+    // line the client's catalogue does not contain, and Zoho reads Item Name
+    // as a lookup: the file fails on import, or worse, does not.
+    if (decision.kind !== "map") {
       warnings.push(
-        `Shopify invoice: ${item.key} arrived as "${item.name}", but SKU mapping expects ` +
-          `${decision.expectedNames.map((expected) => `"${expected}"`).join(" or ")}`,
+        decision.kind === "mismatch"
+          ? `Shopify invoice: ${item.key} arrived as "${item.name}", but SKU mapping expects ` +
+            `${decision.expectedNames.map((expected) => `"${expected}"`).join(" or ")}`
+          : `Shopify invoice: ${item.key} ("${item.name}") has no complete SKU mapping — ` +
+            "an invoice code and an item name are both needed",
       );
-      skip("Shopify invoice: the mapping disagrees about what this SKU is");
+      skip("Shopify invoice: no complete SKU mapping for this item");
       continue;
     }
 
@@ -378,8 +385,7 @@ export function generateShopifyZohoInvoice(
     // reached it — the same money Off-Amazon Sales bills as the order's total.
     const billed = billedPerLine.get(row.id) ?? row.gross;
     const unitPrice = billed.dividedBy(quantity);
-    const sku = decision.kind === "map" ? decision.targetSku : item.key;
-    const itemName = decision.kind === "map" ? decision.itemName : "";
+    const { targetSku: sku, itemName } = decision;
     const key = `${sku}|${unitPrice.toFixed(10)}`;
     const existing = productAgg.get(key);
 
@@ -496,7 +502,7 @@ export function generateShopifyZohoInvoice(
         "",
         line.quantity.toFixed(),
         line.price.toFixed(2),
-        "Shopify Sales",
+        SALES_ACCOUNT,
       ]);
     }
   }
@@ -571,7 +577,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): Unmappe
 
     const decision = decideSku(rules, "shopify_geyser", item.key, item.name);
 
-    if (decision.kind !== "passthrough" && decision.kind !== "mismatch") continue;
+    if (decision.kind === "map" || decision.kind === "ignore") continue;
 
     // The pair is the identity, not the code: one code can be two products,
     // and each needs its own answer.
@@ -581,7 +587,12 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): Unmappe
       key,
       sourceSku: item.key,
       sourceName: item.name,
-      problem: decision.kind === "mismatch" ? "mismatch" : "unmapped",
+      problem:
+        decision.kind === "mismatch"
+          ? "mismatch"
+          : decision.kind === "incomplete"
+            ? "incomplete"
+            : "unmapped",
       expectedNames: decision.kind === "mismatch" ? decision.expectedNames : [],
     });
   }

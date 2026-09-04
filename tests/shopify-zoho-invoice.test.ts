@@ -242,30 +242,30 @@ function januaryRows(): LedgerRow[] {
 describe("generateShopifyZohoInvoice", () => {
   it("aggregates every line item by (SKU, unit price), one row per item — no combo collapsing", () => {
     const result = generateShopifyZohoInvoice(januaryRows(), context);
-    const products = result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales");
+    const products = result.sheets[0].rows.filter((r) => r[10] === "Shopify Geyser Sales");
     const bySku = new Map(products.map((r) => [r[6], r]));
 
     expect(bySku.get("CART-1")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge", "CART-1", "", "3", "45.90", "Shopify Sales",
+      "Geyser Euro Cartridge", "CART-1", "", "3", "45.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("CART-2")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge 2-Pack", "CART-2", "", "3", "72.90", "Shopify Sales",
+      "Geyser Euro Cartridge 2-Pack", "CART-2", "", "3", "72.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("CART-4")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Cartridge 4-Pack", "CART-4", "", "1", "123.90", "Shopify Sales",
+      "Geyser Euro Cartridge 4-Pack", "CART-4", "", "1", "123.90", "Shopify Geyser Sales",
     ]);
     expect(bySku.get("FILTER-KIT")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Filter", "FILTER-KIT", "", "2", "45.90", "Shopify Sales",
+      "Geyser Euro Filter", "FILTER-KIT", "", "2", "45.90", "Shopify Geyser Sales",
     ]);
     // The order #171112 "Filter" line stays its own product row — no combo
     // collapsing into "Filter with 1 extra Cartridge", confirmed out of scope.
     expect(bySku.get("FILTER")).toEqual([
       "2026-01-31 00:00:00", "INV-GeyserWebsite-01.26", "Geyser Website", "EUR", "1",
-      "Geyser Euro Filter Only", "FILTER", "", "1", "89.90", "Shopify Sales",
+      "Geyser Euro Filter Only", "FILTER", "", "1", "89.90", "Shopify Geyser Sales",
     ]);
     expect(products).toHaveLength(5);
 
@@ -371,7 +371,7 @@ describe("generateShopifyZohoInvoice", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
     const vat = built.sheets[0].rows.filter((line) => String(line[10]).startsWith("VAT"));
 
     expect(goods).toHaveLength(1);
@@ -476,7 +476,7 @@ describe("generateShopifyZohoInvoice", () => {
 
     const result = generateShopifyZohoInvoice(rows, { ...context, rules: ignoredRules });
 
-    expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Sales")).toEqual([]);
+    expect(result.sheets[0].rows.filter((r) => r[10] === "Shopify Geyser Sales")).toEqual([]);
     const vatLine = result.sheets[0].rows.find((r) => r[7] === "VAT FR OSS");
     expect(vatLine?.[9]).toBe("16.67");
   });
@@ -666,7 +666,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
 
     expect(goods).toHaveLength(1);
     expect(goods[0][9]).toBe("35.90");
@@ -691,7 +691,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
     const billed = goods.reduce(
       (total, line) => total + Number(line[9]) * Number(line[8]),
       0,
@@ -720,7 +720,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
 
     // One line, priced at what the buyer paid for the whole order.
     expect(goods).toHaveLength(1);
@@ -747,7 +747,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
     const billed = goods.reduce((total, line) => total + Number(line[9]) * Number(line[8]), 0);
 
     expect(billed.toFixed(2)).toBe("121.75");
@@ -774,7 +774,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
 
     const built = generateShopifyZohoInvoice(rows, context).sheets[0].rows;
     const billed = built
-      .filter((line) => line[10] === "Shopify Sales")
+      .filter((line) => line[10] === "Shopify Geyser Sales")
       .reduce((total, line) => total + Number(line[9]) * Number(line[8]), 0);
 
     expect(billed.toFixed(2)).toBe("38.85");
@@ -796,10 +796,79 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     ];
 
     const built = generateShopifyZohoInvoice(rows, context);
-    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
 
     expect(goods[0][9]).toBe("45.90");
     expect(built.warnings.join(" ")).toContain("no readable total");
+  });
+
+  it("asks rather than billing an item whose mapping does not say what to bill", () => {
+    // A row exists but has no invoice code, or no item name. Falling back to
+    // the raw Shopify code puts a string the client's catalogue does not
+    // contain into the SKU column, and Zoho reads Item Name as a lookup — so
+    // this is a question for the gate, not something to paper over.
+    for (const half of [
+      { targetSku: null, itemName: "Geyser Euro Cartridge" },
+      { targetSku: "CART-1", itemName: null },
+    ]) {
+      const rules2: RulesSnapshot = {
+        ...rules,
+        skuMappings: [
+          {
+            channel: "shopify_geyser",
+            sourceSku: "Geyser EURO Cartridge - 1 Cartridge",
+            sourceName: "Geyser EURO Cartridge - 1 Cartridge",
+            isIgnored: false,
+            ...half,
+          },
+        ],
+      };
+      const rows = [
+        orderHead({
+          name: "#1",
+          country: "FR",
+          total: "45.90",
+          taxes: "7.65",
+          taxLabel: "FR TVA 20%",
+          itemName: "Geyser EURO Cartridge - 1 Cartridge",
+          price: "45.90",
+          qty: 1,
+        }),
+      ];
+
+      expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules2)).toMatchObject([
+        { sourceSku: "Geyser EURO Cartridge - 1 Cartridge", problem: "incomplete" },
+      ]);
+
+      // And a build that somehow got past the gate bills nothing under it.
+      const built = generateShopifyZohoInvoice(rows, { ...context, rules: rules2 });
+
+      expect(built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales")).toEqual([]);
+      expect(built.warnings.join(" ")).toContain("no complete SKU mapping");
+    }
+  });
+
+  it("never bills an item with no mapping row at all", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "45.90",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Brand New Thing",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Geyser Sales");
+
+    // It used to reach the invoice under its raw Shopify text, with a blank
+    // Item Name beside it.
+    expect(goods).toEqual([]);
+    expect(built.warnings.join(" ")).toContain("Geyser EURO Brand New Thing");
   });
 
   it("does not flag a mapped item, and ignores a hand-made order's items", () => {

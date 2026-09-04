@@ -439,6 +439,10 @@ function SkuGateModal({
                                     .map((expected) => expected || "(no name yet)")
                                     .join(", ")}
                                 </Typography.Text>
+                              ) : sku.problem === "incomplete" ? (
+                                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                                  mapped, but without an invoice code or an item name
+                                </Typography.Text>
                               ) : null}
                             </Space>
                           ),
