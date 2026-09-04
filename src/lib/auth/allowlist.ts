@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { acrossTenants, withTenant } from "@/lib/db/tenant";
 import type { MembershipRole } from "@/lib/db/schema";
 import { seedReferenceData } from "@/lib/reference/seed";
+import { GEYSER } from "@/modules/companies/geyser";
 
 /**
  * The MVP serves one client, so a sign-in that is bootstrapped rather than
@@ -214,12 +215,16 @@ async function ensureDefaultTenant(): Promise<string> {
 
   const [created] = await getDb()
     .insert(schema.tenants)
-    .values({ name: DEFAULT_TENANT.name, slug: DEFAULT_TENANT.slug })
+    .values({
+      name: DEFAULT_TENANT.name,
+      slug: DEFAULT_TENANT.slug,
+      profileKey: GEYSER.key,
+    })
     .returning({ id: schema.tenants.id });
 
   // Reference data comes with the tenant. An empty rate table would let the
   // first report run and quietly produce nothing.
-  await seedReferenceData(created.id);
+  await seedReferenceData(created.id, GEYSER);
 
   return created.id;
 }

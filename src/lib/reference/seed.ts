@@ -1,9 +1,31 @@
 import { getDb, schema } from "@/lib/db";
 
+import { eq } from "drizzle-orm";
+
 import { companyProfile } from "@/modules/companies/registry";
 import type { CompanyProfile } from "@/modules/companies/types";
 
 import { RULES_EFFECTIVE_FROM } from "./seed-data";
+
+/**
+ * The profile a company was created with.
+ *
+ * There is no sensible default: seeding a company from the wrong profile puts
+ * another company's VAT registrations in its tables, and it would print them
+ * on its first report with nothing to notice. So the profile is looked up, and
+ * a company whose key names none refuses rather than falling back.
+ */
+export async function profileOf(tenantId: string): Promise<CompanyProfile> {
+  const [row] = await getDb()
+    .select({ profileKey: schema.tenants.profileKey })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, tenantId))
+    .limit(1);
+
+  if (!row) throw new Error("This company no longer exists.");
+
+  return companyProfile(row.profileKey);
+}
 
 export type SeedResult = {
   vatRates: number;
@@ -25,7 +47,7 @@ export type SeedResult = {
  */
 export async function seedReferenceData(
   tenantId: string,
-  profile: CompanyProfile = companyProfile("geyser"),
+  profile: CompanyProfile,
 ): Promise<SeedResult> {
   const db = getDb();
   const { vatRates, sellerVatNumbers, skuMappings, ignoredSkus, channelRules } = profile.seeds;

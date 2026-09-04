@@ -75,13 +75,6 @@ const MARKETPLACE_COUNTRIES: Record<string, string> = {
  */
 const ARRIVAL_ALIASES: Record<string, string> = { MC: "FR" };
 
-/**
- * Arrival countries big enough for a Zoho ledger line of their own. Everything
- * else pools into "VAT OSS Other countries" — a fixed list by agreement, not a
- * setting: it does not grow on its own because a new country turned up in a
- * file. The same idea, and mostly the same list, as the Shopify invoice.
- */
-
 
 /** The bucket everything outside that list is summed into. */
 const OSS_OTHER = "OTHER";
@@ -233,7 +226,6 @@ function rateOf(context: ReportContext, currency: string): Decimal | null {
   return rate ? new Decimal(rate) : null;
 }
 
-/** `INV-Amz DE-07.26` — the number the client's accounting expects. */
 /**
  * The Amazon facts of the company this report is for. Throws rather than
  * defaulting: a company that does not sell on Amazon has no answer to which
@@ -247,6 +239,7 @@ function amazonOf(context: ReportContext): AmazonProfile {
   return context.company.amazon;
 }
 
+/** `INV-Amz DE-07.26` — the number the client's accounting expects. */
 export function invoiceNumber(prefix: string, country: string, periodEnd: string): string {
   const [year, month] = periodEnd.split("-");
 

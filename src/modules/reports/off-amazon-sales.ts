@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
+import type { ShopifyProfile } from "@/modules/companies/types";
 
 import {
   arrivalCountryOf,
@@ -68,6 +69,10 @@ export function generateOffAmazonSales(
   rows: readonly LedgerRow[],
   context: ReportContext,
 ): GeneratorResult {
+  // At the top, not inside the row loop: a company with no shop should be
+  // refused before anything is built, the way the Amazon and Allegro invoices
+  // refuse — not part-way through, on whichever row happens to come first.
+  const shop = shopifyOf(context);
   const skipped: Skipped = new Map();
   const warnings: string[] = [];
   const output: (string | number | null)[][] = [];
@@ -79,7 +84,7 @@ export function generateOffAmazonSales(
         : row.dataset === "cdiscount"
           ? cdiscountRow(row, context, skipped, warnings)
           : row.dataset === "shopify_geyser"
-            ? shopifyRow(row, context, skipped, warnings)
+            ? shopifyRow(shop, row, context, skipped, warnings)
             : skip(skipped, `Channel ${row.dataset} is not part of this report`);
 
     if (mapped) output.push(mapped);
@@ -286,13 +291,12 @@ export function parseShopifyTaxRate(label: string | undefined): Decimal | null {
 }
 
 function shopifyRow(
+  shop: ShopifyProfile,
   row: LedgerRow,
   context: ReportContext,
   skipped: Skipped,
   warnings: string[],
 ): (string | number | null)[] | null {
-  const shop = shopifyOf(context);
-
   // One row per order, not per line item.
   //
   // The ledger keeps line items, which is the right grain for a ledger — a

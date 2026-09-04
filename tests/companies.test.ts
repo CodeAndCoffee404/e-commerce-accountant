@@ -167,6 +167,32 @@ describe.skipIf(!HAS_DB)("moving between companies", () => {
     expect(updated).toEqual([{ tenantId: a }]);
   });
 
+  it("records that the person has arrived, so the Team screen stops calling them absent", async () => {
+    const a = await acrossTenants(() => company("lambda"));
+    const email = `arrived-${stamp}@example.invalid`;
+    const userId = await acrossTenants(() => person(email));
+
+    // Invited after their last sign-in, which is why there is no membership:
+    // only signing in writes one, and this person is already signed in.
+    await acrossTenants(() =>
+      getDb().insert(schema.allowedEmails).values({ tenantId: a, email, role: "accountant" }),
+    );
+
+    session.userId = userId;
+    session.email = email;
+
+    expect((await switchCompany(a)).ok).toBe(true);
+
+    const members = await acrossTenants(() =>
+      getDb()
+        .select({ userId: schema.memberships.userId, role: schema.memberships.role })
+        .from(schema.memberships)
+        .where(eq(schema.memberships.tenantId, a)),
+    );
+
+    expect(members).toEqual([{ userId, role: "accountant" }]);
+  });
+
   it("refuses when nobody is signed in", async () => {
     session.userId = null;
     session.email = null;

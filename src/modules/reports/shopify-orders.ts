@@ -39,21 +39,6 @@ export function shopifyOf(context: ReportContext): ShopifyProfile {
   return context.company.shopify;
 }
 
-/**
- * Orders an employee wrote up by hand in the admin, through the draft-order
- * screen. Shopify shows them as ordinary orders once completed — only the
- * export still says where they came from. This is how a warranty replacement
- * and an adapter ship.
- */
-
-
-/**
- * The shop takes card payments only. An order marked paid by any of these was
- * not paid at all — it is the known mistake on a warranty replacement, which
- * should have been zeroed with a 100% discount and was marked paid instead.
- */
-
-
 /** The order-level columns this judgement needs; Shopify writes them on an order's first line. */
 export type ShopifyOrder = {
   source: string;
@@ -128,8 +113,8 @@ export function notASaleReason(report: string, why: NotASale): string {
  * It lived in an editable rule while the invoice quietly hard-coded "ES" for
  * the domestic account. Moving the warehouse in Settings would then have sent
  * the new country's domestic VAT to Spain's account, silently. The country is
- * a fact about the business, not a monthly setting — so it is here, and both
- * uses read the same constant.
+ * a fact about the business, not a monthly setting — so it lives in the
+ * company profile, and both uses read it from there.
  * ------------------------------------------------------------------------ */
 
 /** Sold and shipped without leaving the departure country: the home regime. */

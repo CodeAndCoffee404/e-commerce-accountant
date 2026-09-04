@@ -43,8 +43,6 @@ const EXEMPT: Record<string, string> = {
     "the admin shell: above the companies, so it names none — its guard is requireSuperAdmin",
   "src/app/(admin)/admin/page.tsx":
     "the list of companies: it reads counts and dates through acrossTenants, never a company's rows",
-  "src/lib/auth/companies.ts":
-    "the switcher: lists the companies a person is in and moves between them, so it precedes the choice",
   "src/app/api/auth/[...nextauth]/route.ts": "Auth.js's own handlers; sign-in names the company",
   "src/lib/auth/actions.ts": "starts and ends a session; touches no company data",
 };

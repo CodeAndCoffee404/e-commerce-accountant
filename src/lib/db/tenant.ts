@@ -24,9 +24,8 @@ import { rootDb, type Executor } from "./index";
 
 type Scope = {
   /**
-   * The company, or null in a scope that deliberately spans companies — the
-   * sign-in path, which has no company yet, and the nightly job, which walks
-   * all of them.
+   * The company, or null in a scope that deliberately spans companies — see
+   * `acrossTenants` below for who those are and why.
    */
   tenantId: string | null;
   /** The transaction this scope's queries run on, and which named the company. */

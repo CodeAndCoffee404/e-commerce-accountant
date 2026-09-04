@@ -17,7 +17,8 @@ export type CompanySummary = {
   id: string;
   name: string;
   slug: string;
-  members: number;
+  /** How many addresses may currently come in — the access list, not arrivals. */
+  people: number;
   lastUploadAt: Date | null;
   lastReportAt: Date | null;
 };
@@ -26,7 +27,7 @@ export async function allCompanies(): Promise<CompanySummary[]> {
   return acrossTenants(async () => {
     const db = getDb();
 
-    const [companies, members, uploads, reports] = await Promise.all([
+    const [companies, people, uploads, reports] = await Promise.all([
       db
         .select({ id: schema.tenants.id, name: schema.tenants.name, slug: schema.tenants.slug })
         .from(schema.tenants)
@@ -53,17 +54,15 @@ export async function allCompanies(): Promise<CompanySummary[]> {
         .groupBy(schema.reportRuns.tenantId),
     ]);
 
-    const memberCount = new Map(members.map((row) => [row.tenantId, row.n]));
+    const peopleCount = new Map(people.map((row) => [row.tenantId, row.n]));
     const lastUpload = new Map(uploads.map((row) => [row.tenantId, row.at]));
     const lastReport = new Map(reports.map((row) => [row.tenantId, row.at]));
 
     return companies.map((company) => ({
       ...company,
-      members: memberCount.get(company.id) ?? 0,
+      people: peopleCount.get(company.id) ?? 0,
       lastUploadAt: lastUpload.get(company.id) ?? null,
       lastReportAt: lastReport.get(company.id) ?? null,
     }));
   });
 }
-
-

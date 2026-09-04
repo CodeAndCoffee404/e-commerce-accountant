@@ -483,7 +483,7 @@ export function generateShopifyZohoInvoice(
       output.push([
         invoiceDate,
         invoiceNo,
-        "Geyser Website",
+        shop.zoho.customerName,
         "EUR",
         "1",
         product.itemName,
@@ -506,7 +506,7 @@ export function generateShopifyZohoInvoice(
     output.push([
       invoiceDate,
       invoiceNo,
-      "Geyser Website",
+      shop.zoho.customerName,
       "EUR",
       "1",
       // Item Name and SKU stay empty, and the name goes in Item Desc: Zoho
@@ -572,7 +572,7 @@ function unmappedSkus(
     if (row.gross === null) continue;
     if (row.quantity === null || row.quantity.isZero()) continue;
 
-    const decision = decideSku(rules, "shopify_geyser", item.key, item.name);
+    const decision = decideSku(rules, shop.dataset, item.key, item.name);
 
     if (decision.kind === "map" || decision.kind === "ignore") continue;
 

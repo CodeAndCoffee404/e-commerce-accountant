@@ -214,8 +214,8 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const entered = mine.find((company) => company.slug === `entered-${stamp}`);
     const untouched = mine.find((company) => company.slug === `made-${stamp}`);
 
-    expect(entered?.members).toBe(2);
-    expect(untouched?.members).toBe(1);
+    expect(entered?.people).toBe(2);
+    expect(untouched?.people).toBe(1);
     // Nothing has been uploaded to any of them, and the list says so rather
     // than inventing a date.
     expect(mine.every((company) => company.lastUploadAt === null)).toBe(true);

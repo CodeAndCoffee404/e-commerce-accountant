@@ -170,9 +170,12 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
         action: "company.entered",
         entity: "tenant",
         entityId: company.id,
-        payload: before
-          ? { replaced: { role: before.role, isActive: before.isActive } }
-          : { granted: "owner" },
+        payload:
+          !before
+            ? { granted: "owner" }
+            : before.role === "owner" && before.isActive
+              ? {}
+              : { replaced: { role: before.role, isActive: before.isActive } },
       },
     );
   });

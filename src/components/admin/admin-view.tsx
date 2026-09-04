@@ -82,7 +82,7 @@ export function AdminView({
               ),
             },
             { title: "Short name", dataIndex: "slug" },
-            { title: "People", dataIndex: "members", align: "right" },
+            { title: "People", dataIndex: "people", align: "right" },
             {
               title: "Last upload",
               dataIndex: "lastUploadAt",
