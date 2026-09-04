@@ -32,9 +32,9 @@ import type { ReportModule, UnmappedSku } from "./types";
  *
  * A single order's other columns (`Source`, used to drop draft orders) are
  * likewise only written on that first line, but every one of an order's
- * lines has to be excluded together — so `orderSourceMap` below resolves
- * each order's `Source` once, up front, and every row looks it up by order
- * number rather than trusting its own (possibly blank) `raw["Source"]`.
+ * lines has to be excluded together — so `orderFactsMap` below resolves each
+ * order's `Source` and `Total` once, up front, and every row looks them up by
+ * order number rather than trusting its own (possibly blank) columns.
  */
 
 /**
@@ -119,17 +119,29 @@ function vatBucketKey(arrival: string, departure: string): string {
   return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? arrival : "OTHER";
 }
 
-/** Every order's `Source`, resolved once from whichever of its lines carries it. */
-function orderSourceMap(rows: readonly LedgerRow[]): Map<string, string> {
-  const map = new Map<string, string>();
+type OrderFacts = { source: string; total: Decimal | null };
+
+/**
+ * Every order's `Source` and `Total`, resolved once from whichever of its
+ * lines carries them — both are order-level columns Shopify writes on the
+ * first line only, and every line of the order is judged by them.
+ */
+function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
+  const map = new Map<string, OrderFacts>();
 
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
     const name = row.raw["Name"];
-    const source = row.raw["Source"];
 
-    if (name && source) map.set(name, source);
+    if (!name) continue;
+
+    const found = map.get(name);
+
+    map.set(name, {
+      source: row.raw["Source"] || found?.source || "",
+      total: money(row.raw["Total"]) ?? found?.total ?? null,
+    });
   }
 
   return map;
@@ -172,13 +184,21 @@ function money(value: string | undefined): Decimal | null {
 function isExcludedRow(
   row: LedgerRow,
   rules: RulesSnapshot,
-  sources: ReadonlyMap<string, string>,
+  facts: ReadonlyMap<string, OrderFacts>,
   arrival: string,
 ): string | null {
   const excludedSources = channelRule<string[]>(rules, "shopify_geyser", "excluded_sources") ?? [];
-  const source = sources.get(row.raw["Name"] ?? "") ?? "";
+  const order = facts.get(row.raw["Name"] ?? "");
+  const source = order?.source ?? "";
 
-  if (excludedSources.includes(source)) return "Shopify invoice: draft order";
+  // A draft order is how the shop ships an adapter or a warranty replacement:
+  // no money, no sale. When money did change hands it is a sale that happens
+  // to have been written up by hand, and dropping it loses real revenue —
+  // three such orders in July, three in August. The source alone cannot tell
+  // the two apart; the total can.
+  if (excludedSources.includes(source) && !(order?.total?.greaterThan(0) ?? false)) {
+    return "Shopify invoice: draft order";
+  }
 
   const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];
 
@@ -224,7 +244,7 @@ export function generateShopifyZohoInvoice(
     );
   }
 
-  const sources = orderSourceMap(rows);
+  const facts = orderFactsMap(rows);
 
   /* ------------------------------------------------------------------ *
    * Product lines: every line item, one row per (item, unit price).
@@ -256,7 +276,7 @@ export function generateShopifyZohoInvoice(
 
     const arrival = arrivalCountryOf(row, context.rules);
 
-    if (isExcludedRow(row, context.rules, sources, arrival)) continue;
+    if (isExcludedRow(row, context.rules, facts, arrival)) continue;
 
     const order = row.raw["Name"] ?? "";
     const found = linesByOrder.get(order);
@@ -299,7 +319,7 @@ export function generateShopifyZohoInvoice(
     if (row.dataset !== "shopify_geyser") continue;
 
     const arrival = arrivalCountryOf(row, context.rules);
-    const excludeReason = isExcludedRow(row, context.rules, sources, arrival);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     if (excludeReason) {
       skip(excludeReason);
@@ -382,7 +402,7 @@ export function generateShopifyZohoInvoice(
     if (!orderTotal) continue; // a continuation line — the order total lives on the first row
 
     const arrival = arrivalCountryOf(row, context.rules);
-    const excludeReason = isExcludedRow(row, context.rules, sources, arrival);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
 
     // Already tallied in `skipped` above, once per line, in the product
     // pass — this is the same order's first line, not a new row to count.
@@ -556,14 +576,14 @@ export function generateShopifyZohoInvoice(
  */
 function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
   const found = new Map<string, UnmappedSku>();
-  const sources = orderSourceMap(rows);
+  const facts = orderFactsMap(rows);
 
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
     const arrival = arrivalCountryOf(row, rules);
 
-    if (isExcludedRow(row, rules, sources, arrival)) continue;
+    if (isExcludedRow(row, rules, facts, arrival)) continue;
 
     const item = identify(row);
 

@@ -327,16 +327,16 @@ describe("generateShopifyZohoInvoice", () => {
     ]);
   });
 
-  it("drops a draft order's line items entirely, even the continuation lines the source column is blank on", () => {
+  it("drops a moneyless draft order's line items, even the continuation lines the source column is blank on", () => {
     const rows = [
       orderHead({
         name: "#999",
         country: "FR",
-        total: "50.00",
+        total: "0.00",
         taxes: "8.33",
         taxLabel: "FR TVA 20%",
         itemName: "Geyser EURO Cartridge - 1 Cartridge",
-        price: "50.00",
+        price: "0.00",
         qty: 1,
         source: "shopify_draft_order",
       }),
@@ -349,6 +349,55 @@ describe("generateShopifyZohoInvoice", () => {
     expect(result.skipped.map((s) => s.reason)).toContain("Shopify invoice: draft order");
     // Both lines of the draft order were dropped, not just the first.
     expect(result.skipped.find((s) => s.reason === "Shopify invoice: draft order")?.count).toBe(2);
+  });
+
+  it("bills a draft order that was paid for — it is a sale written up by hand", () => {
+    // How the shop ships an adapter or a warranty replacement is a draft with
+    // no money in it. A draft with money is a real sale: three of them in the
+    // client's July export, three more in August, 495.40 EUR between them.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "89.90",
+        taxes: "14.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Filter",
+        price: "89.90",
+        qty: 1,
+        source: "shopify_draft_order",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const vat = built.sheets[0].rows.filter((line) => String(line[10]).startsWith("VAT"));
+
+    expect(goods).toHaveLength(1);
+    expect(goods[0][9]).toBe("89.90");
+    // And its VAT with it, or the invoice would charge tax on nothing.
+    expect(vat.map((line) => line[9])).toEqual(["14.98"]);
+  });
+
+  it("still drops a draft order with no money in it", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "0.00",
+        taxes: "0.00",
+        taxLabel: "FR TVA 20%",
+        itemName: "Adapter: Inside 16 - Outside 22 - Height 13 (China)",
+        price: "0.00",
+        qty: 1,
+        source: "shopify_draft_order",
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+
+    expect(built.sheets[0].rows).toEqual([]);
+    expect(built.skipped.map((s) => s.reason)).toContain("Shopify invoice: draft order");
   });
 
   it("drops an order shipped to Switzerland", () => {
@@ -712,11 +761,11 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       orderHead({
         name: "#2",
         country: "FR",
-        total: "10.00",
-        taxes: "1.67",
+        total: "0.00",
+        taxes: "0.00",
         taxLabel: "FR TVA 20%",
         itemName: "Geyser EURO Draft Thing",
-        price: "10.00",
+        price: "0.00",
         qty: 1,
         source: "shopify_draft_order",
       }),

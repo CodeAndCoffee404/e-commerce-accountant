@@ -247,7 +247,10 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
     channel: GEYSER.dataset,
     key: "excluded_sources",
     value: ["shopify_draft_order"],
-    note: "Draft orders are not sales.",
+    note:
+      "A draft order is how an adapter or a warranty replacement is shipped: no " +
+      "money in it, no sale. One that was paid for is a sale written up by hand " +
+      "and is reported normally — the source is only half the test.",
   },
 ];
 

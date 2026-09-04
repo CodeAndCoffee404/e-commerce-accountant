@@ -257,6 +257,20 @@ function cdiscountRow(
  * Shopify
  * ------------------------------------------------------------------ */
 
+/**
+ * Whether an order's total is money rather than nothing — an unreadable total
+ * counts as nothing, so a draft stays excluded exactly as it was before this
+ * distinction existed, and the unreadable total is reported further down.
+ */
+function isPaidFor(orderTotal: string): boolean {
+  try {
+    return parseDecimalValue(orderTotal, { decimalSeparator: ".", column: "Total" })
+      ?.greaterThan(0) ?? false;
+  } catch {
+    return false;
+  }
+}
+
 /** `FR TVA 20%` → 0.2. The rate is only ever written into the tax label. */
 export function parseShopifyTaxRate(label: string | undefined): Decimal | null {
   const match = (label ?? "").match(/(\d+(?:[.,]\d+)?)\s*%/);
@@ -285,7 +299,10 @@ function shopifyRow(
 
   const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
 
-  if (excluded.includes(row.raw["Source"] ?? "")) {
+  // A draft order is how the shop ships an adapter or a warranty replacement:
+  // no money, no sale. One that was paid for is a sale written up by hand, and
+  // dropping it loses real revenue. The source alone cannot tell them apart.
+  if (excluded.includes(row.raw["Source"] ?? "") && !isPaidFor(orderTotal)) {
     return skip(skipped, "Shopify: draft order");
   }
 
