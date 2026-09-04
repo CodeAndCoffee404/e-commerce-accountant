@@ -49,6 +49,9 @@ function orderHead(args: {
   name: string;
   country: string;
   total: string;
+  /** Goods after an order-level discount; defaults to the order total. */
+  subtotal?: string;
+  shipping?: string;
   taxes: string;
   taxLabel: string;
   itemName: string;
@@ -68,6 +71,11 @@ function orderHead(args: {
     raw: {
       Name: args.name,
       Total: args.total,
+      // Shopify's own split of the order: goods after any order-level
+      // discount, then delivery. Defaults keep the existing cases saying
+      // "no discount, no delivery".
+      Subtotal: args.subtotal ?? args.total,
+      Shipping: args.shipping ?? "0.00",
       Taxes: args.taxes,
       "Tax 1 Name": args.taxLabel,
       "Shipping Country": args.country,
@@ -556,6 +564,137 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
 
     expect(built.sheets[0].rows.some((line) => line[6] === "CART-1")).toBe(false);
     expect(built.warnings.join(" ")).toContain("SKU mapping expects");
+  });
+
+  it("bills what the buyer paid, not the list price, when a discount code was used", () => {
+    // Shopify puts a discount code on the order and leaves `Lineitem discount`
+    // at zero, so the line still reads 45.90 while the buyer paid 35.90.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "35.90",
+        subtotal: "35.90",
+        taxes: "5.98",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+
+    expect(goods).toHaveLength(1);
+    expect(goods[0][9]).toBe("35.90");
+  });
+
+  it("spreads an order's discount over its lines, to the cent", () => {
+    // Two items, 10.00 off the order. Neither line can carry it alone and the
+    // two shares have to add back to what the buyer paid.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "108.80",
+        subtotal: "108.80",
+        taxes: "18.13",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+      orderLine({ name: "#1", itemName: "Geyser EURO Cartridge - 2 Cartridges", price: "72.90", qty: 1 }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+    const billed = goods.reduce(
+      (total, line) => total + Number(line[9]) * Number(line[8]),
+      0,
+    );
+
+    expect(billed.toFixed(2)).toBe("108.80");
+    // In proportion, not split down the middle: the dearer item takes more.
+    // 108.80 x 45.90/118.80 = 42.036..., and the other line takes the rest.
+    expect(goods.map((line) => line[9]).sort()).toEqual(["42.04", "66.76"]);
+  });
+
+  it("bills delivery the buyer paid for, on its own account", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "IT",
+        total: "75.85",
+        subtotal: "72.90",
+        shipping: "2.95",
+        taxes: "13.68",
+        taxLabel: "IT IVA 22%",
+        itemName: "Geyser EURO Cartridge - 2 Cartridges",
+        price: "72.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const shipping = built.sheets[0].rows.filter((line) => line[10] === "Shopify Shipping");
+
+    expect(shipping).toHaveLength(1);
+    expect(shipping[0][9]).toBe("2.95");
+    // Item Name and SKU stay empty, exactly as the VAT lines do: Zoho reads
+    // Item Name as a lookup and there is no product called this.
+    expect(shipping[0][5]).toBe("");
+    expect(shipping[0][6]).toBe("");
+    expect(shipping[0][7]).toBe("Shopify Shipping");
+  });
+
+  it("adds up to the same money Off-Amazon Sales bills for the order", () => {
+    // The whole point of both changes: goods + delivery = the order's Total,
+    // which is the figure the other report states, and VAT is unchanged.
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "38.85",
+        subtotal: "35.90",
+        shipping: "2.95",
+        taxes: "6.48",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context).sheets[0].rows;
+    const billed = built
+      .filter((line) => line[10] === "Shopify Sales" || line[10] === "Shopify Shipping")
+      .reduce((total, line) => total + Number(line[9]) * Number(line[8]), 0);
+
+    expect(billed.toFixed(2)).toBe("38.85");
+  });
+
+  it("bills at list price and says so when the subtotal cannot be read", () => {
+    const rows = [
+      orderHead({
+        name: "#1",
+        country: "FR",
+        total: "45.90",
+        subtotal: "",
+        taxes: "7.65",
+        taxLabel: "FR TVA 20%",
+        itemName: "Geyser EURO Cartridge - 1 Cartridge",
+        price: "45.90",
+        qty: 1,
+      }),
+    ];
+
+    const built = generateShopifyZohoInvoice(rows, context);
+    const goods = built.sheets[0].rows.filter((line) => line[10] === "Shopify Sales");
+
+    expect(goods[0][9]).toBe("45.90");
+    expect(built.warnings.join(" ")).toContain("no readable subtotal");
   });
 
   it("does not flag a mapped item, and ignores a draft order's items", () => {

@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 
-import { exactLines } from "@/lib/reports/invoice-lines";
+import { allocate, exactLines } from "@/lib/reports/invoice-lines";
 import { channelRule, decideSku, splitGross, vatRateOn } from "@/lib/reports/rules";
 import type {
   GeneratorResult,
@@ -76,6 +76,14 @@ const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
 const VAT_BUCKET_ORDER = ["ES", "DE", "FR", "IT", "PL", "OTHER"] as const;
 
 /**
+ * Where delivery income posts in Zoho. Named like `Shopify Sales` beside it,
+ * and written into Item Desc rather than Item Name for the same reason the VAT
+ * lines are: Item Name is a lookup into Zoho's item list, and there is no
+ * product by this name.
+ */
+const SHIPPING_ACCOUNT = "Shopify Shipping";
+
+/**
  * The names of the Zoho accounts these lines post to, not labels: country in
  * the middle, scheme last, that capitalisation — the same shape the Amazon and
  * Allegro invoices use, so one country's tax lands on one account whichever
@@ -125,6 +133,40 @@ function orderSourceMap(rows: readonly LedgerRow[]): Map<string, string> {
   }
 
   return map;
+}
+
+/**
+ * Every order's `Subtotal` and `Shipping`, from whichever of its lines carries
+ * them — Shopify writes order-level columns on the first line only.
+ *
+ * `Subtotal` is what the goods came to after any order-level discount, VAT
+ * included, and `Subtotal + Shipping` is the order's `Total` — the figure
+ * Off-Amazon Sales bills and the VAT below is charged on.
+ */
+function orderMoneyMap(rows: readonly LedgerRow[]): Map<string, { subtotal: Decimal | null; shipping: Decimal | null }> {
+  const map = new Map<string, { subtotal: Decimal | null; shipping: Decimal | null }>();
+
+  for (const row of rows) {
+    if (row.dataset !== "shopify_geyser") continue;
+
+    const name = row.raw["Name"];
+
+    if (!name || !row.raw["Total"] || map.has(name)) continue;
+
+    map.set(name, { subtotal: money(row.raw["Subtotal"]), shipping: money(row.raw["Shipping"]) });
+  }
+
+  return map;
+}
+
+function money(value: string | undefined): Decimal | null {
+  if (value === undefined || value.trim() === "") return null;
+
+  try {
+    return parseDecimalValue(value, { decimalSeparator: ".", column: "amount" });
+  } catch {
+    return null;
+  }
 }
 
 function isExcludedRow(
@@ -190,6 +232,69 @@ export function generateShopifyZohoInvoice(
 
   const productAgg = new Map<string, ProductLine>();
 
+  /* ------------------------------------------------------------------ *
+   * What each line is worth, once the order's discount reaches it.
+   *
+   * A discount code takes money off the order, not off any one product:
+   * Shopify records it on the order and leaves `Lineitem discount` at zero, so
+   * the line items still read at list price and add up to more than the buyer
+   * paid. Off-Amazon Sales bills the order's `Total` and never sees this; the
+   * invoice has to state products, so the difference is spread back over the
+   * order's lines in proportion, to the cent.
+   *
+   * Every priced line of the order shares in it, including ones that will not
+   * be invoiced — an ignored item takes its share of the discount away with it
+   * rather than pushing it onto the items that are billed.
+   * ------------------------------------------------------------------ */
+
+  const orderMoney = orderMoneyMap(rows);
+  const linesByOrder = new Map<string, LedgerRow[]>();
+
+  for (const row of rows) {
+    if (row.dataset !== "shopify_geyser") continue;
+    if (row.gross === null || row.quantity === null || row.quantity.isZero()) continue;
+
+    const arrival = arrivalCountryOf(row, context.rules);
+
+    if (isExcludedRow(row, context.rules, sources, arrival)) continue;
+
+    const order = row.raw["Name"] ?? "";
+    const found = linesByOrder.get(order);
+
+    if (found) found.push(row);
+    else linesByOrder.set(order, [row]);
+  }
+
+  const netOfDiscount = new Map<string, Decimal>();
+
+  for (const [order, lines] of linesByOrder) {
+    const subtotal = orderMoney.get(order)?.subtotal ?? null;
+    const listed = lines.reduce((total, line) => total.plus(line.gross!), new Decimal(0));
+
+    // No readable subtotal is no basis to adjust anything: the lines stand as
+    // the file states them, and the run says so rather than inventing a base.
+    if (subtotal === null) {
+      warnings.push(`Shopify invoice: order ${order} has no readable subtotal; its items are billed at list price`);
+      for (const line of lines) netOfDiscount.set(line.id, line.gross!);
+      continue;
+    }
+
+    // A subtotal above the listed price is not a discount and not something to
+    // spread: it would invent revenue no line item accounts for.
+    if (subtotal.greaterThan(listed)) {
+      warnings.push(
+        `Shopify invoice: order ${order} has a subtotal of ${subtotal.toFixed(2)} above its ` +
+          `items' ${listed.toFixed(2)}; its items are billed at list price`,
+      );
+      for (const line of lines) netOfDiscount.set(line.id, line.gross!);
+      continue;
+    }
+
+    const shares = allocate(subtotal, lines.map((line) => line.gross!));
+
+    lines.forEach((line, index) => netOfDiscount.set(line.id, shares[index]));
+  }
+
   for (const row of rows) {
     if (row.dataset !== "shopify_geyser") continue;
 
@@ -246,7 +351,10 @@ export function generateShopifyZohoInvoice(
     // Grouped by the exact unit price, not the rounded one — two sales at
     // genuinely different prices are two invoice lines, same reasoning as
     // the Amazon invoice.
-    const unitPrice = row.gross.dividedBy(quantity);
+    // What this line is worth after the order's discount reached it, which is
+    // the same money Off-Amazon Sales bills through the order's `Total`.
+    const billed = netOfDiscount.get(row.id) ?? row.gross;
+    const unitPrice = billed.dividedBy(quantity);
     const sku = decision.kind === "map" ? decision.targetSku : item.key;
     const itemName = decision.kind === "map" ? decision.itemName : "";
     const key = `${sku}|${unitPrice.toFixed(10)}`;
@@ -254,8 +362,8 @@ export function generateShopifyZohoInvoice(
 
     if (existing) {
       existing.qty = existing.qty.plus(quantity);
-      existing.total = existing.total.plus(row.gross);
-    } else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice, total: row.gross });
+      existing.total = existing.total.plus(billed);
+    } else productAgg.set(key, { itemName, sku, qty: quantity, unitPrice, total: billed });
   }
 
   /* ------------------------------------------------------------------ *
@@ -368,6 +476,31 @@ export function generateShopifyZohoInvoice(
         "Shopify Sales",
       ]);
     }
+  }
+
+  // Delivery the buyer paid for. It is revenue and its VAT is already on the
+  // invoice through the order's `Taxes`, so leaving it out billed the tax on a
+  // sale the invoice did not state. One line for the month, on its own account
+  // rather than folded into a product's price.
+  const shipping = [...linesByOrder.keys()].reduce(
+    (total, order) => total.plus(orderMoney.get(order)?.shipping ?? new Decimal(0)),
+    new Decimal(0),
+  );
+
+  if (!shipping.isZero()) {
+    output.push([
+      invoiceDate,
+      invoiceNo,
+      "Geyser Website",
+      "EUR",
+      "1",
+      "",
+      "",
+      SHIPPING_ACCOUNT,
+      "1",
+      shipping.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
+      SHIPPING_ACCOUNT,
+    ]);
   }
 
   for (const bucket of VAT_BUCKET_ORDER) {
