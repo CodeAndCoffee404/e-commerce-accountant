@@ -1,7 +1,7 @@
 "use client";
 
 import { BankOutlined, LoginOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Form, Input, Space, Table, Tag, Typography } from "antd";
+import { App, Button, Card, Form, Input, Select, Space, Table, Tag, Typography } from "antd";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -19,8 +19,11 @@ import { DEFAULT_ROUTE } from "@/lib/navigation";
 export function AdminView({
   companies,
   current,
+  profiles,
 }: {
   companies: CompanySummary[];
+  /** The profiles the code knows how to build reports for. */
+  profiles: string[];
   /** The company this session is in, so the row you are already inside says so. */
   current: string;
 }) {
@@ -136,6 +139,17 @@ export function AdminView({
             tooltip="Lower case, no spaces. It never changes and never appears to customers."
           >
             <Input placeholder="short-name" style={{ minWidth: 160 }} />
+          </Form.Item>
+          <Form.Item
+            name="profileKey"
+            rules={[{ required: true, message: "A profile is required." }]}
+            tooltip="Which profile in the code its reports are built from. Added by a developer first."
+          >
+            <Select
+              placeholder="Profile"
+              style={{ minWidth: 140 }}
+              options={profiles.map((key) => ({ value: key, label: key }))}
+            />
           </Form.Item>
           <Form.Item
             name="adminEmail"

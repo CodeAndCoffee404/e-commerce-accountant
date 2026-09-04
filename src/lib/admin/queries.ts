@@ -1,4 +1,4 @@
-import { count, desc, eq, max } from "drizzle-orm";
+import { count, eq, max } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { acrossTenants } from "@/lib/db/tenant";
@@ -32,10 +32,15 @@ export async function allCompanies(): Promise<CompanySummary[]> {
         .from(schema.tenants)
         .orderBy(schema.tenants.name),
 
+      // The access list, not the memberships: "people" on this screen means
+      // who may get in, and a membership is only a record that somebody once
+      // did. Counting memberships would leave out anyone invited since their
+      // last sign-in and count everyone suspended.
       db
-        .select({ tenantId: schema.memberships.tenantId, n: count() })
-        .from(schema.memberships)
-        .groupBy(schema.memberships.tenantId),
+        .select({ tenantId: schema.allowedEmails.tenantId, n: count() })
+        .from(schema.allowedEmails)
+        .where(eq(schema.allowedEmails.isActive, true))
+        .groupBy(schema.allowedEmails.tenantId),
 
       db
         .select({ tenantId: schema.sourceFiles.tenantId, at: max(schema.sourceFiles.uploadedAt) })
@@ -61,19 +66,4 @@ export async function allCompanies(): Promise<CompanySummary[]> {
   });
 }
 
-/** Who can get into one company, for the admin's view of it. */
-export async function companyPeople(
-  tenantId: string,
-): Promise<{ email: string; role: string; isActive: boolean }[]> {
-  return acrossTenants(() =>
-    getDb()
-      .select({
-        email: schema.allowedEmails.email,
-        role: schema.allowedEmails.role,
-        isActive: schema.allowedEmails.isActive,
-      })
-      .from(schema.allowedEmails)
-      .where(eq(schema.allowedEmails.tenantId, tenantId))
-      .orderBy(desc(schema.allowedEmails.isActive), schema.allowedEmails.email),
-  );
-}
+

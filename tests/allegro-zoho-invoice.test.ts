@@ -5,6 +5,7 @@ import { ALLEGRO_CURRENCY_MAP } from "@/modules/channels/allegro";
 import { allegroZohoInvoiceModule, generateAllegroZohoInvoice } from "@/modules/reports/allegro-zoho-invoice";
 
 import type { FxSnapshot, LedgerRow, ReportContext, RulesSnapshot } from "@/lib/reports/types";
+import { GEYSER } from "@/modules/companies/geyser";
 
 /**
  * Numbers throughout are chosen so every division lands on an exact cent —
@@ -64,6 +65,7 @@ const context: ReportContext = {
   period: { label: "2026.01 January", granularity: "month", start: "2026-01-01", end: "2026-01-31" },
   rules,
   fx,
+  company: GEYSER,
 };
 
 describe("generateAllegroZohoInvoice", () => {
@@ -177,6 +179,7 @@ describe("generateAllegroZohoInvoice", () => {
     ];
     const badRateContext: ReportContext = {
       ...context,
+      company: GEYSER,
       fx: { HUF: { rate: "378", rateDate: "2026-01-31", source: "ecb" } },
     };
 
@@ -197,6 +200,7 @@ describe("generateAllegroZohoInvoice", () => {
 
     const result = generateAllegroZohoInvoice(rows, {
       ...context,
+      company: GEYSER,
       fx: { PLN: { rate: "1", rateDate: "2026-01-31", source: "ecb" } },
     });
 
@@ -225,7 +229,7 @@ describe("allegroZohoInvoiceModule.unmappedSkus", () => {
       row({ gross: new Decimal("1"), raw: { oferta: "999;Thing;1 szt." } }),
     ];
 
-    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([
       { key: "999", sourceSku: "999", sourceName: "", problem: "unmapped", expectedNames: [] },
     ]);
   });
@@ -235,7 +239,7 @@ describe("allegroZohoInvoiceModule.unmappedSkus", () => {
       row({ gross: new Decimal("1"), raw: { oferta: "111;Widget A;1 szt.|333;Bundle;1 szt." } }),
     ];
 
-    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([]);
+    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([]);
   });
 
   it("ignores a row that is not a wpłata sale", () => {
@@ -246,7 +250,7 @@ describe("allegroZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([]);
+    expect(allegroZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([]);
   });
 });
 

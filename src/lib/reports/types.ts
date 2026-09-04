@@ -1,6 +1,7 @@
 import type Decimal from "decimal.js";
 
 import type { Period } from "@/lib/ingest/period";
+import type { CompanyProfile } from "@/modules/companies/types";
 
 /** One ledger row as a generator sees it. */
 export type LedgerRow = {
@@ -58,6 +59,12 @@ export type ReportContext = {
   period: Period;
   rules: RulesSnapshot;
   fx: FxSnapshot;
+  /**
+   * The company these numbers belong to: where its goods ship from, what it
+   * calls its accounts in Zoho, which markets get their own VAT line. Code,
+   * not settings — see `src/modules/companies/types.ts`.
+   */
+  company: CompanyProfile;
   /** For reports built per tenant-defined variant: the stored definition. */
   variant?: { key: string; value: unknown };
   /**

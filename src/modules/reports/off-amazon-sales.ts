@@ -5,7 +5,6 @@ import { parseDecimalValue } from "@/lib/ingest/numbers";
 import { allegroCurrencyRule, channelRule, splitGross, vatRateOn } from "@/lib/reports/rules";
 
 import {
-  DEPARTURE_COUNTRY,
   arrivalCountryOf,
   isDomestic,
   isSkippedCountry,
@@ -13,6 +12,7 @@ import {
   notASaleReason,
   recomputesZeroTax,
   unpaidOrderWarning,
+  shopifyOf,
 } from "./shopify-orders";
 import type { ReportModule } from "./types";
 import type {
@@ -291,6 +291,8 @@ function shopifyRow(
   skipped: Skipped,
   warnings: string[],
 ): (string | number | null)[] | null {
+  const shop = shopifyOf(context);
+
   // One row per order, not per line item.
   //
   // The ledger keeps line items, which is the right grain for a ledger — a
@@ -310,7 +312,7 @@ function shopifyRow(
     total: readMoney(orderTotal),
     paymentMethod: row.raw["Payment Method"] ?? "",
   };
-  const why = notASale(order);
+  const why = notASale(shop, order);
 
   if (why) {
     if (why === "unpaid") warnings.push(unpaidOrderWarning("Shopify", row.raw["Name"] ?? "", order));
@@ -331,11 +333,11 @@ function shopifyRow(
     return skip(skipped, "Shopify: the defaults rule is missing");
   }
 
-  const arrival = arrivalCountryOf(row);
+  const arrival = arrivalCountryOf(shop, row);
 
   // Swiss orders are out of scope by agreement, and silently — no marker in
   // the report, see the rules table in PLAN §1.
-  if (isSkippedCountry(arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
+  if (isSkippedCountry(shop, arrival)) return skip(skipped, `Shopify: delivered to ${arrival}`);
 
   // The shared parser, not `new Decimal(...)`: it knows about spaces used for
   // thousands, a currency written beside the amount and a Unicode minus, and it
@@ -354,8 +356,8 @@ function shopifyRow(
     return skip(skipped, "Shopify: order total could not be read");
   }
 
-  const departure = DEPARTURE_COUNTRY;
-  const domestic = isDomestic(arrival);
+  const departure = shop.departureCountry;
+  const domestic = isDomestic(shop, arrival);
   const scheme = domestic ? defaults.domesticScheme : defaults.exportScheme;
   const sellerVat = domestic ? defaults.domesticSellerVat : defaults.exportSellerVat;
 
@@ -389,7 +391,7 @@ function shopifyRow(
   const computedVat = rate === null ? null : splitGross(total, rate).vat;
 
   const vat =
-    reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(arrival))
+    reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(shop, arrival))
       ? computedVat
       : reportedVat;
   const net = vat === null ? null : total.minus(vat);

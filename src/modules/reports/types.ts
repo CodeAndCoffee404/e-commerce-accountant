@@ -1,3 +1,4 @@
+import type { CompanyProfile } from "@/modules/companies/types";
 import type { schema } from "@/lib/db";
 import type { PeriodGranularity } from "@/lib/db/schema";
 import type { DatasetId } from "@/lib/ingest/datasets";
@@ -128,7 +129,11 @@ export type ReportModule = {
    * asked once rather than discovered afterwards in the workbook, silently
    * carrying a raw code or the wrong product's name.
    */
-  unmappedSkus?: (rows: readonly LedgerRow[], rules: RulesSnapshot) => UnmappedSku[];
+  unmappedSkus?: (
+    rows: readonly LedgerRow[],
+    rules: RulesSnapshot,
+    company: CompanyProfile,
+  ) => UnmappedSku[];
   /**
    * Distinct currencies this period's rows would carry into the report that
    * have no rule to say what they mean — same idea as `unmappedSkus`, for

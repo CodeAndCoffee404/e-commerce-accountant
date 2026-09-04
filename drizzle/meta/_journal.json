@@ -176,6 +176,13 @@
       "when": 1788546598720,
       "tag": "0024_memberships_across_companies",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788548301985,
+      "tag": "0025_company_profile",
+      "breakpoints": true
     }
   ]
 }

@@ -127,12 +127,13 @@ export function withTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T
  * Runs `fn` with no company in scope, on purpose — and with row-level security
  * stood down for the duration.
  *
- * Three callers, and they are the whole list: signing in, which happens before
- * anyone knows which company the person belongs to and looks the invitation up
- * by email across all of them; the nightly job, which opens the month for every
- * company in turn; and tests, which build the rows the other two read. Spelling
- * it out is the point — this is the one door around the database's own check,
- * and a door nobody can name is a door nobody guards.
+ * Three kinds of caller, and they are the whole list: signing in and the
+ * switcher, which run before anyone knows which company is in play and look a
+ * person up by their address across all of them; the work that is genuinely
+ * about every company — the nightly job, and the admin screen above them; and
+ * tests, which build the rows the others read. Spelling it out is the point —
+ * this is the one door around the database's own check, and a door nobody can
+ * name is a door nobody guards.
  *
  * It refuses to open inside a company's scope. That direction is the dangerous
  * one: it would widen a request that had been narrowed, which is exactly the

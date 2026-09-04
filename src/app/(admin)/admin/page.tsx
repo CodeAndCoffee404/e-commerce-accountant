@@ -1,6 +1,7 @@
 import { AdminView } from "@/components/admin/admin-view";
 import { requireSuperAdmin } from "@/lib/auth/session";
 import { allCompanies } from "@/lib/admin/queries";
+import { COMPANY_KEYS } from "@/modules/companies/registry";
 
 export const metadata = { title: "Companies" };
 
@@ -14,5 +15,7 @@ export const metadata = { title: "Companies" };
 export default async function AdminPage() {
   const admin = await requireSuperAdmin();
 
-  return <AdminView companies={await allCompanies()} current={admin.tenantId} />;
+  return (
+    <AdminView companies={await allCompanies()} current={admin.tenantId} profiles={[...COMPANY_KEYS]} />
+  );
 }

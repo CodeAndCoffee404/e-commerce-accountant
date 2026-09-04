@@ -27,7 +27,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
 
 const { getDb, schema } = await import("@/lib/db");
 const { acrossTenants } = await import("@/lib/db/tenant");
-const { companiesFor, resolveAccess, roleFor } = await import("@/lib/auth/allowlist");
+const { companiesFor, isSuperAdmin, resolveAccess, roleFor } = await import("@/lib/auth/allowlist");
 const { switchCompany } = await import("@/lib/auth/companies");
 const { inRequest } = await import("./helpers/request-scope");
 
@@ -129,8 +129,11 @@ describe.skipIf(!HAS_DB)("belonging to more than one company", () => {
       await getDb()
         .insert(schema.allowedEmails)
         .values({ tenantId: a, email, role: "owner" });
+      await resolveAccess(userId, email);
 
-      expect((await resolveAccess(userId, email))?.isSuperAdmin).toBe(false);
+      // Read from the row, which is what every request reads — being invited
+      // to a company says nothing about standing above them.
+      expect(await isSuperAdmin(userId)).toBe(false);
     }),
   );
 });

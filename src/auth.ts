@@ -11,8 +11,7 @@ declare module "next-auth" {
   interface Session {
     /** The company this session is currently working in. */
     tenantId: string;
-    /** Above the companies: may see the list of them and step into any. */
-    isSuperAdmin: boolean;
+
   }
 }
 
@@ -21,7 +20,6 @@ declare module "next-auth" {
 declare module "@auth/core/jwt" {
   interface JWT {
     tenantId?: string;
-    isSuperAdmin?: boolean;
   }
 }
 
@@ -77,7 +75,6 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
           if (!access) return null;
 
           token.tenantId = access.tenantId;
-          token.isSuperAdmin = access.isSuperAdmin;
         }
 
         // Switching company.
@@ -103,8 +100,6 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(() 
       session({ session, token }) {
         if (token.sub) session.user.id = token.sub;
         if (token.tenantId) session.tenantId = token.tenantId;
-        session.isSuperAdmin = token.isSuperAdmin ?? false;
-
         return session;
       },
     },

@@ -127,6 +127,15 @@ export const tenants = pgTable("tenants", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * Which company profile in `src/modules/companies` this one is built from.
+   *
+   * The database holds the key and nothing else: the values themselves are
+   * code, reviewed and covered by a golden test, because they are what the
+   * reports are computed from — see the profile's own comment for why that is
+   * not a settings screen.
+   */
+  profileKey: text("profile_key").notNull().default("geyser"),
 });
 
 export const memberships = pgTable(

@@ -10,9 +10,8 @@ import { afterAll, describe, expect, it, vi } from "vitest";
  * books would be worse than no way in.
  */
 
-const session: { userId: string | null; isSuperAdmin: boolean; tenantId: string } = {
+const session: { userId: string | null; tenantId: string } = {
   userId: null,
-  isSuperAdmin: false,
   tenantId: "00000000-0000-0000-0000-000000000000",
 };
 
@@ -24,7 +23,6 @@ vi.mock("@/auth", () => ({
       ? {
           user: { id: session.userId, email: `${session.userId}@example.invalid`, name: null },
           tenantId: session.tenantId,
-          isSuperAdmin: session.isSuperAdmin,
         }
       : null,
   unstable_update: async () => null,
@@ -53,18 +51,27 @@ const stamp = `${process.pid}-${Date.now()}`;
 const slugs: string[] = [];
 const people: string[] = [];
 
-async function admin(): Promise<string> {
+/**
+ * Standing above the companies is a row, not a claim in the session — which is
+ * what makes it revocable — so these tests set the row.
+ */
+async function admin(above = true): Promise<string> {
   const id = `admin-${stamp}`;
 
-  await acrossTenants(() =>
-    getDb()
+  await acrossTenants(async () => {
+    await getDb()
       .insert(schema.users)
-      .values({ id, email: `${id}@example.invalid`, isSuperAdmin: true })
-      .onConflictDoNothing(),
-  );
+      .values({ id, email: `${id}@example.invalid`, isSuperAdmin: above })
+      .onConflictDoNothing();
+
+    await getDb()
+      .update(schema.users)
+      .set({ isSuperAdmin: above })
+      .where(eq(schema.users.id, id));
+  });
+
   people.push(id);
   session.userId = id;
-  session.isSuperAdmin = true;
 
   return id;
 }
@@ -82,18 +89,19 @@ describe.skipIf(!HAS_DB)("the company list", () => {
   );
 
   it("refuses everyone who is not above the companies", async () => {
-    await admin();
-    session.isSuperAdmin = false;
+    // Stood down in the database, session untouched: the point of reading the
+    // row on every request is that this takes effect now rather than at the
+    // next sign-in.
+    await admin(false);
 
     // The guard redirects rather than throwing a refusal: a screen someone is
     // not meant to know about should not announce itself.
-    await expect(createCompany({ name: "No", slug: "no", adminEmail: "a@b.co" })).rejects.toThrow(
-      /redirected/,
-    );
+    await expect(
+      createCompany({ name: "No", slug: "no", profileKey: "geyser", adminEmail: "a@b.co" }),
+    ).rejects.toThrow(/redirected/);
     expect(redirects.at(-1)).toBe("/dashboard");
 
     session.userId = null;
-    session.isSuperAdmin = false;
 
     await expect(enterCompany("whatever")).rejects.toThrow(/redirected/);
     expect(redirects.at(-1)).toBe("/signin");
@@ -109,6 +117,7 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const made = await createCompany({
       name: `Made ${stamp}`,
       slug,
+      profileKey: "geyser",
       adminEmail: `Owner-${stamp}@Example.Invalid`,
     });
 
@@ -146,9 +155,9 @@ describe.skipIf(!HAS_DB)("the company list", () => {
 
     slugs.push(slug);
 
-    expect((await createCompany({ name: "First", slug, adminEmail: "a@b.co" })).ok).toBe(true);
+    expect((await createCompany({ name: "First", slug, profileKey: "geyser", adminEmail: "a@b.co" })).ok).toBe(true);
 
-    const second = await createCompany({ name: "Second", slug, adminEmail: "c@d.co" });
+    const second = await createCompany({ name: "Second", slug, profileKey: "geyser", adminEmail: "c@d.co" });
 
     expect(second.ok).toBe(false);
     expect(second.ok === false && second.message).toContain(slug);
@@ -159,7 +168,7 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const slug = `entered-${stamp}`;
 
     slugs.push(slug);
-    await createCompany({ name: `Entered ${stamp}`, slug, adminEmail: "a@b.co" });
+    await createCompany({ name: `Entered ${stamp}`, slug, profileKey: "geyser", adminEmail: "a@b.co" });
 
     const [company] = await acrossTenants(() =>
       getDb()
@@ -170,17 +179,24 @@ describe.skipIf(!HAS_DB)("the company list", () => {
 
     expect((await enterCompany(company.id)).ok).toBe(true);
 
-    const members = await acrossTenants(() =>
-      getDb()
-        .select({ userId: schema.memberships.userId, role: schema.memberships.role })
+    const [invited, members] = await acrossTenants(async () => [
+      await getDb()
+        .select({ email: schema.allowedEmails.email, role: schema.allowedEmails.role })
+        .from(schema.allowedEmails)
+        .where(eq(schema.allowedEmails.tenantId, company.id)),
+      await getDb()
+        .select({ userId: schema.memberships.userId })
         .from(schema.memberships)
         .where(eq(schema.memberships.tenantId, company.id)),
-    );
+    ]);
 
-    // Visible, not silent: the company's own owner sees this in their team
-    // list, which is the whole argument for granting it rather than making
-    // super-admins a special case inside every check.
-    expect(members).toEqual([{ userId: id, role: "owner" }]);
+    // The access list, because that is what every check reads: a membership
+    // alone would leave the admin holding a company that refuses them. And
+    // visible, not silent — the company's own owner sees this address in their
+    // team list and can suspend it, which is the whole argument for granting it
+    // rather than making super-admins a special case inside every check.
+    expect(invited).toContainEqual({ email: `${id}@example.invalid`, role: "owner" });
+    expect(members.map((row) => row.userId)).toContain(id);
   });
 
   it("counts what it lists without reading anybody's rows", async () => {
@@ -190,6 +206,18 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const mine = listed.filter((company) => slugs.includes(company.slug));
 
     expect(mine.length).toBe(slugs.length);
-    expect(mine.every((company) => typeof company.members === "number")).toBe(true);
+
+    // The company just entered has two people on its list — the owner it was
+    // created with and the admin who stepped in — and one it has not been
+    // entered has one. A count that ignored what it was counting would not
+    // tell those apart.
+    const entered = mine.find((company) => company.slug === `entered-${stamp}`);
+    const untouched = mine.find((company) => company.slug === `made-${stamp}`);
+
+    expect(entered?.members).toBe(2);
+    expect(untouched?.members).toBe(1);
+    // Nothing has been uploaded to any of them, and the list says so rather
+    // than inventing a date.
+    expect(mine.every((company) => company.lastUploadAt === null)).toBe(true);
   });
 });

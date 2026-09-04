@@ -7,6 +7,7 @@ import {
 } from "@/modules/reports/shopify-zoho-invoice";
 
 import type { FxSnapshot, LedgerRow, ReportContext, RulesSnapshot } from "@/lib/reports/types";
+import { GEYSER } from "@/modules/companies/geyser";
 
 /**
  * Fixture numbers are the real Geyser Shopify orders for January 2026 (the
@@ -146,6 +147,7 @@ const context: ReportContext = {
   period: { label: "2026.01 January", granularity: "month", start: "2026-01-01", end: "2026-01-31" },
   rules,
   fx,
+  company: GEYSER,
 };
 
 /** The 8 real January orders, in the shape the ledger stores them. */
@@ -502,7 +504,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([
       {
         key: "Geyser EURO New Thing\u0000Geyser EURO New Thing",
         sourceSku: "Geyser EURO New Thing",
@@ -542,7 +544,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
 
     // Only the coded one is unknown: the mapping keyed by that name already
     // covers the other, and asking again would be asking a settled question.
-    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([
       {
         key: "9Z-0IH0-ECWV\u0000Geyser EURO Cartridge - 1 Cartridge",
         sourceSku: "9Z-0IH0-ECWV",
@@ -582,7 +584,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    const asked = shopifyZohoInvoiceModule.unmappedSkus!(rows, rules);
+    const asked = shopifyZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER);
 
     expect(asked).toHaveLength(2);
     expect(asked.map((item) => item.sourceName)).toEqual([
@@ -622,7 +624,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       ],
     };
 
-    expect(shopifyZohoInvoiceModule.unmappedSkus!([renamed], mapped)).toEqual([
+    expect(shopifyZohoInvoiceModule.unmappedSkus!([renamed], mapped, GEYSER)).toEqual([
       {
         key: "CODE-1\u0000Geyser EURO Cartridge - 1 Cartridge (new packaging)",
         sourceSku: "CODE-1",
@@ -637,6 +639,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     const built = generateShopifyZohoInvoice([renamed], {
       period: context.period,
       rules: mapped,
+      company: GEYSER,
       fx: {},
     });
 
@@ -832,7 +835,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
         }),
       ];
 
-      expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules2)).toMatchObject([
+      expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules2, GEYSER)).toMatchObject([
         { sourceSku: "Geyser EURO Cartridge - 1 Cartridge", problem: "incomplete" },
       ]);
 
@@ -892,6 +895,6 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
       }),
     ];
 
-    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules)).toEqual([]);
+    expect(shopifyZohoInvoiceModule.unmappedSkus!(rows, rules, GEYSER)).toEqual([]);
   });
 });

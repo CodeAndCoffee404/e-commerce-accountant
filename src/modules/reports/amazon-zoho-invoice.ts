@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { parseDecimalValue } from "@/lib/ingest/numbers";
 import { exactLines } from "@/lib/reports/invoice-lines";
 import { decideSku } from "@/lib/reports/rules";
+import type { AmazonProfile } from "@/modules/companies/types";
 import type {
   GeneratorResult,
   LedgerRow,
@@ -80,7 +81,7 @@ const ARRIVAL_ALIASES: Record<string, string> = { MC: "FR" };
  * setting: it does not grow on its own because a new country turned up in a
  * file. The same idea, and mostly the same list, as the Shopify invoice.
  */
-const OSS_BREAKOUT_COUNTRIES = ["ES", "IT", "FR", "PL", "CZ", "DE"];
+
 
 /** The bucket everything outside that list is summed into. */
 const OSS_OTHER = "OTHER";
@@ -118,7 +119,11 @@ type VatTotals = {
  * written in terms of. Schemes outside REGULAR and UNION-OSS (`UK_VOEC-IMPORT`,
  * `CH_VOEC`) are not invoiced here.
  */
-function collectVat(rows: readonly LedgerRow[], warnings: string[]): VatTotals {
+function collectVat(
+  amazon: AmazonProfile,
+  rows: readonly LedgerRow[],
+  warnings: string[],
+): VatTotals {
   const totals: VatTotals = { regular: new Map(), oss: new Map() };
 
   for (const row of rows) {
@@ -162,7 +167,7 @@ function collectVat(rows: readonly LedgerRow[], warnings: string[]): VatTotals {
       continue;
     }
 
-    const bucket = OSS_BREAKOUT_COUNTRIES.includes(arrival) ? arrival : OSS_OTHER;
+    const bucket = amazon.ossBreakout.includes(arrival) ? arrival : OSS_OTHER;
     const byBucket = totals.oss.get(marketplace) ?? new Map<string, Money>();
     const money = byBucket.get(bucket) ?? new Map<string, Decimal>();
 
@@ -229,10 +234,23 @@ function rateOf(context: ReportContext, currency: string): Decimal | null {
 }
 
 /** `INV-Amz DE-07.26` — the number the client's accounting expects. */
-export function invoiceNumber(country: string, periodEnd: string): string {
+/**
+ * The Amazon facts of the company this report is for. Throws rather than
+ * defaulting: a company that does not sell on Amazon has no answer to which
+ * markets get their own VAT line.
+ */
+function amazonOf(context: ReportContext): AmazonProfile {
+  if (!context.company.amazon) {
+    throw new Error(`${context.company.key} does not sell on Amazon, so this report cannot be built.`);
+  }
+
+  return context.company.amazon;
+}
+
+export function invoiceNumber(prefix: string, country: string, periodEnd: string): string {
   const [year, month] = periodEnd.split("-");
 
-  return `INV-Amz ${country}-${month}.${year.slice(2)}`;
+  return `${prefix}${country}-${month}.${year.slice(2)}`;
 }
 
 type Group = {
@@ -262,6 +280,7 @@ export function generateZohoInvoice(
   rows: readonly LedgerRow[],
   context: ReportContext,
 ): GeneratorResult {
+  const amazon = amazonOf(context);
   const skipped = new Map<string, number>();
   const warnings: string[] = [];
   const groups = new Map<string, Group>();
@@ -377,7 +396,7 @@ export function generateZohoInvoice(
       output.push([
         // Invoiced on the last day of the month, whatever day the sale fell on.
         `${context.period.end} 00:00:00`,
-        invoiceNumber(group.country, context.period.end),
+        invoiceNumber(amazon.invoicePrefix, group.country, context.period.end),
         `Amazon ${group.country}`,
         currency,
         rate,
@@ -398,13 +417,13 @@ export function generateZohoInvoice(
   const invoicedCountries = [...new Set(sorted.map((group) => group.country))].sort(
     (a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99),
   );
-  const totals = collectVat(rows, warnings);
+  const totals = collectVat(amazon, rows, warnings);
   const placed = new Set<string>();
 
   const vatLine = (country: string, label: string, amount: Decimal) => {
     output.push([
       `${context.period.end} 00:00:00`,
-      invoiceNumber(country, context.period.end),
+      invoiceNumber(amazon.invoicePrefix, country, context.period.end),
       `Amazon ${country}`,
       currencyOf(country),
       rateFor(country),
@@ -450,7 +469,7 @@ export function generateZohoInvoice(
 
     if (!buckets) continue;
 
-    for (const bucket of [...OSS_BREAKOUT_COUNTRIES, OSS_OTHER]) {
+    for (const bucket of [...amazon.ossBreakout, OSS_OTHER]) {
       const money = buckets.get(bucket);
 
       if (!money) continue;

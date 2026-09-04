@@ -1,13 +1,9 @@
 import { getDb, schema } from "@/lib/db";
 
-import {
-  CHANNEL_RULES,
-  IGNORED_SKUS,
-  RULES_EFFECTIVE_FROM,
-  SELLER_VAT_NUMBERS,
-  SKU_MAPPINGS,
-  VAT_RATES,
-} from "./seed-data";
+import { companyProfile } from "@/modules/companies/registry";
+import type { CompanyProfile } from "@/modules/companies/types";
+
+import { RULES_EFFECTIVE_FROM } from "./seed-data";
 
 export type SeedResult = {
   vatRates: number;
@@ -17,18 +13,28 @@ export type SeedResult = {
 };
 
 /**
- * Fills a tenant's reference data with the values the legacy scripts had built
- * in. Safe to run again: existing rows are left alone, so a rate the client has
- * since corrected is never quietly reverted to the legacy value.
+ * Fills a company's reference data with what its profile says it starts with.
+ *
+ * From the profile rather than from one shared table of values, and that is the
+ * point of the profile existing: a new company seeded with Geyser's VAT
+ * registrations would print somebody else's numbers on its first report and
+ * nothing would notice.
+ *
+ * Safe to run again: existing rows are left alone, so a rate the client has
+ * since corrected is never quietly reverted to the seeded value.
  */
-export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
+export async function seedReferenceData(
+  tenantId: string,
+  profile: CompanyProfile = companyProfile("geyser"),
+): Promise<SeedResult> {
   const db = getDb();
+  const { vatRates, sellerVatNumbers, skuMappings, ignoredSkus, channelRules } = profile.seeds;
 
   const [rates, sellers, skus, rules] = await Promise.all([
     db
       .insert(schema.vatRates)
       .values(
-        VAT_RATES.map((rate) => ({
+        vatRates.map((rate) => ({
           tenantId,
           country: rate.country,
           rate: rate.rate,
@@ -42,7 +48,7 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
     db
       .insert(schema.sellerVatNumbers)
       .values(
-        SELLER_VAT_NUMBERS.map((entry) => ({
+        sellerVatNumbers.map((entry) => ({
           tenantId,
           country: entry.country,
           vatNumber: entry.vatNumber,
@@ -56,7 +62,7 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
     db
       .insert(schema.skuMappings)
       .values([
-        ...SKU_MAPPINGS.map((mapping) => ({
+        ...skuMappings.map((mapping) => ({
           tenantId,
           channel: mapping.channel,
           sourceSku: mapping.sourceSku,
@@ -64,7 +70,7 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
           itemName: mapping.itemName,
           isIgnored: false,
         })),
-        ...IGNORED_SKUS.map((sku) => ({
+        ...ignoredSkus.map((sku) => ({
           tenantId,
           channel: "amazon",
           sourceSku: sku,
@@ -79,7 +85,7 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
     db
       .insert(schema.channelRules)
       .values(
-        CHANNEL_RULES.map((rule) => ({
+        channelRules.map((rule) => ({
           tenantId,
           channel: rule.channel,
           key: rule.key,

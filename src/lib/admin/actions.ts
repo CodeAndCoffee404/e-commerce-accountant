@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ import { requireSuperAdmin } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import { acrossTenants, withTenant } from "@/lib/db/tenant";
 import { seedReferenceData } from "@/lib/reference/seed";
+import { companyProfile } from "@/modules/companies/registry";
 
 /**
  * What the person above the companies can do to them: make one, and step into
@@ -24,6 +25,7 @@ import { seedReferenceData } from "@/lib/reference/seed";
 export type AdminResult = { ok: true; message: string } | { ok: false; message: string };
 
 const newCompanySchema = z.object({
+  profileKey: z.string().trim().min(1),
   name: z.string().trim().min(2).max(120),
   slug: z
     .string()
@@ -39,7 +41,17 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
 
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
-  const { name, slug, adminEmail } = parsed.data;
+  const { name, slug, adminEmail, profileKey } = parsed.data;
+
+  // Before anything is written: a company whose profile does not exist cannot
+  // have reports built, and would be seeded from somebody else's values.
+  let profile;
+
+  try {
+    profile = companyProfile(profileKey);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unknown profile." };
+  }
 
   return acrossTenants(async () => {
     const db = getDb();
@@ -52,14 +64,20 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
 
     if (taken) return { ok: false, message: `The short name "${slug}" is already in use.` };
 
+    // Checked above and again here by the database: two admins submitting the
+    // same short name at once would otherwise get an error blaming the network.
     const [company] = await db
       .insert(schema.tenants)
-      .values({ name, slug })
+      .values({ name, slug, profileKey })
+      .onConflictDoNothing({ target: schema.tenants.slug })
       .returning({ id: schema.tenants.id });
 
-    // Reference data comes with the company. An empty rate table lets the
-    // first report run and quietly produce nothing.
-    await seedReferenceData(company.id);
+    if (!company) return { ok: false, message: `The short name "${slug}" is already in use.` };
+
+    // Reference data comes with the company, and from its own profile — an
+    // empty rate table lets the first report run and quietly produce nothing,
+    // and somebody else's rates are worse than an empty one.
+    await seedReferenceData(company.id, profile);
 
     await db.insert(schema.allowedEmails).values({
       tenantId: company.id,
@@ -73,7 +91,7 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
         action: "company.created",
         entity: "tenant",
         entityId: company.id,
-        payload: { name, slug, admin: normaliseEmail(adminEmail) },
+        payload: { name, slug, profileKey, admin: normaliseEmail(adminEmail) },
       },
     );
 
@@ -102,6 +120,9 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
     return { ok: false, message: "No company chosen." };
   }
 
+  // `tenants` carries no company of its own and no row-level security, so this
+  // scope buys nothing but saying out loud that the question is about all of
+  // them.
   const company = await acrossTenants(async () => {
     const [row] = await getDb()
       .select({ id: schema.tenants.id, name: schema.tenants.name })
@@ -115,6 +136,21 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
   if (!company) return { ok: false, message: "No such company." };
 
   await withTenant(company.id, async () => {
+    // Read before writing, so the record says what was overwritten. Forcing
+    // ownership is defensible; doing it to a row the company's owner had
+    // deliberately scoped — a viewer, or a suspension — without saying so is
+    // not, and the Activity screen is where they would look.
+    const [before] = await getDb()
+      .select({ role: schema.allowedEmails.role, isActive: schema.allowedEmails.isActive })
+      .from(schema.allowedEmails)
+      .where(
+        and(
+          eq(schema.allowedEmails.tenantId, company.id),
+          eq(schema.allowedEmails.email, normaliseEmail(admin.email)),
+        ),
+      )
+      .limit(1);
+
     await getDb()
       .insert(schema.allowedEmails)
       .values({ tenantId: company.id, email: normaliseEmail(admin.email), role: "owner" })
@@ -130,7 +166,14 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
 
     await record(
       { id: admin.id, email: admin.email, tenantId: company.id },
-      { action: "company.entered", entity: "tenant", entityId: company.id, payload: {} },
+      {
+        action: "company.entered",
+        entity: "tenant",
+        entityId: company.id,
+        payload: before
+          ? { replaced: { role: before.role, isActive: before.isActive } }
+          : { granted: "owner" },
+      },
     );
   });
 

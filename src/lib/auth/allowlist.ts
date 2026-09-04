@@ -87,7 +87,6 @@ export async function maySignIn(email: string | null | undefined): Promise<boole
 export type SignedIn = {
   /** Where this sign-in starts. Someone in two companies can move afterwards. */
   tenantId: string;
-  isSuperAdmin: boolean;
 };
 
 /**
@@ -108,6 +107,8 @@ export async function resolveAccess(userId: string, email: string): Promise<Sign
   if (bootstrap) {
     // The only way to make the first one: production has no other lever, and
     // whoever can set the environment variable already controls the deployment.
+    // Written to the row rather than to the token, so that taking it away is
+    // an edit somebody can make rather than a wait for a session to expire.
     await getDb()
       .update(schema.users)
       .set({ isSuperAdmin: true })
@@ -117,7 +118,7 @@ export async function resolveAccess(userId: string, email: string): Promise<Sign
   if (invitations.length > 0) {
     for (const invitation of invitations) await ensureMembership(userId, invitation);
 
-    return { tenantId: invitations[0].tenantId, isSuperAdmin: bootstrap };
+    return { tenantId: invitations[0].tenantId };
   }
 
   const access: Access = { tenantId: await ensureDefaultTenant(), role: "owner" };
@@ -133,7 +134,7 @@ export async function resolveAccess(userId: string, email: string): Promise<Sign
 
   await ensureMembership(userId, access);
 
-  return { tenantId: access.tenantId, isSuperAdmin: true };
+  return { tenantId: access.tenantId };
 }
 
 /**
@@ -228,4 +229,22 @@ async function ensureMembership(userId: string, access: Access): Promise<void> {
     .insert(schema.memberships)
     .values({ tenantId: access.tenantId, userId, role: access.role })
     .onConflictDoNothing();
+}
+
+/**
+ * Whether this person stands above the companies.
+ *
+ * Read on every request rather than carried in the token, for the same reason
+ * the role is: a power that can only be taken away by waiting for somebody to
+ * sign out is not one that can be taken away. `users` carries no company and
+ * no row-level security, so this needs no scope of its own.
+ */
+export async function isSuperAdmin(userId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ isSuperAdmin: schema.users.isSuperAdmin })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+
+  return row?.isSuperAdmin ?? false;
 }

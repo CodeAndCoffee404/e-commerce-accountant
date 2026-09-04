@@ -8,6 +8,7 @@ import { buildPeriod, collectPeriods } from "@/lib/ingest/period";
 import { generateZohoInvoice, missingCountries, ZOHO_HEADERS } from "@/modules/reports/amazon-zoho-invoice";
 
 import { corpusAvailable, ledgerForPeriod, readGolden, REPORTS, seededRules } from "./harness";
+import { GEYSER } from "@/modules/companies/geyser";
 
 const PERIODS = ["2026.05 May", "2026.07 July"];
 
@@ -77,6 +78,7 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho against the reference
     const result = generateZohoInvoice(ledger, {
       period: periodOf(label),
       rules: seededRules(),
+      company: GEYSER,
       fx: {},
     });
 
@@ -150,6 +152,7 @@ describe.skipIf(!corpusAvailable)("Amazon invoice for Zoho against the reference
     const result = generateZohoInvoice(ledger, {
       period: periodOf(label),
       rules: seededRules(),
+      company: GEYSER,
       fx: {},
     });
 

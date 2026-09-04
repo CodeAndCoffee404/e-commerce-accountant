@@ -7,7 +7,7 @@ import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
 
 import { DEFAULT_ROUTE, landingRoute, SELECT_COMPANY } from "@/lib/navigation";
-import { roleFor } from "./allowlist";
+import { isSuperAdmin, roleFor } from "./allowlist";
 
 export type CurrentUser = {
   id: string;
@@ -84,7 +84,9 @@ export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
     email: session.user.email,
     image: session.user.image ?? null,
     tenantId: session.tenantId,
-    isSuperAdmin: session.isSuperAdmin,
+    // From the database, not the token: a super-admin who has been stood down
+    // should stop being one on their next request, not at their next sign-in.
+    isSuperAdmin: await isSuperAdmin(session.user.id),
     role: await roleFor(session.user.email, session.tenantId),
   };
 }
@@ -112,13 +114,15 @@ export async function apiUser(): Promise<UserWithAccess | null> {
  * shown a refusal — a screen they are not meant to know about should not
  * announce itself.
  */
-export async function requireSuperAdmin(): Promise<CurrentUser & { isSuperAdmin: true }> {
+export async function requireSuperAdmin(): Promise<
+  Omit<CurrentUser, "role"> & { role: MembershipRole | null; isSuperAdmin: true }
+> {
   const user = await signedIn();
 
   if (!user) redirect("/signin");
   if (!user.isSuperAdmin) redirect(DEFAULT_ROUTE);
 
-  return { ...user, role: user.role ?? "owner", isSuperAdmin: true };
+  return { ...user, isSuperAdmin: true };
 }
 
 export type UserWithAccess = CurrentUser & { access: AccessMap };

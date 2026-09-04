@@ -10,6 +10,8 @@ import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
 import { euroRateOn } from "@/lib/reference/fx";
 
 import { DATASET_NAMES } from "@/modules/channels/registry";
+import { companyProfile } from "@/modules/companies/registry";
+import type { CompanyProfile } from "@/modules/companies/types";
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
@@ -322,6 +324,10 @@ export async function runReport(input: {
     }
 
     const rules = await loadRules(input.tenantId);
+    // The company's own facts — where its goods ship from, what its accounts
+    // are called. Read here rather than reached for inside the modules, so a
+    // report is a pure function of what it was handed.
+    const company = await loadCompany(input.tenantId);
 
     // Before anything is built. A missing channel rule does not make a smaller
     // report — it makes one where every row of that channel is skipped as
@@ -350,7 +356,7 @@ export async function runReport(input: {
     // Same idea as the channel-rules check above, one step further in: an
     // unmapped SKU does not make a smaller invoice, it makes one with the
     // channel's raw code sitting where the client's own code should be.
-    const missingSkus = reportModule(input.reportType).unmappedSkus?.(rows, rules) ?? [];
+    const missingSkus = reportModule(input.reportType).unmappedSkus?.(rows, rules, company) ?? [];
 
     if (missingSkus.length > 0) throw new NeedsSkuMappingError(missingSkus);
 
@@ -368,6 +374,7 @@ export async function runReport(input: {
       period,
       rules,
       fx,
+      company,
       variant: variant ? { key: variant.key, value: variant.value } : undefined,
       history: definition.historyMonths
         ? await loadHistory(input.tenantId, definition.datasets, period, definition.historyMonths)
@@ -589,6 +596,25 @@ async function loadHistory(
     .orderBy(schema.transactions.occurredOn);
 
   return rows.map(toLedgerRow);
+}
+
+/**
+ * The profile this company's reports are built from.
+ *
+ * Throws when the key names no profile, and that is the right answer: a
+ * company created before its profile exists cannot have reports built, and
+ * failing loudly beats building them from somebody else's values.
+ */
+async function loadCompany(tenantId: string): Promise<CompanyProfile> {
+  const [row] = await getDb()
+    .select({ profileKey: schema.tenants.profileKey })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, tenantId))
+    .limit(1);
+
+  if (!row) throw new Error("This company no longer exists.");
+
+  return companyProfile(row.profileKey);
 }
 
 async function loadRules(tenantId: string): Promise<RulesSnapshot> {
