@@ -327,7 +327,7 @@ describe("generateShopifyZohoInvoice", () => {
     ]);
   });
 
-  it("drops a moneyless draft order's line items, even the continuation lines the source column is blank on", () => {
+  it("drops a hand-made order with nothing paid, continuation lines and all", () => {
     const rows = [
       orderHead({
         name: "#999",
@@ -346,12 +346,12 @@ describe("generateShopifyZohoInvoice", () => {
     const result = generateShopifyZohoInvoice(rows, context);
 
     expect(result.sheets[0].rows).toEqual([]);
-    expect(result.skipped.map((s) => s.reason)).toContain("Shopify invoice: draft order");
-    // Both lines of the draft order were dropped, not just the first.
-    expect(result.skipped.find((s) => s.reason === "Shopify invoice: draft order")?.count).toBe(2);
+    expect(result.skipped.map((s) => s.reason)).toContain("Shopify invoice: made by hand, nothing paid");
+    // Both lines of the order were dropped, not just the first.
+    expect(result.skipped.find((s) => s.reason === "Shopify invoice: made by hand, nothing paid")?.count).toBe(2);
   });
 
-  it("bills a draft order that was paid for — it is a sale written up by hand", () => {
+  it("bills a hand-made order that was paid for — it is a sale", () => {
     // How the shop ships an adapter or a warranty replacement is a draft with
     // no money in it. A draft with money is a real sale: three of them in the
     // client's July export, three more in August, 495.40 EUR between them.
@@ -379,7 +379,7 @@ describe("generateShopifyZohoInvoice", () => {
     expect(vat.map((line) => line[9])).toEqual(["14.98"]);
   });
 
-  it("still drops a draft order with no money in it", () => {
+  it("still drops a hand-made order with no money in it", () => {
     const rows = [
       orderHead({
         name: "#1",
@@ -397,7 +397,7 @@ describe("generateShopifyZohoInvoice", () => {
     const built = generateShopifyZohoInvoice(rows, context);
 
     expect(built.sheets[0].rows).toEqual([]);
-    expect(built.skipped.map((s) => s.reason)).toContain("Shopify invoice: draft order");
+    expect(built.skipped.map((s) => s.reason)).toContain("Shopify invoice: made by hand, nothing paid");
   });
 
   it("drops an order shipped to Switzerland", () => {
@@ -746,7 +746,7 @@ describe("shopifyZohoInvoiceModule.unmappedSkus", () => {
     expect(built.warnings.join(" ")).toContain("no readable subtotal");
   });
 
-  it("does not flag a mapped item, and ignores a draft order's items", () => {
+  it("does not flag a mapped item, and ignores a hand-made order's items", () => {
     const rows = [
       orderHead({
         name: "#1",

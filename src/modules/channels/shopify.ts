@@ -248,9 +248,10 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
     key: "excluded_sources",
     value: ["shopify_draft_order"],
     note:
-      "A draft order is how an adapter or a warranty replacement is shipped: no " +
-      "money in it, no sale. One that was paid for is a sale written up by hand " +
-      "and is reported normally — the source is only half the test.",
+      "Orders an employee wrote up by hand in the admin. Shopify shows them as " +
+      "ordinary orders afterwards; only the export still says where they came " +
+      "from. Most carry no money — an adapter or a warranty replacement — but " +
+      "one that was paid for is a sale, so the source is only half the test.",
   },
 ];
 

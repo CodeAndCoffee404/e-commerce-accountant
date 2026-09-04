@@ -30,9 +30,9 @@ import type { ReportModule, UnmappedSku } from "./types";
  * order, on that first line — so the VAT pass below still reads only the
  * rows that carry an order `Total`, exactly as `shopifyRow` does.
  *
- * A single order's other columns (`Source`, used to drop draft orders) are
- * likewise only written on that first line, but every one of an order's
- * lines has to be excluded together — so `orderFactsMap` below resolves each
+ * A single order's other columns (`Source`, which says whether it was made
+ * by hand) are likewise only written on that first line, but every one of an
+ * order's lines has to be excluded together — so `orderFactsMap` resolves each
  * order's `Source` and `Total` once, up front, and every row looks them up by
  * order number rather than trusting its own (possibly blank) columns.
  */
@@ -191,13 +191,14 @@ function isExcludedRow(
   const order = facts.get(row.raw["Name"] ?? "");
   const source = order?.source ?? "";
 
-  // A draft order is how the shop ships an adapter or a warranty replacement:
-  // no money, no sale. When money did change hands it is a sale that happens
-  // to have been written up by hand, and dropping it loses real revenue —
-  // three such orders in July, three in August. The source alone cannot tell
-  // the two apart; the total can.
+  // `shopify_draft_order` is not an order that is still a draft: it is one an
+  // employee wrote up by hand in the admin, which Shopify then shows as an
+  // ordinary order. Most carry no money — that is how an adapter or a warranty
+  // replacement is shipped. The ones that were paid for are sales, and dropping
+  // them loses real revenue: three in July, three in August. The source alone
+  // cannot tell the two apart; the amount can.
   if (excludedSources.includes(source) && !(order?.total?.greaterThan(0) ?? false)) {
-    return "Shopify invoice: draft order";
+    return "Shopify invoice: made by hand, nothing paid";
   }
 
   const skippedCountries = channelRule<string[]>(rules, "shopify_geyser", "skipped_arrival_countries") ?? [];

@@ -299,11 +299,12 @@ function shopifyRow(
 
   const excluded = channelRule<string[]>(context.rules, "shopify_geyser", "excluded_sources") ?? [];
 
-  // A draft order is how the shop ships an adapter or a warranty replacement:
-  // no money, no sale. One that was paid for is a sale written up by hand, and
-  // dropping it loses real revenue. The source alone cannot tell them apart.
+  // `shopify_draft_order` is not an order that is still a draft: it is one an
+  // employee wrote up by hand in the admin. Most carry no money — that is how
+  // an adapter or a warranty replacement is shipped — but one that was paid
+  // for is a sale, and dropping it loses real revenue.
   if (excluded.includes(row.raw["Source"] ?? "") && !isPaidFor(orderTotal)) {
-    return skip(skipped, "Shopify: draft order");
+    return skip(skipped, "Shopify: made by hand, nothing paid");
   }
 
   const defaults = channelRule<{
