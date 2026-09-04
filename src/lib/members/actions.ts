@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
 import { normaliseEmail } from "@/lib/auth/allowlist";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 export type MemberResult = { ok: true; message: string } | { ok: false; message: string };
@@ -29,6 +29,10 @@ const inviteSchema = z.object({
 });
 
 export async function inviteMember(input: unknown): Promise<MemberResult> {
+  return inRequest(() => inviteMemberInScope(input));
+}
+
+async function inviteMemberInScope(input: unknown): Promise<MemberResult> {
   const user = await requireOwner();
   const parsed = inviteSchema.safeParse(input);
 
@@ -74,6 +78,10 @@ const changeSchema = z.object({
 });
 
 export async function updateMember(input: unknown): Promise<MemberResult> {
+  return inRequest(() => updateMemberInScope(input));
+}
+
+async function updateMemberInScope(input: unknown): Promise<MemberResult> {
   const user = await requireOwner();
   const parsed = changeSchema.safeParse(input);
 

@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { acrossTenants } from "@/lib/db/tenant";
 import { GET } from "@/app/api/cron/daily/route";
 
 /**
@@ -30,11 +31,15 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  // Guarded before the scope, not inside it: opening one needs a connection,
+  // and this file's database tests skip themselves when there is none.
   if (!HAS_DB || created.length === 0) return;
 
-  for (const tenantId of created) {
-    await getDb().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-  }
+  await acrossTenants(async () => {
+    for (const tenantId of created) {
+      await getDb().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+    }
+  });
 });
 
 describe("who the scheduler lets in", () => {

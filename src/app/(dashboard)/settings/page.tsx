@@ -1,7 +1,7 @@
 import { SettingsView } from "@/components/settings/settings-view";
 import { loadRoleAccess } from "@/lib/access/queries";
 import { listAudit } from "@/lib/audit/record";
-import { can, requireSection } from "@/lib/auth/session";
+import { can, inRequest, requireSection } from "@/lib/auth/session";
 import { googlePickerApiKey, googlePickerAppId } from "@/lib/env";
 import { loadConnection } from "@/lib/google/connection";
 import { listMembers } from "@/lib/members/queries";
@@ -34,6 +34,12 @@ async function companyTabs(tenantId: string, canEditDeadlines: boolean) {
 }
 
 export default async function SettingsPage() {
+  return inRequest(() => settingsPage());
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function settingsPage() {
   // Settings is one screen over several sections; any of them is a reason to
   // let someone in, and each tab checks its own below.
   const user = await requireSection(["settings_company", "team", "activity"]);

@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -21,6 +22,15 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
  * through here, behind the same session check as every page.
  */
 export async function GET(
+  _request: Request,
+  context: { params: Promise<{ artifactId: string }> },
+): Promise<NextResponse> {
+  return inRequest(() => downloadArtifact(_request, context));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function downloadArtifact(
   _request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<NextResponse> {

@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { MAX_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from "@/lib/uploads/constants";
 import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
 
@@ -21,6 +22,12 @@ import { isOwnUpload, uploadPrefix } from "@/lib/uploads/paths";
  * keep anywhere.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  return inRequest(() => presignUpload(request));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function presignUpload(request: Request): Promise<NextResponse> {
   // Checked before the handler: it validates store credentials first, so a
   // misconfigured store would answer an anonymous caller with a configuration
   // error instead of a refusal.

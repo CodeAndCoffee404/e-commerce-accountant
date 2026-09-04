@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 import {
   boolean,
@@ -7,6 +8,7 @@ import {
   jsonb,
   numeric,
   pgEnum,
+  pgPolicy,
   pgTable,
   primaryKey,
   text,
@@ -15,6 +17,33 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+/**
+ * Postgres' own answer to "whose row is this?".
+ *
+ * Every table below that carries a company gets this policy, and the answer
+ * stops depending on the query remembering to ask. A statement that has not
+ * named a company sees no rows at all — not an error, not somebody else's:
+ * `current_setting(…, true)` yields NULL when unset, the comparison is NULL,
+ * and NULL is not true. Failing closed is the whole point.
+ *
+ * The `nullif` is not decoration. A setting made with `set_config(…, true)`
+ * reverts when its transaction ends — to the empty string, not to NULL, once
+ * the connection has seen it at all. Casting that empty string to uuid raises
+ * an error rather than matching nothing, so every query on a reused connection
+ * would fail instead of returning nothing. The test that found this is
+ * tests/tenant-isolation.test.ts.
+ *
+ * The company is named per transaction by `withTenant` in `src/lib/db/tenant.ts`,
+ * and `acrossTenants` there is the one deliberate way past this, for the three
+ * places that genuinely span companies.
+ */
+const OWN_COMPANY = sql`tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid or current_setting('app.bypass_rls', true) = 'on'`;
+
+function tenantIsolation() {
+  return pgPolicy("tenant_isolation", { for: "all", using: OWN_COMPANY, withCheck: OWN_COMPANY });
+}
+
+
 /* ------------------------------------------------------------------ *
  * Auth.js tables
  *
@@ -22,6 +51,8 @@ import {
  * while the JWT strategy is active but kept so switching to database
  * sessions later needs no migration.
  * ------------------------------------------------------------------ */
+
+
 
 export const users = pgTable("users", {
   id: text("id")
@@ -105,6 +136,7 @@ export const memberships = pgTable(
   (table) => [
     primaryKey({ columns: [table.tenantId, table.userId] }),
     index("memberships_user_idx").on(table.userId),
+    tenantIsolation(),
   ],
 );
 
@@ -134,7 +166,9 @@ export const rolePermissions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   },
-  (table) => [primaryKey({ columns: [table.tenantId, table.role, table.section] })],
+  (table) => [primaryKey({ columns: [table.tenantId, table.role, table.section] }),
+    tenantIsolation(),
+  ],
 );
 
 /**
@@ -153,7 +187,9 @@ export const allowedEmails = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("allowed_emails_email_idx").on(table.email)],
+  (table) => [uniqueIndex("allowed_emails_email_idx").on(table.email),
+    tenantIsolation(),
+  ],
 );
 
 /* ------------------------------------------------------------------ *
@@ -219,6 +255,7 @@ export const periods = pgTable(
     // and '2026.Q3' sort before '2026.07 July' as text, which would interleave
     // a year with the months inside it.
     index("periods_start_idx").on(table.tenantId, table.startDate),
+    tenantIsolation(),
   ],
 );
 
@@ -309,6 +346,7 @@ export const sourceFiles = pgTable(
       table.periodLabel,
     ),
     index("source_files_uploaded_idx").on(table.tenantId, table.uploadedAt),
+    tenantIsolation(),
   ],
 );
 
@@ -389,6 +427,7 @@ export const transactions = pgTable(
     // rows, the dashboard counts them, the ledger pages filter by them.
     index("transactions_period_idx").on(table.tenantId, table.periodLabel, table.isCurrent),
     index("transactions_file_idx").on(table.sourceFileId),
+    tenantIsolation(),
   ],
 );
 
@@ -422,6 +461,7 @@ export const vatRates = pgTable(
     // One rate per country and start date. Without this constraint a repeat
     // seed found no conflict to skip and duplicated every rate.
     uniqueIndex("vat_rates_period_idx").on(table.tenantId, table.country, table.validFrom),
+    tenantIsolation(),
   ],
 );
 
@@ -440,6 +480,7 @@ export const sellerVatNumbers = pgTable(
   },
   (table) => [
     uniqueIndex("seller_vat_period_idx").on(table.tenantId, table.country, table.validFrom),
+    tenantIsolation(),
   ],
 );
 
@@ -475,6 +516,7 @@ export const skuMappings = pgTable(
       table.sourceSku,
       table.sourceName,
     ),
+    tenantIsolation(),
   ],
 );
 
@@ -496,7 +538,9 @@ export const channelRules = pgTable(
     value: jsonb("value").notNull(),
     note: text("note"),
   },
-  (table) => [uniqueIndex("channel_rules_key_idx").on(table.tenantId, table.channel, table.key)],
+  (table) => [uniqueIndex("channel_rules_key_idx").on(table.tenantId, table.channel, table.key),
+    tenantIsolation(),
+  ],
 );
 
 /**
@@ -551,7 +595,9 @@ export const auditLog = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("audit_log_tenant_idx").on(table.tenantId, table.createdAt)],
+  (table) => [index("audit_log_tenant_idx").on(table.tenantId, table.createdAt),
+    tenantIsolation(),
+  ],
 );
 
 export type AuditEntry = typeof auditLog.$inferSelect;
@@ -597,7 +643,9 @@ export const googleConnections = pgTable(
     connectedBy: text("connected_by").references(() => users.id, { onDelete: "set null" }),
   },
   // One Drive per tenant: two would make "where did the report go" ambiguous.
-  (table) => [uniqueIndex("google_connections_tenant_idx").on(table.tenantId)],
+  (table) => [uniqueIndex("google_connections_tenant_idx").on(table.tenantId),
+    tenantIsolation(),
+  ],
 );
 
 export type GoogleConnection = typeof googleConnections.$inferSelect;
@@ -670,13 +718,25 @@ export const reportRuns = pgTable(
       table.periodLabel,
       table.createdAt,
     ),
+    tenantIsolation(),
   ],
 );
 
-/** Which uploads fed a run — the "sources" line of the report card. */
+/**
+ * Which uploads fed a run — the "sources" line of the report card.
+ *
+ * The tenant is repeated here although both ends of the row already carry it.
+ * It is not for the queries, which reach these rows through their run: it is so
+ * that the row can be checked on its own. A rule that says "this row belongs to
+ * that company" cannot be written against a column the table does not have, and
+ * a join is a place the check can be forgotten.
+ */
 export const reportRunSources = pgTable(
   "report_run_sources",
   {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     reportRunId: uuid("report_run_id")
       .notNull()
       .references(() => reportRuns.id, { onDelete: "cascade" }),
@@ -684,16 +744,28 @@ export const reportRunSources = pgTable(
       .notNull()
       .references(() => sourceFiles.id, { onDelete: "cascade" }),
   },
-  (table) => [primaryKey({ columns: [table.reportRunId, table.sourceFileId] })],
+  (table) => [
+    primaryKey({ columns: [table.reportRunId, table.sourceFileId] }),
+    index("report_run_sources_tenant_idx").on(table.tenantId, table.sourceFileId),
+    tenantIsolation(),
+  ],
 );
 
 export const artifactKind = pgEnum("artifact_kind", ["xlsx", "gsheet"]);
 export const driveStatus = pgEnum("drive_status", ["pending", "synced", "failed"]);
 
+/**
+ * A file a run produced. The tenant is carried here for the same reason as on
+ * `report_run_sources`: an artifact is fetched by its own id, and the check
+ * that it is this company's should not depend on remembering to join.
+ */
 export const reportArtifacts = pgTable(
   "report_artifacts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     reportRunId: uuid("report_run_id")
       .notNull()
       .references(() => reportRuns.id, { onDelete: "cascade" }),
@@ -710,7 +782,11 @@ export const reportArtifacts = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("report_artifacts_run_idx").on(table.reportRunId)],
+  (table) => [
+    index("report_artifacts_run_idx").on(table.reportRunId),
+    index("report_artifacts_tenant_idx").on(table.tenantId),
+    tenantIsolation(),
+  ],
 );
 
 /**
@@ -743,6 +819,7 @@ export const reportDeadlines = pgTable(
   },
   (table) => [
     uniqueIndex("report_deadlines_idx").on(table.tenantId, table.reportType, table.granularity),
+    tenantIsolation(),
   ],
 );
 

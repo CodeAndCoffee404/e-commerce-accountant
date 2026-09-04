@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { log } from "@/lib/log";
 import { listTransactions, type TransactionFilters } from "@/lib/transactions/queries";
 
@@ -40,6 +41,12 @@ function cell(value: unknown): string {
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  return inRequest(() => exportTransactions(request));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function exportTransactions(request: Request): Promise<NextResponse> {
   const session = await auth();
 
   if (!session?.user?.id || !session.tenantId) {

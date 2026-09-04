@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { reportDefinition } from "./definitions";
@@ -43,6 +43,12 @@ export type SaveReportSettingsInput = z.input<typeof inputSchema>;
  * report added later starts strict.
  */
 export async function saveReportSettings(
+  raw: SaveReportSettingsInput,
+): Promise<SettingsActionResult> {
+  return inRequest(() => saveReportSettingsInScope(raw));
+}
+
+async function saveReportSettingsInScope(
   raw: SaveReportSettingsInput,
 ): Promise<SettingsActionResult> {
   const user = await requireAccess();
@@ -154,6 +160,12 @@ export type SaveReportStartDateInput = z.input<typeof startDateSchema>;
  * toggle — the interface asks for a second confirmation before calling it.
  */
 export async function saveReportStartDate(
+  raw: SaveReportStartDateInput,
+): Promise<SettingsActionResult> {
+  return inRequest(() => saveReportStartDateInScope(raw));
+}
+
+async function saveReportStartDateInScope(
   raw: SaveReportStartDateInput,
 ): Promise<SettingsActionResult> {
   const user = await requireAccess();

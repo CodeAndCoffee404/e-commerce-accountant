@@ -277,7 +277,13 @@ export async function runReport(input: {
   try {
     await db
       .insert(schema.reportRunSources)
-      .values(files.map((file) => ({ reportRunId: run.id, sourceFileId: file.id })));
+      .values(
+        files.map((file) => ({
+          tenantId: input.tenantId,
+          reportRunId: run.id,
+          sourceFileId: file.id,
+        })),
+      );
 
     if (definition.requiresEveryDataset) {
       // Only the channels this tenant still requires. An optional channel is
@@ -477,6 +483,7 @@ async function storeArtifacts(
     });
 
     await getDb().insert(schema.reportArtifacts).values({
+      tenantId,
       reportRunId: runId,
       kind: "xlsx",
       filename,

@@ -7,15 +7,28 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const session = { tenantId: "", userId: "close-user" };
 
-vi.mock("@/lib/auth/session", () => ({
-  requireUser: async () => ({
-    id: session.userId,
-    name: "Close test",
-    email: "close@example.invalid",
-    image: null,
+// Signed in, and nothing else about access stubbed: the actions ask the real
+// permission code what an owner may do, and `requireUser` names the company
+// for the queries below, exactly as it does in a request.
+vi.mock("@/auth", () => ({
+  auth: async () => ({
+    user: {
+      id: session.userId,
+      name: "Close test",
+      email: "close@example.invalid",
+      image: null,
+    },
     tenantId: session.tenantId,
     role: "owner" as const,
   }),
+}));
+// The report writes its workbook to Blob storage, which wants credentials the
+// test environment has no reason to hold. The bytes are not what these tests
+// are about — the rows that produced them are — so the store is stubbed and
+// the run gets a key back, as it would in production.
+vi.mock("@vercel/blob", () => ({
+  put: async (key: string) => ({ pathname: key, url: `https://blob.test/${key}` }),
+  del: async () => undefined,
 }));
 vi.mock("@/lib/google/publish", () => ({ publishRun: async () => ({ uploaded: 0, failed: 0 }) }));
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
@@ -29,6 +42,7 @@ const { buildReport } = await import("@/lib/reports/actions");
 const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { periodContaining } = await import("@/lib/periods/calendar");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
+const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -37,17 +51,22 @@ const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRE
 const PERIOD = "2026.07 July";
 
 describe.skipIf(!HAS_DB)("the dashboard", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
 
-  beforeAll(async () => {
-    const [tenant] = await db
+  beforeAll(inRequest(async () => {
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Close test", slug: `close-${process.pid}` })
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;
     // runReport records who asked, and the column is a real foreign key.
-    await db
+    await db()
       .insert(schema.users)
       .values({ id: session.userId, email: `${session.userId}@example.invalid` })
       .onConflictDoNothing();
@@ -69,7 +88,7 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
 
       if (!classified.ok) throw new Error(classified.message);
 
-      const [row] = await db
+      const [row] = await db()
         .insert(schema.sourceFiles)
         .values({
           tenantId: session.tenantId,
@@ -94,21 +113,21 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
 
       // registerUpload records these after ingest; the direct path used here
       // has to do the same for the checklist to show row counts.
-      await db
+      await db()
         .update(schema.sourceFiles)
         .set({ detectionMeta: { sourceRows: ingested.sourceRows, mappedRows: ingested.inserted } })
         .where(eq(schema.sourceFiles.id, row.id));
     }
-  }, 300_000);
+  }), 300_000);
 
-  afterAll(async () => {
+  afterAll(inRequest(async () => {
     if (session.tenantId) {
-      await db.delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
+      await db().delete(schema.tenants).where(eq(schema.tenants.id, session.tenantId));
     }
-    await db.delete(schema.users).where(eq(schema.users.id, session.userId));
-  });
+    await db().delete(schema.users).where(eq(schema.users.id, session.userId));
+  }));
 
-  it("derives the checklist from the enabled reports and marks what landed", async () => {
+  it("derives the checklist from the enabled reports and marks what landed", inRequest(async () => {
     const data = await loadDashboard(session.tenantId);
 
     expect(data.month).toBe(PERIOD);
@@ -161,9 +180,9 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     // ...and the screen still opens on the month being worked on, not on the
     // empty one that has only just begun.
     expect(data.month).toBe(PERIOD);
-  });
+  }));
 
-  it("builds what is ready, and the dashboard's own build-all shortlist empties out afterwards", async () => {
+  it("builds what is ready, and what built drops off the dashboard's own build-all shortlist", inRequest(async () => {
     // The dashboard's Build button computes its own target list from
     // `data.reports` (state "ready" or stale) and calls this same action
     // once per target, in the browser — there is no server-side "build
@@ -171,31 +190,51 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     const before = await loadDashboard(session.tenantId);
     const targets = before.reports.filter((report) => report.state === "ready" || report.stale);
 
-    expect(targets.map((t) => t.id)).toEqual(["off_amazon_sales"]);
+    // Everything these uploads are enough for. Sorted, because the shortlist's
+    // order is the dashboard's business and not this test's.
+    expect(targets.map((t) => t.id).sort()).toEqual(
+      ["allegro_zoho_invoice", "off_amazon_sales", "shopify_zoho_invoice"].sort(),
+    );
     // Not ready, so not in the shortlist — a build-all that tried it anyway
     // would fail its way through every missing report.
     expect(targets.some((t) => t.id === "sales_by_currency")).toBe(false);
 
+    const built: string[] = [];
+
     for (const target of targets) {
       const result = await buildReport({ reportType: target.id, periodLabel: PERIOD });
 
-      expect(result.ok).toBe(true);
+      if (result.ok) {
+        built.push(target.id);
+        continue;
+      }
+
+      // The two Zoho invoices key their line items on SKU, and this fixture
+      // carries codes the seeded mapping does not know. Stopping at that gate
+      // is the right answer — it is the modal the client answers — so the
+      // shortlist is allowed to survive it, but nothing else is.
+      expect(result.needsSkuMapping ?? []).not.toHaveLength(0);
     }
+
+    expect(built).toEqual(["off_amazon_sales"]);
 
     const after = await loadDashboard(session.tenantId);
     const offAmazon = after.reports.find((report) => report.id === "off_amazon_sales")!;
 
     expect(offAmazon.state).toBe("built");
     expect(offAmazon.stale).toBe(false);
-    expect(after.buildable).toBe(0);
 
-    // A second pass finds nothing left to build — same shortlist, now empty.
+    // A second pass finds only what the SKU gate stopped: what built is gone
+    // from the shortlist, and the count the dashboard shows agrees with it.
     const second = after.reports.filter((report) => report.state === "ready" || report.stale);
 
-    expect(second).toHaveLength(0);
-  }, 300_000);
+    expect(second.map((report) => report.id).sort()).toEqual(
+      ["allegro_zoho_invoice", "shopify_zoho_invoice"].sort(),
+    );
+    expect(after.buildable).toBe(second.length);
+  }), 300_000);
 
-  it("marks the built report stale after a re-upload of its source", async () => {
+  it("marks the built report stale after a re-upload of its source", inRequest(async () => {
     // The same Allegro file, salted, replaces the original slice.
     const file = path.resolve(
       process.cwd(),
@@ -210,7 +249,7 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
 
     if (!classified.ok) throw new Error(classified.message);
 
-    const [row] = await db
+    const [row] = await db()
       .insert(schema.sourceFiles)
       .values({
         tenantId: session.tenantId,
@@ -240,6 +279,12 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
     // the ledger, and the page has to say so rather than show a green tick.
     expect(offAmazon.state).toBe("built");
     expect(offAmazon.stale).toBe(true);
-    expect(data.buildable).toBe(1);
-  }, 300_000);
+
+    // And it is back on the shortlist it had left, alongside the two the SKU
+    // gate is still holding.
+    const shortlist = data.reports.filter((report) => report.state === "ready" || report.stale);
+
+    expect(shortlist.map((report) => report.id)).toContain("off_amazon_sales");
+    expect(data.buildable).toBe(shortlist.length);
+  }), 300_000);
 });

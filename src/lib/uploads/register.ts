@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { log } from "@/lib/log";
 import { getDb, schema } from "@/lib/db";
 import { classify } from "@/lib/ingest/classify";
@@ -48,6 +48,10 @@ export type RegisterResult =
  * that nothing references and nothing cleans up.
  */
 export async function registerUpload(raw: RegisterInput): Promise<RegisterResult> {
+  return inRequest(() => registerUploadInScope(raw));
+}
+
+async function registerUploadInScope(raw: RegisterInput): Promise<RegisterResult> {
   const user = await requireAccess();
 
   // Mirrors the check at the token route: without edit on Source files a

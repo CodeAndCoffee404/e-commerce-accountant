@@ -1,6 +1,6 @@
 import { Result } from "antd";
 
-import { requireAccess } from "@/lib/auth/session";
+import { inRequest, requireAccess } from "@/lib/auth/session";
 
 export const metadata = { title: "No access" };
 
@@ -10,6 +10,12 @@ export const metadata = { title: "No access" };
  * that — so the page says who to ask instead of offering a way back in.
  */
 export default async function NoAccessPage() {
+  return inRequest(() => noAccessPage());
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function noAccessPage() {
   const user = await requireAccess();
 
   return (

@@ -1,6 +1,6 @@
 "use server";
 
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 
 import { transactionSource } from "./queries";
 
@@ -16,6 +16,10 @@ export type SourceRow = {
  * fifty of them to a browser that will look at one.
  */
 export async function loadSourceRow(transactionId: string): Promise<SourceRow> {
+  return inRequest(() => loadSourceRowInScope(transactionId));
+}
+
+async function loadSourceRowInScope(transactionId: string): Promise<SourceRow> {
   const user = await requireAccess();
 
   // The same rows back both the ledger and the expander under a source file,

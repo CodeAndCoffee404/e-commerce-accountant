@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { connectUrl } from "@/lib/google/oauth";
 
 export const STATE_COOKIE = "ea-google-state";
@@ -26,6 +27,12 @@ export function callbackUrl(request: Request): string {
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  return inRequest(() => startConnect(request));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function startConnect(request: Request): Promise<NextResponse> {
   const session = await auth();
 
   if (!session?.user?.id || !session.tenantId) {

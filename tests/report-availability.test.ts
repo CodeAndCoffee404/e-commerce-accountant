@@ -11,6 +11,8 @@ import { parseSpreadsheet } from "@/lib/ingest/parse";
 import { availablePeriods } from "@/lib/reports/queries";
 import { ingestSourceFile } from "@/lib/uploads/ingest";
 
+import { inRequest } from "./helpers/request-scope";
+
 /**
  * Off-Amazon Sales needs Allegro, Cdiscount and Shopify together, and the card
  * that offers it goes quiet until all three are in. This walks that path with
@@ -43,12 +45,17 @@ const CHANNELS = [
 ];
 
 describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
-  const db = getDb();
+  // A function, not a handle: `describe.skipIf` still runs this body to collect
+  // its tests, so opening the connection here would throw before the skip
+  // could take effect — which is how these suites came to fail on a checkout
+  // with no connection string instead of skipping. Called only from inside a
+  // test that is really running.
+  const db = () => getDb();
   let tenantId = "";
 
-  afterAll(async () => {
-    if (tenantId) await db.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
-  });
+  afterAll(inRequest(async () => {
+    if (tenantId) await db().delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+  }));
 
   async function upload(relative: string) {
     const file = path.resolve(process.cwd(), relative);
@@ -62,7 +69,7 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
 
     if (!classified.ok) throw new Error(`${filename}: ${classified.message}`);
 
-    const [row] = await db
+    const [row] = await db()
       .insert(schema.sourceFiles)
       .values({
         tenantId,
@@ -88,8 +95,8 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
     return classified.period.label;
   }
 
-  it("names the missing channels, then offers the period once they are all in", async () => {
-    const [tenant] = await db
+  it("names the missing channels, then offers the period once they are all in", inRequest(async () => {
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({ name: "Availability test", slug: `avail-${process.pid}` })
       .returning({ id: schema.tenants.id });
@@ -122,10 +129,10 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
         expect(state.off_amazon_sales.blocked).toEqual([]);
       }
     }
-  }, 300_000);
+  }), 300_000);
 
-  it("will not offer the Zoho invoice until all ten marketplaces are in", async () => {
-    const [tenant] = await db
+  it("will not offer the Zoho invoice until all ten marketplaces are in", inRequest(async () => {
+    const [tenant] = await db()
       .insert(schema.tenants)
       .values({
         name: "Zoho availability test",
@@ -156,8 +163,8 @@ describe.skipIf(!HAS_DB)("what a report is still waiting for", () => {
         },
       ]);
     } finally {
-      await db.delete(schema.tenants).where(eq(schema.tenants.id, tenant.id));
+      await db().delete(schema.tenants).where(eq(schema.tenants.id, tenant.id));
       tenantId = previous;
     }
-  }, 300_000);
+  }), 300_000);
 });

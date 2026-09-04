@@ -1,5 +1,5 @@
 import { ReportsView } from "@/components/reports/reports-view";
-import { can, requireSection } from "@/lib/auth/session";
+import { can, inRequest, requireSection } from "@/lib/auth/session";
 import {
   allReportPeriodRows,
   availablePeriods,
@@ -11,6 +11,12 @@ import {
 export const metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
+  return inRequest(() => reportsPage());
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function reportsPage() {
   const user = await requireSection("reports");
   const settings = await loadReportSettings(user.tenantId);
   const [periods, missingRules, runs] = await Promise.all([

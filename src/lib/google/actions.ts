@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 
 import { accessTokenFor, disconnect, setFolder } from "./connection";
 import { folderName } from "./drive";
@@ -29,7 +29,15 @@ async function requireEditor() {
  * The token is minted per request, lives an hour, and can do nothing but touch
  * files this app created or the user selects.
  */
-export async function pickerToken(): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
+export async function pickerToken(): Promise<
+  { ok: true; token: string } | { ok: false; message: string }
+> {
+  return inRequest(() => pickerTokenInScope());
+}
+
+async function pickerTokenInScope(): Promise<
+  { ok: true; token: string } | { ok: false; message: string }
+> {
   const user = await requireEditor();
   const token = await accessTokenFor(user.tenantId);
 
@@ -45,6 +53,10 @@ const folderSchema = z.object({
 });
 
 export async function chooseFolder(input: unknown): Promise<DriveResult> {
+  return inRequest(() => chooseFolderInScope(input));
+}
+
+async function chooseFolderInScope(input: unknown): Promise<DriveResult> {
   const user = await requireEditor();
   const parsed = folderSchema.safeParse(input);
 
@@ -79,6 +91,10 @@ export async function chooseFolder(input: unknown): Promise<DriveResult> {
 }
 
 export async function disconnectDrive(): Promise<DriveResult> {
+  return inRequest(() => disconnectDriveInScope());
+}
+
+async function disconnectDriveInScope(): Promise<DriveResult> {
   const user = await requireEditor();
 
   await disconnect(user.tenantId);

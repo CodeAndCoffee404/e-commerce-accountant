@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
+import { inRequest } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 const DEFAULT_MIME = "application/octet-stream";
@@ -16,6 +17,15 @@ const DEFAULT_MIME = "application/octet-stream";
  * bytes come through here, behind the same session check as every page.
  */
 export async function GET(
+  _request: Request,
+  context: { params: Promise<{ fileId: string }> },
+): Promise<NextResponse> {
+  return inRequest(() => downloadUpload(_request, context));
+}
+
+// One request, one unit of work: a route handler answers the browser itself
+// and never passes through requireUser, so it names the company here.
+async function downloadUpload(
   _request: Request,
   { params }: { params: Promise<{ fileId: string }> },
 ): Promise<NextResponse> {

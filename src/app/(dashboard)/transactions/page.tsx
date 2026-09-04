@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { TransactionsView } from "@/components/transactions/transactions-view";
 import { one } from "@/lib/params";
-import { requireSection } from "@/lib/auth/session";
+import { inRequest, requireSection } from "@/lib/auth/session";
 import {
   filterOptions,
   listTransactions,
@@ -11,7 +11,13 @@ import {
 
 export const metadata = { title: "Transactions" };
 
-export default async function TransactionsPage({ searchParams }: PageProps<"/transactions">) {
+export default async function TransactionsPage(props: PageProps<"/transactions">) {
+  return inRequest(() => transactionsPage(props));
+}
+
+// One page, one unit of work: the transaction underneath has told Postgres
+// which company this is for, and every query below runs inside it.
+async function transactionsPage({ searchParams }: PageProps<"/transactions">) {
   const user = await requireSection("transactions");
   const params = await searchParams;
 

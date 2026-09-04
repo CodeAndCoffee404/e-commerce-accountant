@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { record } from "@/lib/audit/record";
-import { can, requireAccess } from "@/lib/auth/session";
+import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { ensurePeriods } from "./ensure";
@@ -35,6 +35,12 @@ export type SavePeriodScheduleInput = z.input<typeof inputSchema>;
  * it stay absent unless a file arrives for them.
  */
 export async function savePeriodSchedule(
+  raw: SavePeriodScheduleInput,
+): Promise<PeriodActionResult> {
+  return inRequest(() => savePeriodScheduleInScope(raw));
+}
+
+async function savePeriodScheduleInScope(
   raw: SavePeriodScheduleInput,
 ): Promise<PeriodActionResult> {
   const user = await requireAccess();
