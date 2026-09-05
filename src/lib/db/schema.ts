@@ -144,16 +144,6 @@ export const tenants = pgTable("tenants", {
    * useful question a year later is when, not whether.
    */
   blockedAt: timestamp("blocked_at", { withTimezone: true }),
-  /**
-   * No longer read by anything.
-   *
-   * It named a set of rules in `src/modules/companies`, which was a second
-   * identifier for something that already had one. The rules are found by the
-   * company's own id now. The column stays for one deploy so that the version
-   * running during the switchover still finds it — see docs/SETUP.md §1.8 —
-   * and is dropped by the next migration.
-   */
-  profileKey: text("profile_key").notNull().default("geyser"),
 });
 
 export const memberships = pgTable(

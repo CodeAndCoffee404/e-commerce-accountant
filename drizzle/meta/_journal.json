@@ -204,6 +204,13 @@
       "when": 1788604621948,
       "tag": "0028_company_blocked",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788612395624,
+      "tag": "0029_drop_profile_key",
+      "breakpoints": true
     }
   ]
 }
