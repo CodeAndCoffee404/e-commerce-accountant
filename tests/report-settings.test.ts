@@ -115,7 +115,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
     expect(state.off_amazon_sales.ready).toEqual([PERIOD]);
     expect(state.off_amazon_sales.blocked).toEqual([]);
     // The card's Needs line follows the configuration.
-    expect(state.off_amazon_sales.needs).toContain("Allegro and Shopify Geyser");
+    expect(state.off_amazon_sales.needs).toContain("Allegro and Shopify EU");
     expect(state.off_amazon_sales.needs).toContain("Cdiscount");
   }));
 

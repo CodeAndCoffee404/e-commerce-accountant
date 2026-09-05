@@ -3,7 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 import { currentlyClosed } from "@/lib/db/tenant";
-import { periodsOf } from "@/lib/periods/rows";
+import { periodsOf, type PeriodRowSummary } from "@/lib/periods/rows";
 import { ensurePeriods } from "@/lib/periods/ensure";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
@@ -121,50 +121,38 @@ export async function loadDashboard(
 
   const settings = await loadReportSettings(tenantId);
   const today = new Date().toISOString().slice(0, 10);
-  const [initialPeriods, files, availability] = await Promise.all([
-    periodsOf(tenantId),
-    db
-      .select({
-        dataset: schema.sourceFiles.dataset,
-        country: schema.sourceFiles.countryCode,
-        period: schema.sourceFiles.periodLabel,
-        granularity: schema.sourceFiles.periodGranularity,
-        filename: schema.sourceFiles.originalFilename,
-        detectionMeta: schema.sourceFiles.detectionMeta,
-        uploadedAt: schema.sourceFiles.uploadedAt,
-      })
-      .from(schema.sourceFiles)
-      .where(
-        and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
-      ),
-    availablePeriods(tenantId, settings),
-  ]);
 
-  // The second way a period comes into being, and the one that does not depend
-  // on a scheduler. Vercel's plan allows a single cron and fires it within an
-  // hour of its slot; if that run is missed the month would otherwise stay
-  // invisible until the next one.
+  // Periods first, alone, because everything else on this page is a question
+  // about them — which reports can be built, what each month is missing. Read
+  // after they had been answered, a month opened here would be invisible to
+  // the answers until the next load: the picker would offer June while the
+  // reports beside it said June did not exist.
+  let openPeriods: PeriodRowSummary[] = await periodsOf(tenantId);
+
+  // Two ways the periods can be behind, both answered from what has already
+  // been read rather than from the database.
   //
-  // Asked of what has already been read rather than of the database: on every
-  // day but one a month some period covers today, and then this costs nothing
-  // at all. It used to run on every dashboard load, before the reads, and pay
-  // for the scheduler's bad day on all the good ones.
+  // Today falls outside every one of them — the scheduler missed a month.
+  // Vercel's plan allows a single cron and fires it within an hour of its
+  // slot; if that run is missed the month would otherwise stay invisible until
+  // the next one.
+  //
+  // Or the earliest month open is later than the earliest month a report is
+  // filed for. That is a company set up in September and told "these reports
+  // begin in June": the setting saves, and the dashboard offers September
+  // alone.
+  //
+  // On a company that is not behind — every day but one a month, for the first
+  // — both questions are asked of rows already in hand and cost nothing.
   //
   // Skipped outright for a closed company. Opening a period is a write, a
   // closed company's transaction refuses writes, and a refused write aborts
   // the transaction — so the `catch` below could not save the page, and a
   // closed company's dashboard was an error screen rather than a read-only
   // one.
-  let openPeriods = initialPeriods;
-
-  // Two ways the periods can be behind, both answered from what has already
-  // been read. Today falls outside every one of them — the scheduler missed a
-  // month. Or the earliest month is later than the earliest month a report is
-  // configured to be filed for, which is what a company set up in September
-  // and told "these reports begin in June" looks like: the setting is saved,
-  // and the dashboard offers one month.
   const earliestOpen = openPeriods.reduce<string | null>(
-    (earliest, period) => (earliest === null || period.startDate < earliest ? period.startDate : earliest),
+    (earliest, period) =>
+      earliest === null || period.startDate < earliest ? period.startDate : earliest,
     null,
   );
   const earliestFiled = Object.values(settings)
@@ -201,6 +189,24 @@ export async function loadDashboard(
       log.error("period.ensure_failed", error, { tenantId });
     }
   }
+
+  const [files, availability] = await Promise.all([
+    db
+      .select({
+        dataset: schema.sourceFiles.dataset,
+        country: schema.sourceFiles.countryCode,
+        period: schema.sourceFiles.periodLabel,
+        granularity: schema.sourceFiles.periodGranularity,
+        filename: schema.sourceFiles.originalFilename,
+        detectionMeta: schema.sourceFiles.detectionMeta,
+        uploadedAt: schema.sourceFiles.uploadedAt,
+      })
+      .from(schema.sourceFiles)
+      .where(
+        and(eq(schema.sourceFiles.tenantId, tenantId), eq(schema.sourceFiles.status, "parsed")),
+      ),
+    availablePeriods(tenantId, settings, openPeriods),
+  ]);
 
   const monthly = files.filter((file) => (file.granularity ?? "month") === "month");
 

@@ -212,6 +212,15 @@ export async function loadReportSettings(tenantId: string): Promise<AllReportSet
 export async function availablePeriods(
   tenantId: string,
   preloadedSettings?: AllReportSettings,
+  /**
+   * The periods the caller already holds.
+   *
+   * The dashboard opens missing periods before asking this, and must pass what
+   * it opened: `periodsOf` is cached for the request, so without this the
+   * month picker would offer June while the reports beside it said June did
+   * not exist.
+   */
+  preloadedPeriods?: { label: string; granularity: PeriodGranularity; startDate: string; endDate: string }[],
 ): Promise<Record<ReportTypeId, ReportAvailability>> {
   // The scheduler's day, in UTC, matching the cron. A period is offered only
   // once it is over: a quarter built from the two months that have happened
@@ -222,7 +231,7 @@ export async function availablePeriods(
     // Ordering and shape live in `periodsOf`, which every reader on the page
     // shares — this used to be the first of four separate reads of one small
     // table.
-    periodsOf(tenantId).then((rows) =>
+    (preloadedPeriods ? Promise.resolve(preloadedPeriods) : periodsOf(tenantId)).then((rows) =>
       rows.map((row) => ({
         label: row.label,
         granularity: row.granularity,

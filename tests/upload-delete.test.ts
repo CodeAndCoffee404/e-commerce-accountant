@@ -250,7 +250,7 @@ describe.skipIf(!HAS_DB)("deleting an upload", () => {
 
     let state = await availablePeriods(session.tenantId);
     expect(state.off_amazon_sales.blocked).toEqual([
-      { period: PERIOD, missing: ["Cdiscount", "Shopify Geyser"], endsOn: null },
+      { period: PERIOD, missing: ["Cdiscount", "Shopify EU"], endsOn: null },
     ]);
 
     await deleteUpload(file.id);

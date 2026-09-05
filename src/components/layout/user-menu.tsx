@@ -5,16 +5,18 @@ import {
   CheckOutlined,
   DeploymentUnitOutlined,
   LogoutOutlined,
+  EditOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Avatar, Dropdown, Typography, message } from "antd";
+import { Avatar, Dropdown, Input, Modal, Typography, message } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import type { Company } from "@/lib/auth/allowlist";
 import { signOutAction } from "@/lib/auth/actions";
 import { switchCompany } from "@/lib/auth/companies";
+import { saveUserName } from "@/lib/members/actions";
 import type { CurrentUser } from "@/lib/auth/session";
 
 export function UserMenu({
@@ -28,6 +30,23 @@ export function UserMenu({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  // Its own name here rather than a shared "renaming" flag: the Team screen is
+  // where an owner renames other people, and this is only ever yourself.
+  const [naming, setNaming] = useState<string | null>(null);
+
+  function saveName() {
+    if (naming === null) return;
+
+    start(async () => {
+      const result = await saveUserName({ name: naming });
+
+      if (result.ok) message.success(result.message);
+      else message.error(result.message, 8);
+
+      setNaming(null);
+      router.refresh();
+    });
+  }
 
   function move(tenantId: string) {
     if (tenantId === user.tenantId || pending) return;
@@ -66,6 +85,7 @@ export function UserMenu({
       : [];
 
   return (
+    <>
     <Dropdown
       trigger={["click"]}
       menu={{
@@ -78,12 +98,23 @@ export function UserMenu({
                 <Typography.Text strong style={{ display: "block" }}>
                   {user.name ?? user.email}
                 </Typography.Text>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>
                   {user.email} · {user.role}
                 </Typography.Text>
-                <Typography.Text style={{ fontSize: 12 }}>{company}</Typography.Text>
+                {/* Its own line: inline, it ran straight on from the role and
+                    read as "ownerGeyser". */}
+                <Typography.Text style={{ display: "block", fontSize: 12 }}>{company}</Typography.Text>
               </div>
             ),
+          },
+          {
+            key: "name",
+            icon: <EditOutlined />,
+            // Here as well as on Team, because Team is the owner's screen: an
+            // accountant or a viewer cannot open it, and their name is the one
+            // shown beside everything they do.
+            label: user.name ? "Change your name" : "Add your name",
+            onClick: () => setNaming(user.name ?? ""),
           },
           { type: "divider" },
           ...switcher,
@@ -130,5 +161,29 @@ export function UserMenu({
         alt={user.email}
       />
     </Dropdown>
+
+      <Modal
+        title="Your name"
+        open={naming !== null}
+        onCancel={() => setNaming(null)}
+        onOk={saveName}
+        okText="Save"
+        confirmLoading={pending}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary">
+          Shown beside everything you do, on the dashboard and in the activity log. Leave it empty
+          and your address is shown instead.
+        </Typography.Paragraph>
+        <Input
+          value={naming ?? ""}
+          onChange={(event) => setNaming(event.target.value)}
+          onPressEnter={saveName}
+          placeholder={user.email}
+          maxLength={120}
+          autoFocus
+        />
+      </Modal>
+    </>
   );
 }

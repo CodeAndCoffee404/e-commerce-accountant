@@ -296,6 +296,26 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
                             status="active"
                             style={{ marginBottom: 0 }}
                           />
+                        ) : item.stage === "processing" ? (
+                          // The half nobody could see. The bytes are up; the
+                          // server is now reading the file and storing its
+                          // rows, which on a large export is the longer half,
+                          // and the dialog sat still through all of it. A
+                          // filled bar rather than a percentage: there is no
+                          // honest number here, and `active` keeps the sweep
+                          // running so it reads as working rather than stuck.
+                          <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                            <Progress
+                              percent={100}
+                              size="small"
+                              status="active"
+                              showInfo={false}
+                              style={{ marginBottom: 0 }}
+                            />
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              Recognising the file and storing its rows…
+                            </Typography.Text>
+                          </Space>
                         ) : (
                           <Typography.Text
                             type={item.stage === "error" ? "danger" : "secondary"}
@@ -305,12 +325,7 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
                               ? item.summary
                               : item.stage === "error"
                                 ? item.error
-                                : item.stage === "processing"
-                                  ? // No bar here on purpose: the server is reading
-                                    // and storing rows, and a bar that stopped
-                                    // moving would read as a hang.
-                                    "Recognising the file and storing its rows…"
-                                  : "Waiting its turn"}
+                                : "Waiting its turn"}
                           </Typography.Text>
                         )
                       }

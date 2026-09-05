@@ -240,7 +240,12 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
 function shopifyModuleFor(store: ShopifyStore, rules: readonly ChannelRuleSeed[]): ChannelModule {
   return {
     id: store.dataset,
-    shortName: store.dataset === GEYSER.dataset ? "Shopify Geyser" : "Shopify Waterlift",
+    // The name people read. The dataset id underneath stays `shopify_geyser`:
+    // it is written into every uploaded file's row and into the channel-rule
+    // keys, so renaming it would be a migration, not a label change. So would
+    // the Zoho account name "Shopify Geyser Sales", which Zoho matches
+    // byte for byte on import.
+    shortName: store.dataset === GEYSER.dataset ? "Shopify EU" : "Shopify Waterlift",
     classify: (grid: Grid) => {
       const result = classifySimpleChannel(PROFILE, grid, VARIANTS);
 

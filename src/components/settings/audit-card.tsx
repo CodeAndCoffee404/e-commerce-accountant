@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Empty, Table, Tag, Typography } from "antd";
+import { Card, Empty, Table, Tag, Tooltip, Typography } from "antd";
 
 import type { AuditRow } from "@/lib/audit/record";
 
@@ -52,7 +52,14 @@ export function AuditCard({ rows }: { rows: AuditRow[] }) {
             dataIndex: "userEmail",
             width: 220,
             ellipsis: true,
-            render: (value: string | null) => value ?? <Typography.Text type="secondary">—</Typography.Text>,
+            render: (email: string | null, row) =>
+              row.userName ? (
+                <Tooltip title={email ?? undefined}>
+                  <span>{row.userName}</span>
+                </Tooltip>
+              ) : (
+                email ?? <Typography.Text type="secondary">—</Typography.Text>
+              ),
           },
           {
             title: "Action",
