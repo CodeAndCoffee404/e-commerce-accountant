@@ -157,7 +157,29 @@ export async function loadDashboard(
   // one.
   let openPeriods = initialPeriods;
 
-  if (!currentlyClosed() && !openPeriods.some((period) => period.startDate <= today && today <= period.endDate)) {
+  // Two ways the periods can be behind, both answered from what has already
+  // been read. Today falls outside every one of them — the scheduler missed a
+  // month. Or the earliest month is later than the earliest month a report is
+  // configured to be filed for, which is what a company set up in September
+  // and told "these reports begin in June" looks like: the setting is saved,
+  // and the dashboard offers one month.
+  const earliestOpen = openPeriods.reduce<string | null>(
+    (earliest, period) => (earliest === null || period.startDate < earliest ? period.startDate : earliest),
+    null,
+  );
+  const earliestFiled = Object.values(settings)
+    .filter((report) => report.enabled && report.startsFrom)
+    .reduce<string | null>(
+      (earliest, report) =>
+        earliest === null || report.startsFrom! < earliest ? report.startsFrom! : earliest,
+      null,
+    );
+
+  const behind =
+    !openPeriods.some((period) => period.startDate <= today && today <= period.endDate) ||
+    (earliestFiled !== null && (earliestOpen === null || earliestFiled < earliestOpen));
+
+  if (!currentlyClosed() && behind) {
     try {
       await ensurePeriods(tenantId, today);
 

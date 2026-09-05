@@ -92,6 +92,15 @@ async function deleteVatRateInScope(id: string): Promise<ActionResult> {
   return { ok: true, message: "Rate deleted." };
 }
 
+/** The day before a date, which is when the registration it replaces stops. */
+function dayBefore(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+
+  day.setUTCDate(day.getUTCDate() - 1);
+
+  return day.toISOString().slice(0, 10);
+}
+
 const sellerVatSchema = z.object({
   /**
    * Required: a registration is never created here.
@@ -116,10 +125,21 @@ const sellerVatSchema = z.object({
 });
 
 /**
- * Correcting a number, or closing a registration that has lapsed.
+ * Correcting a number, closing a registration that has lapsed, or succeeding
+ * one that has changed.
  *
- * Periods are kept so that rebuilding an old month quotes the number that was
- * in force then rather than today's.
+ * The third case is why the dates are on the screen at all. A company that
+ * re-registers keeps both numbers: the old one is what its invoices carried
+ * until the change, and rebuilding that month has to quote it. Overwriting the
+ * row would rewrite those months to say something that was never on the
+ * paperwork.
+ *
+ * Which of the three this is comes from the dates, not from a button. Moving
+ * `validFrom` forward says "a different number, from this date": the row in
+ * force is closed the day before and a new one opens. Leaving `validFrom`
+ * where it was says "this row, corrected". There is no way to say "a different
+ * number, retroactively, and forget the old one" — that is not an edit, it is
+ * a rewrite of what was filed.
  */
 export async function saveSellerVatNumber(input: unknown): Promise<ActionResult> {
   return inRequest(() => saveSellerVatNumberInScope(input));
@@ -133,20 +153,75 @@ async function saveSellerVatNumberInScope(input: unknown): Promise<ActionResult>
 
   const { id, ...values } = parsed.data;
 
-  // The tenant clause is what stops an id from another company being edited
-  // through this one; row-level security stops it as well, and both is the
-  // point.
-  const updated = await getDb()
-    .update(schema.sellerVatNumbers)
-    .set({ ...values, validTo: values.validTo ?? null })
+  const db = getDb();
+
+  // Read first: the country and the scheme come from the stored row and never
+  // from the browser, and whether this is a succession is a comparison against
+  // what is there now. The tenant clause is what stops an id from another
+  // company being reached through this one; row-level security stops it as
+  // well, and both is the point.
+  const [existing] = await db
+    .select()
+    .from(schema.sellerVatNumbers)
     .where(
       and(eq(schema.sellerVatNumbers.id, id), eq(schema.sellerVatNumbers.tenantId, user.tenantId)),
     )
-    .returning({ id: schema.sellerVatNumbers.id });
+    .limit(1);
 
-  if (updated.length === 0) {
+  if (!existing) {
     return { ok: false, message: "That registration is no longer there. Reload the page." };
   }
+
+  const succeeds = values.validFrom > existing.validFrom && values.vatNumber !== existing.vatNumber;
+
+  if (succeeds) {
+    const closesOn = dayBefore(values.validFrom);
+
+    if (closesOn < existing.validFrom) {
+      return {
+        ok: false,
+        message: `${existing.vatNumber} starts on ${existing.validFrom}, so a new number cannot begin the day after it starts. Pick a later date.`,
+      };
+    }
+
+    // Both rows in one transaction, because a company with two open
+    // registrations for the same pair is a company whose reports cannot say
+    // which number is theirs — and the unique index would refuse the second
+    // one anyway, leaving the first closed and nothing to replace it.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.sellerVatNumbers)
+        .set({ validTo: closesOn })
+        .where(eq(schema.sellerVatNumbers.id, id));
+
+      await tx.insert(schema.sellerVatNumbers).values({
+        tenantId: user.tenantId,
+        country: existing.country,
+        scheme: existing.scheme,
+        note: existing.note,
+        vatNumber: values.vatNumber,
+        validFrom: values.validFrom,
+        validTo: values.validTo ?? null,
+      });
+    });
+
+    await audit(user, "seller_vat.succeeded", "seller_vat_number", id, {
+      ...values,
+      replaces: existing.vatNumber,
+      closedOn: closesOn,
+    });
+    revalidatePath("/settings");
+
+    return {
+      ok: true,
+      message: `${values.vatNumber} is in force from ${values.validFrom}. ${existing.vatNumber} stays on reports up to ${closesOn}.`,
+    };
+  }
+
+  await db
+    .update(schema.sellerVatNumbers)
+    .set({ ...values, validTo: values.validTo ?? null })
+    .where(eq(schema.sellerVatNumbers.id, id));
 
   await audit(user, "seller_vat.updated", "seller_vat_number", id, values);
   revalidatePath("/settings");

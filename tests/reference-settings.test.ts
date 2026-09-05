@@ -40,6 +40,7 @@ const { getDb, schema } = await import("@/lib/db");
 const { acrossTenants, withTenant } = await import("@/lib/db/tenant");
 const { loadReferenceData } = await import("@/lib/reference/queries");
 const { saveSellerVatNumber } = await import("@/lib/reference/actions");
+const { sellerVatOn } = await import("@/lib/reports/rules");
 const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
@@ -220,6 +221,94 @@ describe.skipIf(!HAS_DB)("the VAT registrations screen", () => {
 
     expect(after.scheme).toBe("UNION-OSS");
     expect(after.country).toBe("EE");
+  });
+
+  it("keeps the old number when a new one takes over", async () => {
+    const id = await company();
+
+    await acrossTenants(() =>
+      getDb().insert(schema.sellerVatNumbers).values({
+        tenantId: id,
+        country: "PL",
+        scheme: "REGULAR",
+        vatNumber: "PL-OLD",
+        validFrom: "2020-01-01",
+      }),
+    );
+
+    const [before] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    // Moving the start date forward is how the screen says "the number
+    // changed". Overwriting the row instead would rewrite every month already
+    // filed under the old number to claim it carried the new one.
+    const saved = await saveSellerVatNumber({
+      id: before.id,
+      vatNumber: "PL-NEW",
+      validFrom: "2026-07-01",
+    });
+
+    expect(saved.ok).toBe(true);
+
+    const rows = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    expect(
+      rows.map((row) => ({ n: row.vatNumber, from: row.validFrom, to: row.validTo })),
+    ).toEqual(
+      expect.arrayContaining([
+        { n: "PL-OLD", from: "2020-01-01", to: "2026-06-30" },
+        { n: "PL-NEW", from: "2026-07-01", to: null },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+
+    // And the succession is only meaningful if a report still finds the right
+    // one for the month it is rebuilding.
+    const snapshot = {
+      vatRates: [],
+      skuMappings: [],
+      channelRules: [],
+      sellerVatNumbers: rows.map((row) => ({
+        country: row.country,
+        scheme: row.scheme,
+        vatNumber: row.vatNumber,
+        validFrom: row.validFrom,
+        validTo: row.validTo,
+      })),
+    };
+
+    expect(sellerVatOn(snapshot, { scheme: "REGULAR", country: "PL" }, "2026-06-15")).toBe("PL-OLD");
+    expect(sellerVatOn(snapshot, { scheme: "REGULAR", country: "PL" }, "2026-07-15")).toBe("PL-NEW");
+  });
+
+  it("corrects in place when the start date has not moved", async () => {
+    const id = await company();
+
+    await acrossTenants(() =>
+      getDb().insert(schema.sellerVatNumbers).values({
+        tenantId: id,
+        country: "FR",
+        scheme: "REGULAR",
+        vatNumber: "FR-TYPO",
+        validFrom: "2020-01-01",
+      }),
+    );
+
+    const [before] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    // A typo is not a succession: there was never a month where FR-TYPO was
+    // the company's number, so keeping it would invent a registration.
+    const saved = await saveSellerVatNumber({
+      id: before.id,
+      vatNumber: "FR23888800463",
+      validFrom: before.validFrom,
+    });
+
+    expect(saved.ok).toBe(true);
+
+    const rows = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].vatNumber).toBe("FR23888800463");
   });
 
   it("does not create a registration", async () => {

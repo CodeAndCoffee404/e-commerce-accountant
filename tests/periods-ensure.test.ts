@@ -38,6 +38,16 @@ afterAll(inRequest(async () => {
   }
 }));
 
+/** Sets a report's own start date, the way the Reports settings screen does. */
+async function reportStartsFrom(tenantId: string, reportId: string, startsFrom: string) {
+  await getDb().insert(schema.channelRules).values({
+    tenantId,
+    channel: "reports",
+    key: reportId,
+    value: { enabled: true, startsFrom },
+  });
+}
+
 async function tenant(schedule?: Partial<PeriodSchedule>): Promise<string> {
   const db = getDb();
   const suffix = created.length + Date.now();
@@ -305,5 +315,58 @@ describe.skipIf(!HAS_DB)("a file joining the ledger", () => {
 
     expect(period.label).toBe("2026.07 July");
     expect(period.origin).toBe("upload");
+  }));
+
+  it("opens every month back to the earliest report a company files", inRequest(async () => {
+    const tenantId = await tenant();
+
+    // What somebody does on their first day: create the company, then say the
+    // reports begin in June. Before this, the anchor was set to whenever the
+    // company happened to be created, and the dashboard offered exactly one
+    // month — the one we are standing in — with no way to reach the months the
+    // reports had just been configured for.
+    await reportStartsFrom(tenantId, "off_amazon_sales", "2026-06-01");
+
+    const opened = await ensurePeriods(tenantId, "2026-09-15");
+    const months = opened
+      .filter((period) => period.granularity === "month")
+      .map((period) => period.label)
+      .sort();
+
+    expect(months).toEqual([
+      "2026.06 June",
+      "2026.07 July",
+      "2026.08 August",
+      "2026.09 September",
+    ]);
+  }));
+
+  it("does not close months already open when a report starts later", inRequest(async () => {
+    const tenantId = await tenant();
+
+    await reportStartsFrom(tenantId, "off_amazon_sales", "2026-06-01");
+    await ensurePeriods(tenantId, "2026-09-15");
+
+    // The company then decides this report only concerns August onwards. That
+    // narrows what the report shows; it must not take away months the company
+    // has been working in.
+    await getDb()
+      .update(schema.channelRules)
+      .set({ value: { enabled: true, startsFrom: "2026-08-01" } })
+      .where(
+        and(
+          eq(schema.channelRules.tenantId, tenantId),
+          eq(schema.channelRules.channel, "reports"),
+        ),
+      );
+
+    await ensurePeriods(tenantId, "2026-09-15");
+
+    const all = await getDb()
+      .select({ label: schema.periods.label })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId));
+
+    expect(all.map((row) => row.label)).toContain("2026.06 June");
   }));
 });

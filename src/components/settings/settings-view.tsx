@@ -726,10 +726,10 @@ function SellerVat({
   return (
     <>
       <Typography.Paragraph type="secondary">
-        The numbers reports quote as the seller. Correct one that was entered
-        wrongly, or give it an end date once the registration lapses — a report
-        rebuilt for an earlier month goes on quoting the number that was in
-        force then.
+        The numbers reports quote as the seller. Correct one that was entered wrongly, give it an
+        end date once the registration lapses, or move its start date forward to say the number
+        has changed — the old one is kept, and a report rebuilt for an earlier month goes on
+        quoting whichever was in force then.
       </Typography.Paragraph>
 
       <Table<SellerVatNumber>
@@ -786,8 +786,19 @@ function SellerVat({
         onSubmit={(values) => run(() => saveSellerVatNumber({ ...values, id: editing?.id }))}
         fields={[
           { name: "vatNumber", label: "VAT number", required: true, placeholder: "PL5263307678" },
-          { name: "validFrom", label: "Valid from", required: true, placeholder: "2026-01-01" },
-          { name: "validTo", label: "Valid to", placeholder: "empty while in force" },
+          {
+            name: "validFrom",
+            label: "Valid from",
+            required: true,
+            placeholder: "2026-01-01",
+            help: "Leave as it is to correct this number. Move it forward to say the number changed: the old one is kept and stays on reports for the months it covered.",
+          },
+          {
+            name: "validTo",
+            label: "Valid to",
+            placeholder: "empty while in force",
+            help: "Set once the registration lapses.",
+          },
         ]}
       />
     </>
