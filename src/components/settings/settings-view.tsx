@@ -23,7 +23,6 @@ import { useState, useTransition } from "react";
 
 import {
   deleteAllegroCurrency,
-  deleteSellerVatNumber,
   deleteSkuMapping,
   deleteVatRate,
   refreshRates,
@@ -696,6 +695,21 @@ function Rules({
   );
 }
 
+/**
+ * The seller's own VAT numbers, and nothing else.
+ *
+ * A registration is a country, a scheme and a number, but only the number is
+ * the company's to say. Which country and which scheme a report looks a number
+ * up by follows from the report itself, and the pair was written into the row
+ * when the company was created — so the screen neither shows it nor sends it
+ * back. It used to send both, which meant an operator editing a note could
+ * change the scheme of the one-stop registration from a select and take every
+ * export sale out of Off-Amazon Sales, with no error anywhere.
+ *
+ * Nothing is added or deleted here for the same reason: which registrations a
+ * company needs follows from the reports it runs, so a fifth country is a
+ * change to the rules rather than a row somebody types in.
+ */
 function SellerVat({
   data,
   canEdit,
@@ -707,25 +721,16 @@ function SellerVat({
   run: Runner;
   pending: boolean;
 }) {
-  const [editing, setEditing] = useState<Partial<SellerVatNumber> | null>(null);
+  const [editing, setEditing] = useState<SellerVatNumber | null>(null);
 
   return (
     <>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button
-          type="primary"
-          disabled={!canEdit}
-          onClick={() => setEditing({ validFrom: new Date().toISOString().slice(0, 10) })}
-        >
-          Add registration
-        </Button>
-        <Typography.Text type="secondary">
-          The registrations reports quote as the seller. Which one a row gets follows from where
-          the sale is taxed and the scheme it is reported under, so this table is what the
-          reports print — a country and scheme missing from it makes those rows stop rather than
-          print somebody else&apos;s number.
-        </Typography.Text>
-      </Space>
+      <Typography.Paragraph type="secondary">
+        The numbers reports quote as the seller. Correct one that was entered
+        wrongly, or give it an end date once the registration lapses — a report
+        rebuilt for an earlier month goes on quoting the number that was in
+        force then.
+      </Typography.Paragraph>
 
       <Table<SellerVatNumber>
         dataSource={data}
@@ -733,83 +738,40 @@ function SellerVat({
         size="small"
         pagination={false}
         loading={pending}
-        scroll={{ x: 760 }}
         columns={[
-          { title: "Country", dataIndex: "country", width: 90 },
-          {
-            title: "Scheme",
-            dataIndex: "scheme",
-            width: 140,
-            render: (value: string) => <Tag>{value}</Tag>,
-          },
-          { title: "VAT number", dataIndex: "vatNumber", width: 200 },
-          { title: "From", dataIndex: "validFrom", width: 120 },
+          { title: "VAT number", dataIndex: "vatNumber" },
+          { title: "From", dataIndex: "validFrom", width: 140 },
           {
             title: "To",
             dataIndex: "validTo",
-            width: 120,
+            width: 140,
             render: (value: string | null) =>
               value ?? <Typography.Text type="secondary">in force</Typography.Text>,
           },
-          { title: "Note", dataIndex: "note", ellipsis: true },
           {
             title: "",
             key: "actions",
-            width: 140,
+            width: 90,
+            align: "right",
             render: (_, row) => (
-              <Space>
-                <Button size="small" disabled={!canEdit} onClick={() => setEditing(row)}>
-                  Edit
-                </Button>
-                <Popconfirm
-                  title="Delete this registration?"
-                  okText="Delete"
-                  okButtonProps={{ danger: true }}
-                  cancelText="Keep"
-                  onConfirm={() => run(() => deleteSellerVatNumber(row.id))}
-                  disabled={!canEdit}
-                >
-                  <Tooltip title="Delete this registration">
-                    <Button
-                      size="small"
-                      danger
-                      disabled={!canEdit}
-                      icon={<DeleteOutlined />}
-                      aria-label="Delete"
-                    />
-                  </Tooltip>
-                </Popconfirm>
-              </Space>
+              <Button size="small" disabled={!canEdit} onClick={() => setEditing(row)}>
+                Edit
+              </Button>
             ),
           },
         ]}
       />
 
       <EditModal
-        title="Seller VAT registration"
+        title="Seller VAT number"
         open={editing !== null}
         initial={editing}
         onClose={() => setEditing(null)}
         onSubmit={(values) => run(() => saveSellerVatNumber({ ...values, id: editing?.id }))}
         fields={[
-          {
-            name: "country",
-            label: "Country code",
-            required: true,
-            placeholder: "PL",
-            help: "For one-stop, the country the company registered in — not where the goods went.",
-          },
-          {
-            name: "scheme",
-            label: "Scheme",
-            required: true,
-            type: "select",
-            options: SCHEME_OPTIONS,
-          },
           { name: "vatNumber", label: "VAT number", required: true, placeholder: "PL5263307678" },
           { name: "validFrom", label: "Valid from", required: true, placeholder: "2026-01-01" },
           { name: "validTo", label: "Valid to", placeholder: "empty while in force" },
-          { name: "note", label: "Note" },
         ]}
       />
     </>

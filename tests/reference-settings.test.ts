@@ -127,7 +127,42 @@ describe.skipIf(!HAS_DB)("the VAT registrations screen", () => {
     ]);
   });
 
-  it("keeps the scheme through an edit that was not about it", async () => {
+  it("leaves the country and the scheme alone through an edit", async () => {
+    const id = await company();
+
+    await acrossTenants(() =>
+      getDb().insert(schema.sellerVatNumbers).values({
+        tenantId: id,
+        country: "EE",
+        scheme: "UNION-OSS",
+        vatNumber: "EE102013089",
+        validFrom: "2020-01-01",
+        note: "the one-stop registration",
+      }),
+    );
+
+    const [before] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    // What the screen sends: the number and its period, and nothing else. The
+    // country and the scheme are not the company's to say — a report decides
+    // which pair it needs — so they are not on the form and not in the call.
+    const saved = await saveSellerVatNumber({
+      id: before.id,
+      vatNumber: "EE999999999",
+      validFrom: before.validFrom,
+    });
+
+    expect(saved.ok).toBe(true);
+
+    const [after] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    expect(after.vatNumber).toBe("EE999999999");
+    expect(after.country).toBe("EE");
+    expect(after.scheme).toBe("UNION-OSS");
+    expect(after.note).toBe("the one-stop registration");
+  });
+
+  it("refuses a scheme sent from the browser", async () => {
     const id = await company();
 
     await acrossTenants(() =>
@@ -142,16 +177,17 @@ describe.skipIf(!HAS_DB)("the VAT registrations screen", () => {
 
     const [before] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
 
-    // What the screen sends back is what it was given, plus the one field the
-    // person changed. If the form never received the scheme, this is where a
-    // one-stop registration quietly becomes a local one.
+    // The failure this exists to prevent: the one-stop registration turned
+    // local by a hand-made request. Off-Amazon Sales would then find no
+    // UNION-OSS number, skip every export sale, and say so only in a warning
+    // nobody reads. The field is not on the form, so this is somebody past
+    // the form — which is exactly who the check is for.
     const saved = await saveSellerVatNumber({
       id: before.id,
-      country: before.country,
-      scheme: before.scheme,
       vatNumber: before.vatNumber,
       validFrom: before.validFrom,
-      note: "renamed",
+      scheme: "REGULAR",
+      country: "PL",
     });
 
     expect(saved.ok).toBe(true);
@@ -159,6 +195,25 @@ describe.skipIf(!HAS_DB)("the VAT registrations screen", () => {
     const [after] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
 
     expect(after.scheme).toBe("UNION-OSS");
-    expect(after.note).toBe("renamed");
+    expect(after.country).toBe("EE");
   });
+
+  it("does not create a registration", async () => {
+    const id = await company();
+
+    // There is no "add" on the screen, and there is none in the action either:
+    // a fifth country is a change to the rules the reports are written from,
+    // not a row an operator types in and a report then has to make sense of.
+    const saved = await saveSellerVatNumber({
+      vatNumber: "DE123456789",
+      validFrom: "2026-01-01",
+    });
+
+    expect(saved.ok).toBe(false);
+
+    const rows = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    expect(rows).toHaveLength(0);
+  });
+
 });
