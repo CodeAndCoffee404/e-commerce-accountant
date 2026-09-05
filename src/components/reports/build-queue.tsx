@@ -3,7 +3,7 @@
 import { App, Alert, Button, Input, Modal, Select, Space, Switch, Table, Tooltip, Typography } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { saveAllegroCurrency, saveSkuMapping } from "@/lib/reference/actions";
 import { buildReport } from "@/lib/reports/actions";
@@ -56,7 +56,16 @@ export function useBuildQueue({
   const { message } = App.useApp();
 
   const queueRef = useRef<Target[]>([]);
+  const awaitingRefresh = useRef(false);
+  const [refreshing, startRefresh] = useTransition();
   const [runningKey, setRunningKey] = useState<string | null>(null);
+  /**
+   * What this queue has just finished, so the rows that changed can say so.
+   *
+   * Cleared on a timer: it marks a moment, and a report that has been built
+   * for a minute is simply built.
+   */
+  const [justBuilt, setJustBuilt] = useState<ReadonlySet<string>>(new Set());
   const [queueTotal, setQueueTotal] = useState(0);
   const [queueDone, setQueueDone] = useState(0);
   // Which control asked for the work now in the queue. A row's Build and a
@@ -82,16 +91,41 @@ export function useBuildQueue({
     const next = queueRef.current.shift();
 
     if (!next) {
-      setRunningKey(null);
-      setQueueTotal(0);
-      setQueueDone(0);
-      setQueueSource(null);
-      router.refresh();
+      // The queue is empty but the screen is not up to date yet. Clearing the
+      // buttons here and refreshing afterwards left a gap of a second or two
+      // in which the row said "Build" again — the report was finished, and the
+      // page was still describing the moment before it started. So the running
+      // state is held until the refreshed page has actually been committed,
+      // and the button goes straight from building to built.
+      awaitingRefresh.current = true;
+      startRefresh(() => router.refresh());
+
       return;
     }
 
     void runTarget(next);
   };
+
+  // A build is worth noticing for a moment and then it is just a built report.
+  useEffect(() => {
+    if (justBuilt.size === 0) return;
+
+    const timer = setTimeout(() => setJustBuilt(new Set()), 4000);
+
+    return () => clearTimeout(timer);
+  }, [justBuilt]);
+
+  // The other half of the same thing: the transition above has landed, so the
+  // screen now shows what the queue just did and the queue can stand down.
+  useEffect(() => {
+    if (refreshing || !awaitingRefresh.current) return;
+
+    awaitingRefresh.current = false;
+    setRunningKey(null);
+    setQueueTotal(0);
+    setQueueDone(0);
+    setQueueSource(null);
+  }, [refreshing]);
 
   async function runTarget(target: Target): Promise<void> {
     setRunningKey(targetKey(target));
@@ -105,6 +139,9 @@ export function useBuildQueue({
 
       if (result.ok) {
         message.success(`${target.label}: ${result.message}`, 6);
+        // Marked before the refresh, so that when the row comes back as built
+        // it can say which build was this one.
+        setJustBuilt((current) => new Set(current).add(targetKey(target)));
       } else if (result.needsSkuMapping && result.needsSkuMapping.length > 0) {
         // A form to fill in, not an error to read — the queue pauses here
         // until it is saved, then re-attempts this same target.
@@ -270,6 +307,7 @@ export function useBuildQueue({
   };
 
   return {
+    justBuilt,
     startQueue,
     runningKey,
     queueTotal,
