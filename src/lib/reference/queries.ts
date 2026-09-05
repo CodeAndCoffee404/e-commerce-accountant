@@ -14,6 +14,8 @@ export type ReferenceData = {
   sellerVatNumbers: {
     id: string;
     country: string;
+    /** `REGULAR` or `UNION-OSS`. With the country, this is what a report looks up. */
+    scheme: string;
     vatNumber: string;
     validFrom: string;
     validTo: string | null;
@@ -64,6 +66,7 @@ export async function loadReferenceData(tenantId: string): Promise<ReferenceData
         .select({
           id: schema.sellerVatNumbers.id,
           country: schema.sellerVatNumbers.country,
+          scheme: schema.sellerVatNumbers.scheme,
           vatNumber: schema.sellerVatNumbers.vatNumber,
           validFrom: schema.sellerVatNumbers.validFrom,
           validTo: schema.sellerVatNumbers.validTo,
@@ -71,7 +74,7 @@ export async function loadReferenceData(tenantId: string): Promise<ReferenceData
         })
         .from(schema.sellerVatNumbers)
         .where(eq(schema.sellerVatNumbers.tenantId, tenantId))
-        .orderBy(asc(schema.sellerVatNumbers.country)),
+        .orderBy(asc(schema.sellerVatNumbers.country), asc(schema.sellerVatNumbers.scheme)),
 
       db
         .select({
