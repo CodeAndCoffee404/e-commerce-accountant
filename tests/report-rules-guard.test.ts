@@ -21,6 +21,7 @@ const { getDb, schema } = await import("@/lib/db");
 const { classify } = await import("@/lib/ingest/classify");
 const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
+const { giveRegistrations } = await import("./helpers/registrations");
 const { runReport } = await import("@/lib/reports/run");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { inRequest } = await import("./helpers/request-scope");
@@ -134,6 +135,8 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
 
   it("builds once the defaults are restored", inRequest(async () => {
     await seedReferenceData(tenantId);
+    // Registrations are entered, not seeded — see the helper.
+    await giveRegistrations(tenantId);
 
     const outcome = await runReport({
       tenantId,

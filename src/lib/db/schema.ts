@@ -457,6 +457,14 @@ export const transactions = pgTable(
     // rows, the dashboard counts them, the ledger pages filter by them.
     index("transactions_period_idx").on(table.tenantId, table.periodLabel, table.isCurrent),
     index("transactions_file_idx").on(table.sourceFileId),
+    // The badge in the sidebar, counted on every page load of every screen
+    // because it lives in the layout. Partial on purpose: rows needing
+    // attention are the rare ones, so the index stays a fraction of the table
+    // and the count reads only them, instead of walking every current row this
+    // company has ever had.
+    index("transactions_attention_idx")
+      .on(table.tenantId)
+      .where(sql`${table.isCurrent} and ${table.needsAttention}`),
     tenantIsolation(),
   ],
 );

@@ -93,4 +93,17 @@ export type GeneratorResult = {
   /** Rows the generator refused, with the reason, for the run summary. */
   skipped: { reason: string; count: number }[];
   warnings: string[];
+  /**
+   * Registrations the company does not hold but the period needed, described
+   * the way `describeRegistration` names them.
+   *
+   * Separate from `skipped` because the consequences are different in kind. A
+   * skipped row is usually the report doing its job — a channel that is not
+   * part of it, a refund with no sale. A row skipped for want of a
+   * registration is the report coming out short by however many sales went
+   * that way, and looking complete: no error, no red, just a smaller file. So
+   * this is read by the run and turned into a refusal, before anything is
+   * written.
+   */
+  missingRegistrations?: readonly string[];
 };

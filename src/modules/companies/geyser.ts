@@ -23,6 +23,7 @@ import type { CompanyRules } from "./types";
  * what they are.
  */
 export const GEYSER: CompanyRules = {
+  registrations: SELLER_VAT_NUMBERS,
   shopify: {
     dataset: "shopify_geyser",
     // The shop ships from Spain, always. It decides the scheme Off-Amazon
@@ -60,7 +61,6 @@ export const GEYSER: CompanyRules = {
 
   seeds: {
     vatRates: VAT_RATES,
-    sellerVatNumbers: SELLER_VAT_NUMBERS,
     skuMappings: SKU_MAPPINGS,
     ignoredSkus: IGNORED_SKUS,
     // Already the union of every channel module's own defaults, the Allegro

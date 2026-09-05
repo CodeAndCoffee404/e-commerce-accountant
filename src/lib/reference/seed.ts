@@ -6,7 +6,6 @@ import { RULES_EFFECTIVE_FROM } from "./seed-data";
 
 export type SeedResult = {
   vatRates: number;
-  sellerVatNumbers: number;
   skuMappings: number;
   channelRules: number;
 };
@@ -25,9 +24,9 @@ export type SeedResult = {
  */
 export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
   const db = getDb();
-  const { vatRates, sellerVatNumbers, skuMappings, ignoredSkus, channelRules } = seedsFor(tenantId);
+  const { vatRates, skuMappings, ignoredSkus, channelRules } = seedsFor(tenantId);
 
-  const [rates, sellers, skus, rules] = await Promise.all([
+  const [rates, skus, rules] = await Promise.all([
     db
       .insert(schema.vatRates)
       .values(
@@ -41,21 +40,6 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
       )
       .onConflictDoNothing()
       .returning({ id: schema.vatRates.id }),
-
-    db
-      .insert(schema.sellerVatNumbers)
-      .values(
-        sellerVatNumbers.map((entry) => ({
-          tenantId,
-          country: entry.country,
-          scheme: entry.scheme,
-          vatNumber: entry.vatNumber,
-          validFrom: RULES_EFFECTIVE_FROM,
-          note: entry.note ?? null,
-        })),
-      )
-      .onConflictDoNothing()
-      .returning({ id: schema.sellerVatNumbers.id }),
 
     db
       .insert(schema.skuMappings)
@@ -97,7 +81,6 @@ export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
 
   return {
     vatRates: rates.length,
-    sellerVatNumbers: sellers.length,
     skuMappings: skus.length,
     channelRules: rules.length,
   };

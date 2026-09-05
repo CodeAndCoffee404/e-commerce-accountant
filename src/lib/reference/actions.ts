@@ -93,12 +93,18 @@ async function deleteVatRateInScope(id: string): Promise<ActionResult> {
 }
 
 const sellerVatSchema = z.object({
-  id: z.string().uuid().optional(),
-  country: z.string().trim().min(2).max(2).toUpperCase(),
-  // With the country, this is what a report looks the number up by. One-stop
-  // is held in one member state and covers every distance sale, so for those
-  // the country is where the company registered, not where the goods went.
-  scheme: z.enum(["REGULAR", "UNION-OSS"]),
+  /**
+   * Required: a registration is never created here.
+   *
+   * Which registrations a company holds — the country and the regime each is
+   * used under — follows from the reports it runs, and the rows were written
+   * when the company was created. The number and the period it is in force for
+   * are the company's own facts; the pair that finds it is not, and is never
+   * read from the browser. It used to be, which meant an edit made for a note
+   * could change the scheme of the one-stop registration and quietly take
+   * every export sale out of Off-Amazon Sales.
+   */
+  id: z.string().uuid(),
   vatNumber: z
     .string()
     .trim()
@@ -107,12 +113,13 @@ const sellerVatSchema = z.object({
     .regex(/^[A-Za-z0-9 -]+$/, "A VAT number is letters, digits, spaces and dashes"),
   validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  note: z.string().trim().max(300).nullable().optional(),
 });
 
 /**
- * Registrations change when the company registers in a new country or lets one
- * lapse — reference data like the rates, and edited the same way.
+ * Correcting a number, or closing a registration that has lapsed.
+ *
+ * Periods are kept so that rebuilding an old month quotes the number that was
+ * in force then rather than today's.
  */
 export async function saveSellerVatNumber(input: unknown): Promise<ActionResult> {
   return inRequest(() => saveSellerVatNumberInScope(input));
@@ -125,47 +132,26 @@ async function saveSellerVatNumberInScope(input: unknown): Promise<ActionResult>
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
   const { id, ...values } = parsed.data;
-  const db = getDb();
 
-  if (id) {
-    await db
-      .update(schema.sellerVatNumbers)
-      .set({ ...values, validTo: values.validTo ?? null, note: values.note ?? null })
-      .where(
-        and(eq(schema.sellerVatNumbers.id, id), eq(schema.sellerVatNumbers.tenantId, user.tenantId)),
-      );
-  } else {
-    await db.insert(schema.sellerVatNumbers).values({
-      tenantId: user.tenantId,
-      ...values,
-      validTo: values.validTo ?? null,
-      note: values.note ?? null,
-    });
-  }
-
-  await audit(user, id ? "seller_vat.updated" : "seller_vat.created", "seller_vat_number", id, values);
-  revalidatePath("/settings");
-
-  return { ok: true, message: `Registration for ${values.country} saved.` };
-}
-
-export async function deleteSellerVatNumber(id: string): Promise<ActionResult> {
-  return inRequest(() => deleteSellerVatNumberInScope(id));
-}
-
-async function deleteSellerVatNumberInScope(id: string): Promise<ActionResult> {
-  const user = await requireEditor();
-
-  await getDb()
-    .delete(schema.sellerVatNumbers)
+  // The tenant clause is what stops an id from another company being edited
+  // through this one; row-level security stops it as well, and both is the
+  // point.
+  const updated = await getDb()
+    .update(schema.sellerVatNumbers)
+    .set({ ...values, validTo: values.validTo ?? null })
     .where(
       and(eq(schema.sellerVatNumbers.id, id), eq(schema.sellerVatNumbers.tenantId, user.tenantId)),
-    );
+    )
+    .returning({ id: schema.sellerVatNumbers.id });
 
-  await audit(user, "seller_vat.deleted", "seller_vat_number", id);
+  if (updated.length === 0) {
+    return { ok: false, message: "That registration is no longer there. Reload the page." };
+  }
+
+  await audit(user, "seller_vat.updated", "seller_vat_number", id, values);
   revalidatePath("/settings");
 
-  return { ok: true, message: "Registration deleted." };
+  return { ok: true, message: `${values.vatNumber} saved.` };
 }
 
 const skuSchema = z.object({
@@ -417,12 +403,11 @@ export async function restoreDefaults(): Promise<ActionResult> {
 
 async function restoreDefaultsInScope(): Promise<ActionResult> {
   const user = await requireEditor();
-  // This company's own profile, not a default: restoring "the defaults" from
-  // somebody else's profile is how a company ends up printing another's VAT
-  // registrations, which is the failure the profile exists to prevent.
+  // Rates, mappings and channel defaults — never VAT registrations. Those name
+  // a legal entity, so they are entered in Settings and restored by nobody:
+  // seeding them is how a company ends up printing another's numbers.
   const result = await seedReferenceData(user.tenantId);
-  const added =
-    result.vatRates + result.sellerVatNumbers + result.skuMappings + result.channelRules;
+  const added = result.vatRates + result.skuMappings + result.channelRules;
 
   await audit(user, "reference.restored", "reference", undefined, result);
   revalidatePath("/settings");

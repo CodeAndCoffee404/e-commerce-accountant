@@ -381,6 +381,19 @@ export async function runReport(input: {
         : undefined,
     });
 
+    // After the sheet is built, before anything is stored: the generator has
+    // just found out which registrations the month actually needed, which is
+    // not knowable from the settings alone — it depends on where the sales
+    // went. Every row that wanted one of these was left out, and the file
+    // would go out looking like a smaller month.
+    if (result.missingRegistrations && result.missingRegistrations.length > 0) {
+      throw new Error(
+        `This company holds no ${result.missingRegistrations.join(", no ")}. Sales reported ` +
+          "under it were left out, so the report would come out short without saying so. Add " +
+          "the number in Settings -> Seller VAT and build again.",
+      );
+    }
+
     await storeArtifacts(run.id, input.tenantId, label, period.label, result);
 
     await db

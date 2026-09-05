@@ -61,13 +61,6 @@ export type AllegroProfile = {
 /** What a company's reference tables are filled with on the day it is created. */
 export type CompanySeeds = {
   vatRates: readonly { country: string; rate: string; note?: string }[];
-  sellerVatNumbers: readonly {
-    country: string;
-    /** `REGULAR` or `UNION-OSS`. With the country, this is what a report looks up. */
-    scheme: string;
-    vatNumber: string;
-    note?: string;
-  }[];
   skuMappings: readonly {
     channel: string;
     sourceSku: string;
@@ -83,4 +76,24 @@ export type CompanyRules = {
   amazon?: AmazonProfile;
   allegro?: AllegroProfile;
   seeds: CompanySeeds;
+  /**
+   * The VAT registrations this company itself holds.
+   *
+   * Deliberately not part of `seeds`. A seed is what any new company starts
+   * life with — rates, mappings, channel defaults — and a VAT number is not
+   * that: it identifies one legal entity. Seeded, it went into every company
+   * created, and the second one would have printed the first one's numbers on
+   * its own invoices with nothing to notice.
+   *
+   * Read here by the golden tests, which rebuild this company's reports from
+   * its own facts. Live, the numbers are rows the company entered and edits in
+   * Settings; nothing copies these into a database.
+   */
+  registrations: readonly {
+    country: string;
+    /** `REGULAR` or `UNION-OSS`. With the country, this is what a report looks up. */
+    scheme: string;
+    vatNumber: string;
+    note?: string;
+  }[];
 };

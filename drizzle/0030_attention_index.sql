@@ -1,0 +1,12 @@
+-- The badge in the sidebar.
+--
+-- `countNeedsAttention` runs in the dashboard layout, which means once per page
+-- load of every screen. It filters on three columns and the existing indexes
+-- covered a different combination, so on a ledger of any size it walked every
+-- current row the company had.
+--
+-- Partial, because rows needing attention are the rare ones: the index holds
+-- only those and stays a fraction of the table, while the count reads nothing
+-- else. Not built CONCURRENTLY — migrations here run inside a transaction —
+-- so it takes a brief lock on the table as it is created.
+CREATE INDEX "transactions_attention_idx" ON "transactions" USING btree ("tenant_id") WHERE "transactions"."is_current" and "transactions"."needs_attention";
