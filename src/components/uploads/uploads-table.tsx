@@ -21,6 +21,7 @@ import { useState, useTransition } from "react";
 import { KindIcon } from "@/components/common/kind-icon";
 import { formatSize } from "@/lib/format";
 import { periodLabelWords } from "@/lib/ingest/period";
+import { DATASET_NAMES } from "@/modules/channels/registry";
 import type { UploadOptions, UploadRow } from "@/lib/uploads/queries";
 import type { FileReconciliation } from "@/lib/uploads/reconciliation";
 
@@ -42,6 +43,18 @@ const STATUS_COLOURS: Record<string, string> = {
  * Display labels only — the stored status (`received`, `classified`, …)
  * never changes, so filtering and the database stay exactly as they were.
  */
+/**
+ * A channel's name as it is called today.
+ *
+ * Uploads store the name they were given at the time, so a channel that is
+ * renamed leaves old rows reading the old name — and the filter, which offers
+ * the stored enum value, would show something different again. Both now come
+ * from the one place the rest of the application reads.
+ */
+function datasetName(dataset: string): string {
+  return DATASET_NAMES[dataset as keyof typeof DATASET_NAMES] ?? dataset;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   received: "Processing",
   classified: "Classified",
@@ -120,7 +133,7 @@ export function UploadsTable({
             style={{ width: 220, flex: "none" }}
             onSearch={(value) => update("q", value || null)}
           />
-          {selector("dataset", "Type", options.datasets, undefined, 340)}
+          {selector("dataset", "Type", options.datasets, datasetName, 340)}
           <PeriodFilterPicker
             value={params.get("period")}
             options={options.periods}
@@ -200,7 +213,12 @@ export function UploadsTable({
             ),
             dataIndex: "label",
             width: 180,
-            render: (label: string | null) =>
+            // The channel's current name, not the one stored on the row: the
+            // label was written when the file was uploaded, so a channel that
+            // has since been renamed would keep its old name here for ever,
+            // and the filter above would offer a name the table never shows.
+            render: (label: string | null, row) =>
+              (row.dataset ? datasetName(row.dataset) : null) ??
               label ?? <Typography.Text type="secondary">—</Typography.Text>,
           },
           {

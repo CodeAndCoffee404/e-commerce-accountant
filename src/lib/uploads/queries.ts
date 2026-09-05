@@ -2,6 +2,7 @@ import { and, desc, eq, ilike } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import type { PeriodGranularity } from "@/lib/db/schema";
+import type { DatasetId } from "@/lib/ingest/datasets";
 
 export type UploadRow = {
   id: string;
@@ -56,8 +57,12 @@ export type UploadOptions = {
 export async function uploadFilterOptions(tenantId: string): Promise<UploadOptions> {
   const [rows, periods] = await Promise.all([
     getDb()
+      // The channel itself, not the name it was called when the file arrived.
+      // The label is written into the row at upload time, so filtering on it
+      // meant a channel that was renamed offered two entries — its old name on
+      // old files and its new one on new — and neither selected the other.
       .selectDistinct({
-        dataset: schema.sourceFiles.datasetLabel,
+        dataset: schema.sourceFiles.dataset,
         status: schema.sourceFiles.status,
       })
       .from(schema.sourceFiles)
@@ -99,7 +104,7 @@ export async function listUploads(
 ): Promise<UploadRow[]> {
   const clauses = [eq(schema.sourceFiles.tenantId, tenantId)];
 
-  if (filters.dataset) clauses.push(eq(schema.sourceFiles.datasetLabel, filters.dataset));
+  if (filters.dataset) clauses.push(eq(schema.sourceFiles.dataset, filters.dataset as DatasetId));
   if (filters.period) clauses.push(eq(schema.sourceFiles.periodLabel, filters.period));
   if (filters.status) {
     clauses.push(

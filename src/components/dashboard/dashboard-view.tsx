@@ -4,6 +4,7 @@ import {
   CheckCircleFilled,
   CloudUploadOutlined,
   DownloadOutlined,
+  EyeOutlined,
   DownOutlined,
   ExportOutlined,
   FileTextOutlined,
@@ -27,6 +28,7 @@ import { describePeriodLabel, monthLabelShort, monthLabelWords } from "@/lib/ing
 import { republish } from "@/lib/reports/actions";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
 
+import { useDrivePreview } from "@/components/common/drive-preview";
 import { useKindAccent } from "@/components/common/kind-accent";
 import { targetKey, useBuildQueue } from "@/components/reports/build-queue";
 
@@ -935,6 +937,7 @@ function ReportRow({
   const { token } = theme.useToken();
   const router = useRouter();
   const { message } = App.useApp();
+  const preview = useDrivePreview(report.artifact?.driveUrl, report.label);
   const [sending, startSending] = useTransition();
 
   const waiting = report.state === "waiting";
@@ -1007,6 +1010,18 @@ function ReportRow({
         {waiting ? null : (
           <>
             {report.artifact?.driveUrl ? (
+              <Tooltip title="Look at the workbook without leaving this screen.">
+                <Button
+                  type="text"
+                  icon={<EyeOutlined />}
+                  onClick={preview.open}
+                  aria-label={`Preview ${report.label}`}
+                  style={ICON_BUTTON}
+                />
+              </Tooltip>
+            ) : null}
+
+            {report.artifact?.driveUrl ? (
               <Tooltip title="Open in Google Drive — the whole table, with Sheets' own sorting and search.">
                 <Button
                   type="text"
@@ -1070,6 +1085,8 @@ function ReportRow({
           </>
         )}
       </div>
+
+      {preview.modal}
     </div>
   );
 }

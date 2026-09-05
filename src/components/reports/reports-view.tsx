@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   ExportOutlined,
+  EyeOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
   WarningOutlined,
@@ -37,6 +38,8 @@ import { deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportPeriodRow, ReportRunCard } from "@/lib/reports/queries";
 import { summariseWarnings } from "@/lib/reports/warnings";
+
+import { useDrivePreview } from "@/components/common/drive-preview";
 
 import { targetKey, useBuildQueue } from "./build-queue";
 
@@ -872,6 +875,7 @@ function PeriodRow({
 }) {
   const { token } = theme.useToken();
   const tag = STATUS_TAG[row.state];
+  const preview = useDrivePreview(row.artifact?.driveUrl, periodLabelWords(row.period));
 
   const meta =
     row.state === "built" || row.state === "stale"
@@ -912,7 +916,20 @@ function PeriodRow({
         {meta}
       </Typography.Text>
 
+      {preview.modal}
+
       <Space size={6} style={{ flex: "none" }}>
+        {row.artifact?.driveUrl ? (
+          <Tooltip title="Look at the workbook without leaving this screen.">
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={preview.open}
+              aria-label={`Preview ${periodLabelWords(row.period)}`}
+            />
+          </Tooltip>
+        ) : null}
+
         {row.artifact?.driveUrl ? (
           <Tooltip title="Open the workbook in Google Drive — the whole table, with Sheets' own sorting and search.">
             <Button
