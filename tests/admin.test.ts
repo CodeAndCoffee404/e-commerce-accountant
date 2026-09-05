@@ -109,7 +109,7 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     // The guard redirects rather than throwing a refusal: a screen someone is
     // not meant to know about should not announce itself.
     await expect(
-      createCompany({ name: "No", profileKey: "geyser", adminEmail: "a@b.co" }),
+      createCompany({ name: "No", adminEmail: "a@b.co" }),
     ).rejects.toThrow(/redirected/);
     expect(redirects.at(-1)).toBe("/dashboard");
 
@@ -125,7 +125,6 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const name = `Made ${stamp}`;
     const result = await createCompany({
       name,
-      profileKey: "geyser",
       adminEmail: `Owner-${stamp}@Example.Invalid`,
     });
 
@@ -159,8 +158,8 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     // would be treating the name as an identifier again.
     const name = `Twice ${stamp}`;
 
-    expect((await createCompany({ name, profileKey: "geyser", adminEmail: "a@b.co" })).ok).toBe(true);
-    expect((await createCompany({ name, profileKey: "geyser", adminEmail: "c@d.co" })).ok).toBe(true);
+    expect((await createCompany({ name, adminEmail: "a@b.co" })).ok).toBe(true);
+    expect((await createCompany({ name, adminEmail: "c@d.co" })).ok).toBe(true);
 
     const rows = await acrossTenants(() =>
       getDb().select({ id: schema.tenants.id }).from(schema.tenants).where(eq(schema.tenants.name, name)),
@@ -176,7 +175,7 @@ describe.skipIf(!HAS_DB)("the company list", () => {
     const id = await admin();
     const name = `Entered ${stamp}`;
 
-    await createCompany({ name, profileKey: "geyser", adminEmail: "a@b.co" });
+    await createCompany({ name, adminEmail: "a@b.co" });
 
     const company = { id: await idOf(name) };
 
