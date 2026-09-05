@@ -47,6 +47,7 @@ const { getDb, schema } = await import("@/lib/db");
 const { acrossTenants, withTenant } = await import("@/lib/db/tenant");
 const { deleteCompany, setCompanyBlocked } = await import("@/lib/admin/actions");
 const { allCompanies } = await import("@/lib/admin/queries");
+const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { inRequest } = await import("./helpers/request-scope");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
@@ -141,6 +142,21 @@ describe.skipIf(!HAS_DB)("a closed company", () => {
     expect(`${refused?.message} ${(refused?.cause as Error | undefined)?.message ?? ""}`).toMatch(
       /read-only transaction/,
     );
+  });
+
+  it("opens its dashboard instead of an error page", async () => {
+    const id = await company("Dashboard");
+
+    await setCompanyBlocked(id, true);
+
+    // The dashboard used to open a period on the way in — a write, inside the
+    // read-only transaction a closed company gets. Postgres refused it, the
+    // refusal aborted the transaction, and every later query in the render
+    // failed with it: the page a closed company is supposed to be able to read
+    // was the one page it could not.
+    const loaded = await withTenant(id, () => loadDashboard(id));
+
+    expect(loaded.months).toEqual([]);
   });
 
   it("takes writes again once it is opened", async () => {

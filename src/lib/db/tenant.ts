@@ -30,6 +30,17 @@ type Scope = {
   tenantId: string | null;
   /** The transaction this scope's queries run on, and which named the company. */
   executor: Executor;
+  /**
+   * True when this company is closed and Postgres has been told to refuse
+   * writes for the rest of the transaction.
+   *
+   * Known already — naming the company asks the same question — so code that
+   * would otherwise attempt a write during a page render can look here instead
+   * of finding out from the failure. That mattered: an aborted transaction
+   * takes every later query with it, so one hopeful INSERT inside a render
+   * turned a closed company's dashboard into an error page.
+   */
+  closed: boolean;
 };
 
 const storage = new AsyncLocalStorage<Scope>();
@@ -55,6 +66,18 @@ export function requireTenantId(): string {
   }
 
   return tenantId;
+}
+
+/**
+ * True when the company in hand is closed to writes.
+ *
+ * For the rare caller that legitimately wants to write during a read — opening
+ * a period the scheduler missed — and would otherwise poison its own
+ * transaction discovering the refusal. Not a permission check: the refusal is
+ * still Postgres's, and skipping this would not let a write through.
+ */
+export function currentlyClosed(): boolean {
+  return storage.getStore()?.closed ?? false;
 }
 
 /** Where queries should run. Read by `getDb()`, which is how the thirty other files find it. */
@@ -92,26 +115,40 @@ async function announce(executor: Executor, tenantId: string | null): Promise<vo
 }
 
 /**
- * Closes a blocked company's transaction to writes, using Postgres rather than
- * a check somebody has to remember.
+ * Names the company and, in the same breath, closes it to writes if it is
+ * closed.
+ *
+ * One statement where there were three. The question "is this company closed"
+ * has to be asked anyway, and asking it as part of the announcement saves two
+ * round trips on every transaction — which, at a couple of round trips per
+ * statement over a pooler, is most of what a page's own queries cost.
  *
  * `transaction_read_only` refuses every INSERT, UPDATE and DELETE for the rest
  * of the transaction, so a page still reads and nothing writes — which is what
- * "closed" means here. One statement, and no way past it: a forgotten guard in
- * one action out of forty would otherwise be invisible until somebody used it.
+ * "closed" means here. There is no way past it: a forgotten guard in one
+ * action out of forty would otherwise be invisible until somebody used it.
  *
- * It is one-way. Postgres refuses to put a transaction back into read-write
- * once a query has run, which is why this is only ever done on a transaction
- * this scope opened for itself — see `runScoped`.
+ * It is set only inside the CASE, never to 'off'. Postgres refuses to put a
+ * transaction back into read-write once a query has run, and this statement is
+ * itself a query — so an unconditional 'off' would fail on the very
+ * transaction it was meant to leave open.
+ *
+ * One-way, and only ever on a transaction this scope opened for itself — see
+ * `runScoped`.
  */
-async function closeToWrites(executor: Executor, tenantId: string): Promise<void> {
-  const blocked = await executor.execute(
-    sql`select 1 from tenants where id = ${tenantId}::uuid and blocked_at is not null`,
-  );
+async function announceAndClose(executor: Executor, tenantId: string): Promise<boolean> {
+  const rows = (await executor.execute(
+    sql`select set_config('app.bypass_rls', 'off', true),
+               set_config('app.tenant_id', ${tenantId}, true),
+               case
+                 when exists (
+                   select 1 from tenants where id = ${tenantId}::uuid and blocked_at is not null
+                 )
+                 then set_config('transaction_read_only', 'on', true)
+               end as closed`,
+  )) as unknown as { closed: string | null }[];
 
-  if ((blocked as unknown as unknown[]).length > 0) {
-    await executor.execute(sql`select set_config('transaction_read_only', 'on', true)`);
-  }
+  return rows[0]?.closed != null;
 }
 
 async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Promise<T> {
@@ -128,7 +165,10 @@ async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Prom
     await announce(open, tenantId);
 
     try {
-      return await storage.run({ tenantId, executor: open }, fn);
+      return await storage.run(
+        { tenantId, executor: open, closed: storage.getStore()?.closed ?? false },
+        fn,
+      );
     } finally {
       // Best effort: if `fn` threw a database error the transaction is already
       // aborted and this fails too. That direction is safe — the scope stays
@@ -139,16 +179,15 @@ async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Prom
   }
 
   return rootDb().transaction(async (executor) => {
-    await announce(executor, tenantId);
+    // Closing happens only here, never in the nested branch above. The
+    // enclosing transaction there belongs to a caller that deliberately spans
+    // companies — signing in, the admin stepping into a company, the nightly
+    // job — and read-only cannot be undone once set, so switching it on would
+    // leave that caller unable to finish its own work.
+    const closed =
+      tenantId === null ? (await announce(executor, tenantId), false) : await announceAndClose(executor, tenantId);
 
-    // Only here, never in the nested branch above. The enclosing transaction
-    // there belongs to a caller that deliberately spans companies — signing
-    // in, the admin stepping into a company, the nightly job — and read-only
-    // cannot be undone once set, so switching it on would leave that caller
-    // unable to finish its own work.
-    if (tenantId !== null) await closeToWrites(executor, tenantId);
-
-    return storage.run({ tenantId, executor }, fn);
+    return storage.run({ tenantId, executor, closed }, fn);
   });
 }
 

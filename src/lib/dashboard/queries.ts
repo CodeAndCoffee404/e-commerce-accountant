@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
+import { currentlyClosed } from "@/lib/db/tenant";
 import { ensurePeriods } from "@/lib/periods/ensure";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
@@ -105,25 +106,9 @@ export async function loadDashboard(
 ): Promise<DashboardData> {
   const db = getDb();
 
-  // The second way a period comes into being, and the one that does not
-  // depend on a scheduler. Vercel's plan allows a single cron and fires it
-  // within an hour of its slot; if that run is missed the month would
-  // otherwise stay invisible until the next one. Opening periods is
-  // idempotent, so doing it here costs a query that finds nothing on all but
-  // one day a month.
-  //
-  // Never allowed to fail the page: a checklist that will not render because
-  // a period could not be opened is a worse answer than one that renders
-  // without the newest period on it.
-  try {
-    await ensurePeriods(tenantId, new Date().toISOString().slice(0, 10));
-  } catch (error) {
-    log.error("period.ensure_failed", error, { tenantId });
-  }
-
   const settings = await loadReportSettings(tenantId);
   const today = new Date().toISOString().slice(0, 10);
-  const [openPeriods, files, availability] = await Promise.all([
+  const [initialPeriods, files, availability] = await Promise.all([
     db
       .select({
         label: schema.periods.label,
@@ -152,6 +137,44 @@ export async function loadDashboard(
       ),
     availablePeriods(tenantId, settings),
   ]);
+
+  // The second way a period comes into being, and the one that does not depend
+  // on a scheduler. Vercel's plan allows a single cron and fires it within an
+  // hour of its slot; if that run is missed the month would otherwise stay
+  // invisible until the next one.
+  //
+  // Asked of what has already been read rather than of the database: on every
+  // day but one a month some period covers today, and then this costs nothing
+  // at all. It used to run on every dashboard load, before the reads, and pay
+  // for the scheduler's bad day on all the good ones.
+  //
+  // Skipped outright for a closed company. Opening a period is a write, a
+  // closed company's transaction refuses writes, and a refused write aborts
+  // the transaction — so the `catch` below could not save the page, and a
+  // closed company's dashboard was an error screen rather than a read-only
+  // one.
+  let openPeriods = initialPeriods;
+
+  if (!currentlyClosed() && !openPeriods.some((period) => period.startDate <= today && today <= period.endDate)) {
+    try {
+      await ensurePeriods(tenantId, today);
+
+      openPeriods = await db
+        .select({
+          label: schema.periods.label,
+          granularity: schema.periods.granularity,
+          startDate: schema.periods.startDate,
+          endDate: schema.periods.endDate,
+        })
+        .from(schema.periods)
+        .where(eq(schema.periods.tenantId, tenantId))
+        .orderBy(desc(schema.periods.startDate));
+    } catch (error) {
+      // A checklist that will not render because a period could not be opened
+      // is a worse answer than one that renders without the newest period.
+      log.error("period.ensure_failed", error, { tenantId });
+    }
+  }
 
   const monthly = files.filter((file) => (file.granularity ?? "month") === "month");
 
