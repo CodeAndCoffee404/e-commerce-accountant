@@ -66,8 +66,15 @@ export function CompanyCard({
             {identity.id}
           </Typography.Text>
         </Descriptions.Item>
-        <Descriptions.Item label="Report profile">
-          <Typography.Text code>{identity.profileKey}</Typography.Text>
+        <Descriptions.Item label="Status">
+          {identity.blockedAt ? (
+            <Typography.Text type="warning">
+              Closed on {new Date(identity.blockedAt).toLocaleDateString()} — readable, and nothing
+              here can be changed.
+            </Typography.Text>
+          ) : (
+            <Typography.Text type="secondary">Open</Typography.Text>
+          )}
         </Descriptions.Item>
       </Descriptions>
 

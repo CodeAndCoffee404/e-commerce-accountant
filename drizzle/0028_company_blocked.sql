@@ -1,0 +1,11 @@
+-- A company can be closed.
+--
+-- Closed means read-only: its people still sign in and read what is already
+-- there, but nothing writes — no uploads, no reports built, no settings
+-- changed — and the nightly job passes it by. A date rather than a flag,
+-- because the useful question a year later is when it was closed, not whether.
+--
+-- Nullable and with no default, so every existing company stays open and the
+-- version of the code running during the switchover, which knows nothing about
+-- this column, is unaffected.
+ALTER TABLE "tenants" ADD COLUMN "blocked_at" timestamp with time zone;

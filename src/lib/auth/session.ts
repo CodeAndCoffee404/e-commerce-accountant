@@ -7,7 +7,7 @@ import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
 
 import { DEFAULT_ROUTE, landingRoute, SELECT_COMPANY } from "@/lib/navigation";
-import { isSuperAdmin, roleFor } from "./allowlist";
+import { isCompanyBlocked, isSuperAdmin, roleFor } from "./allowlist";
 
 export type CurrentUser = {
   id: string;
@@ -18,6 +18,15 @@ export type CurrentUser = {
   role: MembershipRole;
   /** Above the companies. Not a role: it says nothing about this company. */
   isSuperAdmin: boolean;
+  /**
+   * The company is closed: it can be read and nothing in it can be changed.
+   *
+   * The refusal itself is Postgres's — a closed company's transaction is
+   * read-only, see `closeToWrites` — so this is not the guarantee. It is what
+   * lets a screen grey out the buttons instead of letting somebody fill in a
+   * form and meet a database error on the way out.
+   */
+  companyBlocked: boolean;
 };
 
 /**
@@ -88,6 +97,7 @@ export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
     // should stop being one on their next request, not at their next sign-in.
     isSuperAdmin: await isSuperAdmin(session.user.id),
     role: await roleFor(session.user.email, session.tenantId),
+    companyBlocked: await isCompanyBlocked(session.tenantId),
   };
 }
 
@@ -135,10 +145,13 @@ export type UserWithAccess = CurrentUser & { access: AccessMap };
  * cross that boundary — it would throw at render, on every page at once.
  */
 export function can(
-  user: { access: AccessMap },
+  user: { access: AccessMap; companyBlocked?: boolean },
   section: SectionId,
   level: AccessLevel,
 ): boolean {
+  // A closed company is readable and nothing more, whatever the role says.
+  if (user.companyBlocked && level !== "view") return false;
+
   return allows(user.access, section, level);
 }
 

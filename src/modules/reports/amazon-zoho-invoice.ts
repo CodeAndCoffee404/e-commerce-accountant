@@ -233,7 +233,7 @@ function rateOf(context: ReportContext, currency: string): Decimal | null {
  */
 function amazonOf(context: ReportContext): AmazonProfile {
   if (!context.company.amazon) {
-    throw new Error(`${context.company.key} does not sell on Amazon, so this report cannot be built.`);
+    throw new Error("This company does not sell on Amazon, so this report cannot be built.");
   }
 
   return context.company.amazon;

@@ -213,13 +213,17 @@ describe.skipIf(!HAS_DB)("the company list", () => {
 
     // The company just entered has two people on its list — the owner it was
     // created with and the admin who stepped in — and one it has not been
-    // entered has one. A count that ignored what it was counting would not
-    // tell those apart.
+    // entered has one. Listed, not counted: the addresses are what the screen
+    // shows, and a count would not tell the two companies apart either way.
     const entered = mine.find((company) => company.name === `Entered ${stamp}`);
     const untouched = mine.find((company) => company.name === `Made ${stamp}`);
 
-    expect(entered?.people).toBe(2);
-    expect(untouched?.people).toBe(1);
+    expect(entered?.people.map((person) => person.email).sort()).toEqual(
+      [`${session.userId}@example.invalid`, "a@b.co"].sort(),
+    );
+    expect(untouched?.people).toEqual([
+      { email: `owner-${stamp}@example.invalid`, role: "owner", isActive: true },
+    ]);
     // Nothing has been uploaded to any of them, and the list says so rather
     // than inventing a date.
     expect(mine.every((company) => company.lastUploadAt === null)).toBe(true);

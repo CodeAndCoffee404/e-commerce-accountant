@@ -6,11 +6,12 @@ import {
   VAT_RATES,
 } from "@/lib/reference/seed-data";
 
-import type { CompanyProfile } from "./types";
+import type { CompanyRules } from "./types";
 
 /**
- * Geyser — the client this application was built for, and until now the only
- * shape of company it knew.
+ * Geyser — the client this application was built for, and the values every
+ * company is currently computed from. `registry.ts` says why there is one set
+ * and where the second one will attach.
  *
  * Every value here was a constant somewhere in `src/modules/reports`. Moving
  * them changes nothing about how they are edited: this is code, changed by a
@@ -21,9 +22,7 @@ import type { CompanyProfile } from "./types";
  * `docs/RULES.md` explains why each of them is what it is; this file only says
  * what they are.
  */
-export const GEYSER: CompanyProfile = {
-  key: "geyser",
-
+export const GEYSER: CompanyRules = {
   shopify: {
     dataset: "shopify_geyser",
     // The shop ships from Spain, always. It decides the scheme Off-Amazon

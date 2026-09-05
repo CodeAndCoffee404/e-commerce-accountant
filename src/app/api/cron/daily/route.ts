@@ -1,5 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
+import { isNull } from "drizzle-orm";
+
 import { NextResponse } from "next/server";
 
 import { getDb, schema } from "@/lib/db";
@@ -60,8 +62,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   // The one job that legitimately spans companies: it opens the month for
   // every one of them. Said out loud rather than implied, because when the
   // database starts enforcing the company itself this is a door around it.
+  // Closed companies are skipped outright rather than attempted and refused:
+  // opening a month is a write, and a closed company does not take writes. The
+  // months it misses open by themselves on the first run after it is opened
+  // again, because the job asks what is due rather than what is next.
   const tenants = await acrossTenants(() =>
-    getDb().select({ id: schema.tenants.id, name: schema.tenants.name }).from(schema.tenants),
+    getDb()
+      .select({ id: schema.tenants.id, name: schema.tenants.name })
+      .from(schema.tenants)
+      .where(isNull(schema.tenants.blockedAt)),
   );
 
   const opened: { tenant: string; periods: string[] }[] = [];

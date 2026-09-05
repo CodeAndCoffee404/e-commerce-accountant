@@ -10,8 +10,8 @@ import { resolveCoverage, uncoveredMonths } from "@/lib/periods/coverage";
 import { euroRateOn } from "@/lib/reference/fx";
 
 import { DATASET_NAMES } from "@/modules/channels/registry";
-import { companyProfile } from "@/modules/companies/registry";
-import type { CompanyProfile } from "@/modules/companies/types";
+import { rulesFor } from "@/modules/companies/registry";
+import type { CompanyRules } from "@/modules/companies/types";
 import { reportModule, variantDisplayName as variantName } from "@/modules/reports/registry";
 
 import { reportDefinition, type ReportTypeId } from "./definitions";
@@ -327,7 +327,7 @@ export async function runReport(input: {
     // The company's own facts — where its goods ship from, what its accounts
     // are called. Read here rather than reached for inside the modules, so a
     // report is a pure function of what it was handed.
-    const company = await loadCompany(input.tenantId);
+    const company = loadCompany(input.tenantId);
 
     // Before anything is built. A missing channel rule does not make a smaller
     // report — it makes one where every row of that channel is skipped as
@@ -599,22 +599,14 @@ async function loadHistory(
 }
 
 /**
- * The profile this company's reports are built from.
+ * The values this company's reports are built from.
  *
- * Throws when the key names no profile, and that is the right answer: a
- * company created before its profile exists cannot have reports built, and
- * failing loudly beats building them from somebody else's values.
+ * Still a lookup by identifier rather than a bare constant: every company gets
+ * the same answers today, and the day one of them does not, this is the line
+ * that changes and nothing above it does.
  */
-async function loadCompany(tenantId: string): Promise<CompanyProfile> {
-  const [row] = await getDb()
-    .select({ profileKey: schema.tenants.profileKey })
-    .from(schema.tenants)
-    .where(eq(schema.tenants.id, tenantId))
-    .limit(1);
-
-  if (!row) throw new Error("This company no longer exists.");
-
-  return companyProfile(row.profileKey);
+function loadCompany(tenantId: string): CompanyRules {
+  return rulesFor(tenantId);
 }
 
 async function loadRules(tenantId: string): Promise<RulesSnapshot> {

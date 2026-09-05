@@ -9,7 +9,7 @@ import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 import { refreshFxRates } from "./fx";
-import { profileOf, seedReferenceData } from "./seed";
+import { seedReferenceData } from "./seed";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -420,7 +420,7 @@ async function restoreDefaultsInScope(): Promise<ActionResult> {
   // This company's own profile, not a default: restoring "the defaults" from
   // somebody else's profile is how a company ends up printing another's VAT
   // registrations, which is the failure the profile exists to prevent.
-  const result = await seedReferenceData(user.tenantId, await profileOf(user.tenantId));
+  const result = await seedReferenceData(user.tenantId);
   const added =
     result.vatRates + result.sellerVatNumbers + result.skuMappings + result.channelRules;
 

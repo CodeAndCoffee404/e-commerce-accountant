@@ -1,20 +1,20 @@
 import type { datasetId } from "@/lib/db/schema";
 
 /**
- * The facts about one company that its reports are built from.
+ * The facts about a company that its reports are built from.
  *
  * These used to be constants inside the report modules, and being constants
  * was the right call: `docs/RULES.md` argues at length that the departure
  * country and what counts as a sale must not be editable in Settings, because
  * a switch there is one nobody reviews and it can silently put warranty
- * replacements into an invoice. A second company does not change that
- * argument — it only means there is more than one set of constants.
+ * replacements into an invoice. More than one company does not change that
+ * argument — it only means there may be more than one set of constants.
  *
- * So this is not a settings screen with a different name. A profile is code:
- * it is added and changed by a pull request, with a golden test to say the
- * numbers did not move. What stays in the database is what a month's close
- * legitimately changes — VAT registrations, rates, SKU mappings, channel rules
- * — and `seeds` below is only what a brand new company starts with.
+ * So this is not a settings screen with a different name. It is code: added
+ * and changed by a pull request, with a golden test to say the numbers did not
+ * move. What stays in the database is what a month's close legitimately
+ * changes — VAT registrations, rates, SKU mappings, channel rules — and
+ * `seeds` below is only what a brand new company starts with.
  */
 
 export type ShopifyProfile = {
@@ -78,9 +78,7 @@ export type CompanySeeds = {
   channelRules: readonly { channel: string; key: string; value: unknown; note?: string }[];
 };
 
-export type CompanyProfile = {
-  /** Stored on the company row; the only thing the database knows about this. */
-  key: string;
+export type CompanyRules = {
   shopify?: ShopifyProfile;
   amazon?: AmazonProfile;
   allegro?: AllegroProfile;

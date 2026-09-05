@@ -33,7 +33,7 @@ import type { ShopifyProfile } from "@/modules/companies/types";
  */
 export function shopifyOf(context: ReportContext): ShopifyProfile {
   if (!context.company.shopify) {
-    throw new Error(`${context.company.key} has no Shopify shop, so this report cannot be built.`);
+    throw new Error("This company has no Shopify shop, so this report cannot be built.");
   }
 
   return context.company.shopify;

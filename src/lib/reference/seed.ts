@@ -1,31 +1,8 @@
 import { getDb, schema } from "@/lib/db";
 
-import { eq } from "drizzle-orm";
-
-import { companyProfile } from "@/modules/companies/registry";
-import type { CompanyProfile } from "@/modules/companies/types";
+import { seedsFor } from "@/modules/companies/registry";
 
 import { RULES_EFFECTIVE_FROM } from "./seed-data";
-
-/**
- * The profile a company was created with.
- *
- * There is no sensible default: seeding a company from the wrong profile puts
- * another company's VAT registrations in its tables, and it would print them
- * on its first report with nothing to notice. So the profile is looked up, and
- * a company whose key names none refuses rather than falling back.
- */
-export async function profileOf(tenantId: string): Promise<CompanyProfile> {
-  const [row] = await getDb()
-    .select({ profileKey: schema.tenants.profileKey })
-    .from(schema.tenants)
-    .where(eq(schema.tenants.id, tenantId))
-    .limit(1);
-
-  if (!row) throw new Error("This company no longer exists.");
-
-  return companyProfile(row.profileKey);
-}
 
 export type SeedResult = {
   vatRates: number;
@@ -35,22 +12,20 @@ export type SeedResult = {
 };
 
 /**
- * Fills a company's reference data with what its profile says it starts with.
+ * Fills a company's reference tables with what it starts life holding.
  *
- * From the profile rather than from one shared table of values, and that is the
- * point of the profile existing: a new company seeded with Geyser's VAT
- * registrations would print somebody else's numbers on its first report and
- * nothing would notice.
+ * Taken from the company's own identifier rather than from a table of shared
+ * values — `seedsFor` ignores it today and every company gets the same set, but
+ * the call site is where a second company's answers will arrive, and a caller
+ * that had to pass the values in would be a caller that could pass the wrong
+ * ones.
  *
  * Safe to run again: existing rows are left alone, so a rate the client has
  * since corrected is never quietly reverted to the seeded value.
  */
-export async function seedReferenceData(
-  tenantId: string,
-  profile: CompanyProfile,
-): Promise<SeedResult> {
+export async function seedReferenceData(tenantId: string): Promise<SeedResult> {
   const db = getDb();
-  const { vatRates, sellerVatNumbers, skuMappings, ignoredSkus, channelRules } = profile.seeds;
+  const { vatRates, sellerVatNumbers, skuMappings, ignoredSkus, channelRules } = seedsFor(tenantId);
 
   const [rates, sellers, skus, rules] = await Promise.all([
     db

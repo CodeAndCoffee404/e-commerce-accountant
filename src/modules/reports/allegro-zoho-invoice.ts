@@ -359,7 +359,7 @@ function invoiceNumber(allegro: AllegroProfile, periodEnd: string): string {
 function allegroOf(context: ReportContext): AllegroProfile {
   if (!context.company.allegro) {
     throw new Error(
-      `${context.company.key} does not sell on Allegro, so this report cannot be built.`,
+      "This company does not sell on Allegro, so this report cannot be built.",
     );
   }
 

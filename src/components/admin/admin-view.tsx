@@ -1,29 +1,50 @@
 "use client";
 
-import { BankOutlined, LoginOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Form, Input, Select, Space, Table, Tag, Typography } from "antd";
+import {
+  BankOutlined,
+  DeleteOutlined,
+  LockOutlined,
+  LoginOutlined,
+  PlusOutlined,
+  UnlockOutlined,
+} from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
-import { createCompany, enterCompany } from "@/lib/admin/actions";
-import type { CompanySummary } from "@/lib/admin/queries";
+import {
+  createCompany,
+  deleteCompany,
+  enterCompany,
+  setCompanyBlocked,
+} from "@/lib/admin/actions";
+import type { CompanyPerson, CompanySummary } from "@/lib/admin/queries";
 import { DEFAULT_ROUTE } from "@/lib/navigation";
 
 /**
- * The list of companies, and the two things that can be done to it.
+ * The list of companies and what can be done to them.
  *
  * Plain on purpose. It is a hallway, not a room: what matters is that the
- * names are unambiguous and that stepping into one is a deliberate act rather
- * than a click that could be mistaken for something else.
+ * names are unambiguous, that stepping into one is a deliberate act, and that
+ * the one irreversible button is not something a slipped click can reach.
  */
 export function AdminView({
   companies,
   current,
-  profiles,
 }: {
   companies: CompanySummary[];
-  /** The profiles the code knows how to build reports for. */
-  profiles: string[];
   /** The company this session is in, so the row you are already inside says so. */
   current: string;
 }) {
@@ -31,6 +52,8 @@ export function AdminView({
   const { message } = App.useApp();
   const [pending, start] = useTransition();
   const [form] = Form.useForm();
+  const [removing, setRemoving] = useState<CompanySummary | null>(null);
+  const [typedName, setTypedName] = useState("");
 
   const run = (action: () => Promise<{ ok: boolean; message: string }>, then?: () => void) =>
     start(async () => {
@@ -69,6 +92,13 @@ export function AdminView({
           dataSource={companies}
           pagination={false}
           size="small"
+          expandable={{
+            // Who may come in, under the company they belong to. Read-only:
+            // taking someone's access away is their own owner's decision, on
+            // their own Team screen, where they can see what else it affects.
+            expandedRowRender: (row) => <People people={row.people} />,
+            rowExpandable: () => true,
+          }}
           columns={[
             {
               title: "Company",
@@ -78,11 +108,22 @@ export function AdminView({
                   <BankOutlined />
                   <span>{name}</span>
                   {row.id === current ? <Tag color="blue">You are here</Tag> : null}
+                  {row.blockedAt ? (
+                    <Tooltip
+                      title={`Closed on ${new Date(row.blockedAt).toLocaleDateString()}. It can be read; nothing can be changed.`}
+                    >
+                      <Tag color="warning">Closed</Tag>
+                    </Tooltip>
+                  ) : null}
                 </Space>
               ),
             },
-            { title: "Profile", dataIndex: "profileKey", render: (key: string) => <Tag>{key}</Tag> },
-            { title: "People", dataIndex: "people", align: "right" },
+            {
+              title: "People",
+              dataIndex: "people",
+              align: "right",
+              render: (people: CompanyPerson[]) => people.length,
+            },
             {
               title: "Last upload",
               dataIndex: "lastUploadAt",
@@ -95,24 +136,60 @@ export function AdminView({
             },
             {
               title: "",
-              key: "enter",
+              key: "actions",
               align: "right",
-              render: (_: unknown, row) =>
-                row.id === current ? null : (
+              render: (_: unknown, row) => (
+                <Space>
+                  {row.id === current ? null : (
+                    <Button
+                      size="small"
+                      icon={<LoginOutlined />}
+                      disabled={pending}
+                      onClick={() =>
+                        run(
+                          () => enterCompany(row.id),
+                          () => router.push(DEFAULT_ROUTE),
+                        )
+                      }
+                    >
+                      Work in this one
+                    </Button>
+                  )}
+
                   <Button
                     size="small"
-                    icon={<LoginOutlined />}
+                    icon={row.blockedAt ? <UnlockOutlined /> : <LockOutlined />}
                     disabled={pending}
-                    onClick={() =>
-                      run(
-                        () => enterCompany(row.id),
-                        () => router.push(DEFAULT_ROUTE),
-                      )
+                    onClick={() => run(() => setCompanyBlocked(row.id, !row.blockedAt))}
+                  >
+                    {row.blockedAt ? "Open" : "Close"}
+                  </Button>
+
+                  <Tooltip
+                    title={
+                      row.blockedAt
+                        ? "Removes the company, its rows and its files. This cannot be undone."
+                        : "Close the company first. Deleting one that is in use should take two decisions."
                     }
                   >
-                    Work in this one
-                  </Button>
-                ),
+                    {/* A span, because a disabled antd button swallows the hover
+                        and the tooltip is where the reason lives. */}
+                    <span>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={pending || !row.blockedAt}
+                        onClick={() => {
+                          setRemoving(row);
+                          setTypedName("");
+                        }}
+                        aria-label={`Delete ${row.name}`}
+                      />
+                    </span>
+                  </Tooltip>
+                </Space>
+              ),
             },
           ]}
         />
@@ -134,17 +211,6 @@ export function AdminView({
             <Input placeholder="Company name" style={{ minWidth: 200 }} />
           </Form.Item>
           <Form.Item
-            name="profileKey"
-            rules={[{ required: true, message: "A profile is required." }]}
-            tooltip="Which profile in the code its reports are built from. Added by a developer first, and one company each — the profile carries what its invoices are numbered and named."
-          >
-            <Select
-              placeholder="Profile"
-              style={{ minWidth: 140 }}
-              options={profiles.map((key) => ({ value: key, label: key }))}
-            />
-          </Form.Item>
-          <Form.Item
             name="adminEmail"
             rules={[{ required: true, type: "email", message: "A valid address is required." }]}
           >
@@ -157,6 +223,74 @@ export function AdminView({
           </Form.Item>
         </Form>
       </Card>
+
+      <Modal
+        title={removing ? `Delete ${removing.name}?` : "Delete"}
+        open={removing !== null}
+        onCancel={() => setRemoving(null)}
+        okText="Delete for good"
+        okButtonProps={{ danger: true, disabled: typedName.trim() !== removing?.name || pending }}
+        confirmLoading={pending}
+        onOk={() =>
+          removing &&
+          run(
+            () => deleteCompany(removing.id, typedName),
+            () => setRemoving(null),
+          )
+        }
+        destroyOnHidden
+      >
+        <Typography.Paragraph>
+          Its rows, its uploaded files and its built reports are removed and cannot be brought
+          back. The people on its list keep their accounts and any other company they are in.
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          Type <Typography.Text code>{removing?.name}</Typography.Text> to confirm.
+        </Typography.Paragraph>
+        <Input
+          value={typedName}
+          onChange={(event) => setTypedName(event.target.value)}
+          placeholder={removing?.name}
+          autoFocus
+        />
+      </Modal>
     </Space>
+  );
+}
+
+/** The access list of one company: who may come in, and as what. */
+function People({ people }: { people: CompanyPerson[] }) {
+  if (people.length === 0) {
+    return <Typography.Text type="secondary">Nobody has been invited yet.</Typography.Text>;
+  }
+
+  return (
+    <Table<CompanyPerson>
+      rowKey="email"
+      dataSource={people}
+      pagination={false}
+      size="small"
+      showHeader={false}
+      columns={[
+        { title: "Address", dataIndex: "email" },
+        {
+          title: "Role",
+          dataIndex: "role",
+          width: 140,
+          render: (role: string) => <Tag>{role}</Tag>,
+        },
+        {
+          title: "Active",
+          dataIndex: "isActive",
+          width: 140,
+          render: (isActive: boolean) =>
+            isActive ? (
+              <Typography.Text type="secondary">can sign in</Typography.Text>
+            ) : (
+              <Tag color="warning">suspended</Tag>
+            ),
+        },
+      ]}
+    />
   );
 }

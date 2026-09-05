@@ -23,7 +23,6 @@ const { availablePeriods } = await import("@/lib/reports/queries");
 const { runReport } = await import("@/lib/reports/run");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { inRequest } = await import("./helpers/request-scope");
-const { GEYSER } = await import("@/modules/companies/geyser");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -53,7 +52,7 @@ describe.skipIf(!HAS_DB)("a report with an optional channel", () => {
       .returning({ id: schema.tenants.id });
 
     tenantId = tenant.id;
-    await seedReferenceData(tenantId, GEYSER);
+    await seedReferenceData(tenantId);
 
     // Cdiscount marked optional, exactly as the settings page stores it.
     await db().insert(schema.channelRules).values({

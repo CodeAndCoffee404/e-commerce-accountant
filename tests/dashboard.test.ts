@@ -43,7 +43,6 @@ const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { periodContaining } = await import("@/lib/periods/calendar");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { inRequest } = await import("./helpers/request-scope");
-const { GEYSER } = await import("@/modules/companies/geyser");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -83,7 +82,7 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
       })
       .onConflictDoNothing();
 
-    await seedReferenceData(session.tenantId, GEYSER);
+    await seedReferenceData(session.tenantId);
 
     for (const relative of [
       "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv",

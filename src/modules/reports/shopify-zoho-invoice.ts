@@ -13,7 +13,7 @@ import type {
 } from "@/lib/reports/types";
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
-import type { CompanyProfile, ShopifyProfile } from "@/modules/companies/types";
+import type { CompanyRules, ShopifyProfile } from "@/modules/companies/types";
 
 import { parseShopifyTaxRate } from "./off-amazon-sales";
 import {
@@ -546,7 +546,7 @@ export function generateShopifyZohoInvoice(
 function unmappedSkus(
   rows: readonly LedgerRow[],
   rules: RulesSnapshot,
-  company: CompanyProfile,
+  company: CompanyRules,
 ): UnmappedSku[] {
   const shop = company.shopify;
 
