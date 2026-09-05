@@ -257,7 +257,7 @@ export function SettingsView({
   // A bookmark to a tab this role no longer holds opens on the first one it does.
   const activeKey = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : tabs[0]?.key;
 
-  return <Tabs defaultActiveKey={activeKey} items={tabs} />;
+  return <Tabs className="ea-rise" defaultActiveKey={activeKey} items={tabs} />;
 }
 
 type Runner = (action: () => Promise<ActionResult>) => void;

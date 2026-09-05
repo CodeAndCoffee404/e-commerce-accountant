@@ -67,7 +67,7 @@ export function TransactionsView({
     <>
       <SourceDrawer transactionId={drilling} onClose={() => setDrilling(null)} />
 
-      <Space wrap style={{ marginBottom: 16 }}>
+      <Space className="ea-rise ea-rise-1" wrap style={{ marginBottom: 16 }}>
         {selector("dataset", "Channel", options.datasets, DATASET_LABELS)}
         {selector("period", "Period", options.periods)}
         {selector("country", "Country", options.countries)}
@@ -119,6 +119,7 @@ export function TransactionsView({
       ) : null}
 
       <Table<TransactionRow>
+        className="ea-rise ea-rise-2"
         dataSource={page.rows}
         rowKey="id"
         size="small"
