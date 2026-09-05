@@ -215,14 +215,14 @@ const GEYSER_RULES: readonly ChannelRuleSeed[] = [
     key: "defaults",
     value: {
       domesticScheme: "REGULAR",
-      domesticSellerVat: "ESN0531416F",
       exportScheme: "UNION-OSS",
-      exportSellerVat: "EE102013089",
     },
     note:
-      "The shop's VAT registrations and the scheme each sale is reported " +
-      "under. REGULAR inside the departure country, UNION-OSS beyond it. " +
-      "Where the goods ship from is not here — it is a fact about the " +
+      "The scheme each sale is reported under: REGULAR inside the departure " +
+      "country, UNION-OSS beyond it. The registration number itself is not " +
+      "here — it belongs to the company, is edited on the VAT registrations " +
+      "screen, and is looked up by the pair (country, scheme). Where the " +
+      "goods ship from is not here either: that is a fact about the " +
       "business, not a monthly setting, and both reports read it from the " +
       "code so the domestic VAT account cannot drift away from it.",
   },

@@ -5,6 +5,7 @@ import type { LedgerRow } from "@/lib/reports/types";
 import type { Period } from "@/lib/ingest/period";
 
 import { generateZohoInvoice, invoiceNumber, ZOHO_HEADERS } from "./amazon-zoho-invoice";
+import { GEYSER } from "@/modules/companies/geyser";
 
 const PERIOD: Period = {
   label: "2026.06 June",
@@ -74,7 +75,7 @@ function oss(marketplace: string, arrival: string, amount: string): LedgerRow {
 }
 
 function generate(rows: LedgerRow[]) {
-  return generateZohoInvoice(rows, { period: PERIOD, rules: RULES, fx: {} });
+  return generateZohoInvoice(rows, { period: PERIOD, rules: RULES, fx: {}, company: GEYSER });
 }
 
 const HEADER = {
@@ -90,7 +91,7 @@ const HEADER = {
 };
 
 function vatLinesOf(result: ReturnType<typeof generate>, country: string) {
-  const number = invoiceNumber(country, PERIOD.end);
+  const number = invoiceNumber(GEYSER.amazon!.invoicePrefix, country, PERIOD.end);
 
   return result.sheets[0].rows.filter(
     (row) => row[HEADER.invoiceNumber] === number && row[HEADER.account] !== `Amazon Sales ${country}`,
@@ -240,6 +241,7 @@ describe("VAT lines on the Amazon invoice for Zoho", () => {
         period: PERIOD,
         rules: RULES,
         // A rate for the invoice itself, none for the kronor inside it.
+        company: GEYSER,
         fx: { PLN: { rate: "0.23", rateDate: PERIOD.end, source: "ecb" } },
       }),
     ).toThrow(/cannot be converted/);
@@ -289,6 +291,7 @@ describe("VAT lines on the Amazon invoice for Zoho", () => {
     const result = generateZohoInvoice(rows, {
       period: PERIOD,
       rules: RULES,
+      company: GEYSER,
       fx: { SEK: { rate: "0.0894", rateDate: PERIOD.end, source: "ecb" } },
     });
 

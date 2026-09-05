@@ -43,7 +43,7 @@ async function tenant(schedule?: Partial<PeriodSchedule>): Promise<string> {
   const suffix = created.length + Date.now();
   const [row] = await db
     .insert(schema.tenants)
-    .values({ name: `Periods ${suffix}`, slug: `periods-${suffix}` })
+    .values({ name: `Periods ${suffix}` })
     .returning({ id: schema.tenants.id });
 
   created.push(row.id);

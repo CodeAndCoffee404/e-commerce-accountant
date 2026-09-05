@@ -37,6 +37,12 @@ const EXEMPT: Record<string, string> = {
   "src/app/layout.tsx": "the document shell: a theme cookie and fonts, no data",
   "src/app/page.tsx": "redirects to the dashboard and nothing else",
   "src/app/signin/page.tsx": "the sign-in screen, shown before anyone has a company",
+  "src/app/select-company/page.tsx":
+    "the company chooser: it exists because none has been chosen, and reads only this person's own invitations",
+  "src/app/(admin)/layout.tsx":
+    "the admin shell: above the companies, so it names none — its guard is requireSuperAdmin",
+  "src/app/(admin)/admin/page.tsx":
+    "the list of companies: it reads counts and dates through acrossTenants, never a company's rows",
   "src/app/api/auth/[...nextauth]/route.ts": "Auth.js's own handlers; sign-in names the company",
   "src/lib/auth/actions.ts": "starts and ends a session; touches no company data",
 };

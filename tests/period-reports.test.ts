@@ -52,7 +52,7 @@ async function tenantWithQuarters(): Promise<string> {
   const suffix = created.length + Date.now();
   const [tenant] = await db
     .insert(schema.tenants)
-    .values({ name: `Quarter ${suffix}`, slug: `quarter-${suffix}` })
+    .values({ name: `Quarter ${suffix}` })
     .returning({ id: schema.tenants.id });
 
   created.push(tenant.id);

@@ -12,6 +12,7 @@ import { corpusAvailable, ledgerForPeriod, readGolden, REPORTS, seededRules } fr
 
 import { monthByNumber } from "@/lib/ingest/months";
 import { buildPeriod, collectPeriods } from "@/lib/ingest/period";
+import { GEYSER } from "@/modules/companies/geyser";
 
 const PERIODS = ["2026.06 June", "2026.07 July"];
 
@@ -60,7 +61,7 @@ describe.skipIf(!corpusAvailable)("Sales report by currency against the referenc
 
     const result = generateSalesByCurrency(
       ledger,
-      { period: periodOf(label), rules: seededRules(), fx: {} },
+      { period: periodOf(label), rules: seededRules(), fx: {}, company: GEYSER },
       headers,
     );
 

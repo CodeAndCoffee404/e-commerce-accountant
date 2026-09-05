@@ -4,6 +4,7 @@ import { listAudit } from "@/lib/audit/record";
 import { can, inRequest, requireSection } from "@/lib/auth/session";
 import { googlePickerApiKey, googlePickerAppId } from "@/lib/env";
 import { loadConnection } from "@/lib/google/connection";
+import { companyIdentity } from "@/lib/company/queries";
 import { listMembers } from "@/lib/members/queries";
 import { loadPeriodConfiguration } from "@/lib/periods/ensure";
 import { loadReferenceData } from "@/lib/reference/queries";
@@ -46,10 +47,14 @@ async function settingsPage() {
 
   // Nothing a role cannot open is loaded, let alone rendered: a hidden tab
   // whose figures still travel in the payload is not access control.
-  const [company, team, audit] = await Promise.all([
+  const [company, identity, team, audit] = await Promise.all([
     can(user, "settings_company", "view")
       ? companyTabs(user.tenantId, can(user, "settings_deadlines", "edit"))
       : null,
+    // The name and the identifier below it: what a company is called is the
+    // owner's to change, so it sits with the team rather than with the values
+    // reports are computed from.
+    can(user, "team", "view") ? companyIdentity() : null,
     can(user, "team", "view")
       ? Promise.all([listMembers(user.tenantId), loadRoleAccess(user.tenantId)]).then(
           ([members, roleAccess]) => ({ members, roleAccess }),
@@ -63,6 +68,7 @@ async function settingsPage() {
   return (
     <SettingsView
       company={company}
+      identity={identity}
       team={team}
       audit={audit}
       selfEmail={user.email}

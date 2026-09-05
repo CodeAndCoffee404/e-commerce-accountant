@@ -33,15 +33,22 @@ export const VAT_RATES: readonly { country: string; rate: string; note?: string 
   { country: "GB", rate: "20", note: "Shopify: used when the file carries no rate" },
 ];
 
+/**
+ * The registrations the reports print. Read by `sellerVatOn`, keyed by the
+ * pair (country, scheme) — one-stop is held in a single member state and
+ * covers every distance sale, so its country is where it was registered and
+ * not where the goods went.
+ */
 export const SELLER_VAT_NUMBERS: readonly {
   country: string;
+  scheme: string;
   vatNumber: string;
   note?: string;
 }[] = [
-  { country: "PL", vatNumber: "PL5263307678", note: "Allegro, REGULAR scheme" },
-  { country: "EE", vatNumber: "EE102013089", note: "UNION-OSS" },
-  { country: "FR", vatNumber: "FR23888800463", note: "Cdiscount, REGULAR scheme" },
-  { country: "ES", vatNumber: "ESN0531416F", note: "Shopify, shipped within Spain" },
+  { country: "PL", scheme: "REGULAR", vatNumber: "PL5263307678", note: "Allegro, sales settled in złoty" },
+  { country: "EE", scheme: "UNION-OSS", vatNumber: "EE102013089", note: "UNION-OSS" },
+  { country: "FR", scheme: "REGULAR", vatNumber: "FR23888800463", note: "Cdiscount" },
+  { country: "ES", scheme: "REGULAR", vatNumber: "ESN0531416F", note: "Shopify, shipped within Spain" },
 ];
 
 /**

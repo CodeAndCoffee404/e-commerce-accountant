@@ -62,6 +62,14 @@ export const users = pgTable("users", {
   email: text("email").unique().notNull(),
   emailVerified: timestamp("email_verified", { mode: "date", withTimezone: true }),
   image: text("image"),
+  /**
+   * Above the companies rather than inside one.
+   *
+   * Not a role: roles say what a person may do in a company they belong to,
+   * and this says they may see the list of companies at all and step into any
+   * of them. Nobody grants it from inside a company, which is the point.
+   */
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
 });
 
 export const accounts = pgTable(
@@ -116,9 +124,26 @@ export const membershipRole = pgEnum("membership_role", [
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * What this company is called, and nothing more than that.
+   *
+   * Its own owner changes it — a company is renamed, bought, or was simply
+   * typed in wrong — so nothing may be keyed to it. Everything that has to
+   * point at a company points at `id`: the rows it owns, the folders its files
+   * live under, who may come in. Two companies may share a name; they are
+   * still two companies.
+   */
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * Which company profile in `src/modules/companies` this one is built from.
+   *
+   * The database holds the key and nothing else: the values themselves are
+   * code, reviewed and covered by a golden test, because they are what the
+   * reports are computed from — see the profile's own comment for why that is
+   * not a settings screen.
+   */
+  profileKey: text("profile_key").notNull().default("geyser"),
 });
 
 export const memberships = pgTable(
@@ -187,7 +212,12 @@ export const allowedEmails = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("allowed_emails_email_idx").on(table.email),
+  (table) => [
+    // Per company, not globally. One person can be invited to two companies —
+    // an accountant who keeps the books for both — and the switcher exists for
+    // exactly that. Globally unique was the old assumption that one address
+    // meant one company.
+    uniqueIndex("allowed_emails_tenant_email_idx").on(table.tenantId, table.email),
     tenantIsolation(),
   ],
 );
@@ -473,13 +503,29 @@ export const sellerVatNumbers = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     country: text("country").notNull(),
+    /**
+     * Which regime this registration is used under: `REGULAR` for a number the
+     * company is registered with in that country, `UNION-OSS` for the one-stop
+     * registration it reports distance sales under.
+     *
+     * The pair decides the number a report prints, which is why it is here and
+     * not merely in the note: a company can hold both a local registration and
+     * an OSS one, and the same sale takes one or the other depending on where
+     * it went.
+     */
+    scheme: text("scheme").notNull().default("REGULAR"),
     vatNumber: text("vat_number").notNull(),
     validFrom: date("valid_from").notNull(),
     validTo: date("valid_to"),
     note: text("note"),
   },
   (table) => [
-    uniqueIndex("seller_vat_period_idx").on(table.tenantId, table.country, table.validFrom),
+    uniqueIndex("seller_vat_period_idx").on(
+      table.tenantId,
+      table.country,
+      table.scheme,
+      table.validFrom,
+    ),
     tenantIsolation(),
   ],
 );

@@ -24,6 +24,7 @@ const { seedReferenceData } = await import("@/lib/reference/seed");
 const { runReport } = await import("@/lib/reports/run");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { inRequest } = await import("./helpers/request-scope");
+const { GEYSER } = await import("@/modules/companies/geyser");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -55,7 +56,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Rules guard test", slug: `rules-${process.pid}` })
+      .values({ name: "Rules guard test" })
       .returning({ id: schema.tenants.id });
 
     tenantId = tenant.id;
@@ -133,7 +134,7 @@ describe.skipIf(!HAS_DB)("building without the channel rules", () => {
   }), 300_000);
 
   it("builds once the defaults are restored", inRequest(async () => {
-    await seedReferenceData(tenantId);
+    await seedReferenceData(tenantId, GEYSER);
 
     const outcome = await runReport({
       tenantId,

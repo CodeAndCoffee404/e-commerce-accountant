@@ -43,6 +43,7 @@ const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { periodContaining } = await import("@/lib/periods/calendar");
 const { ingestSourceFile } = await import("@/lib/uploads/ingest");
 const { inRequest } = await import("./helpers/request-scope");
+const { GEYSER } = await import("@/modules/companies/geyser");
 
 const HAS_DB = ["DATABASE_URL", "DEV_DATABASE_URL", "POSTGRES_URL", "DEV_POSTGRES_URL"].some(
   (name) => (process.env[name] ?? "").length > 0,
@@ -61,16 +62,28 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
   beforeAll(inRequest(async () => {
     const [tenant] = await db()
       .insert(schema.tenants)
-      .values({ name: "Close test", slug: `close-${process.pid}` })
+      .values({ name: "Close test" })
       .returning({ id: schema.tenants.id });
 
     session.tenantId = tenant.id;
     // runReport records who asked, and the column is a real foreign key.
     await db()
       .insert(schema.users)
-      .values({ id: session.userId, email: `${session.userId}@example.invalid` })
+      .values({ id: session.userId, email: "close@example.invalid" })
       .onConflictDoNothing();
-    await seedReferenceData(session.tenantId);
+
+    // The role is read from the access list on every request, so the session
+    // needs a row there to be anything other than a stranger to this company.
+    await db()
+      .insert(schema.allowedEmails)
+      .values({
+        tenantId: session.tenantId,
+        email: "close@example.invalid",
+        role: "owner",
+      })
+      .onConflictDoNothing();
+
+    await seedReferenceData(session.tenantId, GEYSER);
 
     for (const relative of [
       "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv",

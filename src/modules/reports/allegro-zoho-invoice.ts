@@ -4,6 +4,7 @@ import { parseAllegroMoney } from "@/modules/channels/allegro";
 
 import { exactLines } from "@/lib/reports/invoice-lines";
 import { allegroCurrencyRule, decideSku, splitGross, vatRateOn } from "@/lib/reports/rules";
+import type { AllegroProfile } from "@/modules/companies/types";
 import type {
   GeneratorResult,
   LedgerRow,
@@ -29,10 +30,12 @@ import { unmappedCode, type ReportModule, type UnmappedSku } from "./types";
  * (see below) rather than silently under-reporting one currency's revenue.
  */
 
-const VAT_LABELS: Record<string, string> = {
-  REGULAR: "VAT PL Regular",
-  "UNION-OSS": "VAT OSS Other countries",
-};
+function vatLabels(allegro: AllegroProfile): Record<string, string> {
+  return {
+    REGULAR: `VAT ${allegro.homeCountry} Regular`,
+    "UNION-OSS": "VAT OSS Other countries",
+  };
+}
 
 /** Fixed so the two VAT lines always print in the same order. */
 const VAT_SCHEME_ORDER = ["REGULAR", "UNION-OSS"];
@@ -342,16 +345,32 @@ function buildOrderLines(
   return lines;
 }
 
-function invoiceNumber(periodEnd: string): string {
+function invoiceNumber(allegro: AllegroProfile, periodEnd: string): string {
   const [year, month] = periodEnd.split("-");
 
-  return `INV-Allegro-${month}.${year.slice(2)}`;
+  return `${allegro.invoicePrefix}${month}.${year.slice(2)}`;
+}
+
+/**
+ * The Allegro facts of the company this report is for. Throws rather than
+ * defaulting: a company that does not sell on Allegro has no home country for
+ * its REGULAR line.
+ */
+function allegroOf(context: ReportContext): AllegroProfile {
+  if (!context.company.allegro) {
+    throw new Error(
+      `${context.company.key} does not sell on Allegro, so this report cannot be built.`,
+    );
+  }
+
+  return context.company.allegro;
 }
 
 export function generateAllegroZohoInvoice(
   rows: readonly LedgerRow[],
   context: ReportContext,
 ): GeneratorResult {
+  const allegro = allegroOf(context);
   const skipped = new Map<string, number>();
   const warnings: string[] = [];
 
@@ -463,7 +482,7 @@ export function generateAllegroZohoInvoice(
   }
 
   const invoiceDate = `${context.period.end} 00:00:00`;
-  const invoiceNo = invoiceNumber(context.period.end);
+  const invoiceNo = invoiceNumber(allegro, context.period.end);
   const output: (string | number | null)[][] = [];
 
   const productRows = [...productAgg.entries()]
@@ -486,7 +505,7 @@ export function generateAllegroZohoInvoice(
       output.push([
         invoiceDate,
         invoiceNo,
-        "Allegro",
+        allegro.customerName,
         "EUR",
         "1",
         product.itemName,
@@ -494,7 +513,7 @@ export function generateAllegroZohoInvoice(
         "",
         line.quantity.toFixed(),
         line.price.toFixed(2),
-        "Allegro Sales",
+        allegro.salesAccount,
       ]);
     }
   }
@@ -506,12 +525,12 @@ export function generateAllegroZohoInvoice(
     // is not a real line on the invoice.
     if (!amount) continue;
 
-    const label = VAT_LABELS[scheme] ?? `VAT ${scheme}`;
+    const label = vatLabels(allegro)[scheme] ?? `VAT ${scheme}`;
 
     output.push([
       invoiceDate,
       invoiceNo,
-      "Allegro",
+      allegro.customerName,
       "EUR",
       "1",
       // Item Name and SKU stay empty, and the name goes in Item Desc: Zoho

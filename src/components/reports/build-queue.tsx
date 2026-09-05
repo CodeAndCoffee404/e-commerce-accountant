@@ -74,7 +74,7 @@ export function useBuildQueue({
     null,
   );
   const [currencyDrafts, setCurrencyDrafts] = useState<
-    Record<string, { country: string; scheme: string; sellerVat: string }>
+    Record<string, { country: string; scheme: string }>
   >({});
   const [savingCurrencies, setSavingCurrencies] = useState(false);
 
@@ -245,7 +245,6 @@ export function useBuildQueue({
             currency,
             country: draft?.country.trim() ?? "",
             scheme: draft?.scheme ?? "UNION-OSS",
-            sellerVat: draft?.sellerVat.trim() ?? "",
           });
 
           if (!result.ok) {
@@ -577,11 +576,11 @@ function CurrencyGateModal({
   onSave,
 }: {
   gate: { target: Target; currencies: string[] } | null;
-  drafts: Record<string, { country: string; scheme: string; sellerVat: string }>;
+  drafts: Record<string, { country: string; scheme: string }>;
   setDrafts: (
     updater: (
-      drafts: Record<string, { country: string; scheme: string; sellerVat: string }>,
-    ) => Record<string, { country: string; scheme: string; sellerVat: string }>,
+      drafts: Record<string, { country: string; scheme: string }>,
+    ) => Record<string, { country: string; scheme: string }>,
   ) => void;
   canEdit: boolean;
   saving: boolean;
@@ -593,19 +592,15 @@ function CurrencyGateModal({
   const currencies = gate?.currencies ?? [];
 
   const draftOf = (currency: string) =>
-    drafts[currency] ?? { country: "", scheme: "UNION-OSS", sellerVat: "" };
+    drafts[currency] ?? { country: "", scheme: "UNION-OSS" };
 
   const decided = currencies.filter((currency) => {
     const draft = draftOf(currency);
 
-    return draft.country.trim() !== "" && draft.sellerVat.trim() !== "";
+    return draft.country.trim() !== "";
   }).length;
 
-  const setField = (
-    currency: string,
-    field: "country" | "scheme" | "sellerVat",
-    value: string,
-  ) => setDrafts((current) => ({ ...current, [currency]: { ...draftOf(currency), [field]: value } }));
+  const setField = (currency: string, field: "country" | "scheme", value: string) => setDrafts((current) => ({ ...current, [currency]: { ...draftOf(currency), [field]: value } }));
 
   return (
     <Modal
@@ -626,8 +621,9 @@ function CurrencyGateModal({
             {currencies.length === 1 ? "This currency appears" : "These currencies appear"} in{" "}
             {gate.target.periodLabel}&rsquo;s Allegro rows and{" "}
             {currencies.length === 1 ? "isn&rsquo;t" : "aren&rsquo;t"} in currency_map yet. Give{" "}
-            {currencies.length === 1 ? "it" : "each one"} an arrival country, a VAT scheme and the
-            seller VAT number it settles under.
+            {currencies.length === 1 ? "it" : "each one"} an arrival country and a VAT scheme.
+            The registration number follows from that pair — it is the company&rsquo;s own, kept
+            on Settings &rarr; VAT registrations.
           </Typography.Text>
 
           {canEdit ? (
@@ -667,18 +663,6 @@ function CurrencyGateModal({
                         value={draftOf(currency).scheme}
                         options={SCHEME_OPTIONS}
                         onChange={(value) => setField(currency, "scheme", value)}
-                      />
-                    ),
-                  },
-                  {
-                    title: "Seller VAT",
-                    key: "sellerVat",
-                    render: (_, { currency }: { currency: string }) => (
-                      <Input
-                        size="small"
-                        placeholder="e.g. EE102013089"
-                        value={draftOf(currency).sellerVat}
-                        onChange={(event) => setField(currency, "sellerVat", event.target.value)}
                       />
                     ),
                   },

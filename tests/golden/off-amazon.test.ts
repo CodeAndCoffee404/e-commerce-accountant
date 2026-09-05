@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildPeriod, collectPeriods } from "@/lib/ingest/period";
 import { monthByNumber } from "@/lib/ingest/months";
 import { generateOffAmazonSales, OFF_AMAZON_HEADERS } from "@/modules/reports/off-amazon-sales";
+import { GEYSER } from "@/modules/companies/geyser";
 
 import {
   corpusAvailable,
@@ -93,6 +94,7 @@ describe.skipIf(!corpusAvailable)("Off-Amazon Sales against the reference", () =
     const result = generateOffAmazonSales(ledger, {
       period: periodOf(label),
       rules: seededRules(),
+      company: GEYSER,
       fx: {},
     });
 

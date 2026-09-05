@@ -58,14 +58,38 @@ afterAll(inRequest(async () => {
 
 async function asOwnerOfFreshTenant(): Promise<string> {
   const suffix = created.length + Date.now();
+
+  // Reset first: one test drops to accountant, and the next one asking for an
+  // owner should get one however the tests happen to be ordered.
+  session.role = "owner";
+
   const [tenant] = await getDb()
     .insert(schema.tenants)
-    .values({ name: `Schedule ${suffix}`, slug: `schedule-${suffix}` })
+    .values({ name: `Schedule ${suffix}` })
     .returning({ id: schema.tenants.id });
+
+  // The person and their membership, not just the session: the role is read
+  // from the membership on every request now, so a session naming a company
+  // nobody belongs to is sent to the chooser — which is the point of it.
+  await getDb()
+    .insert(schema.users)
+    .values({ id: session.id, email: session.email })
+    .onConflictDoNothing();
+
+  // The access list, not just the membership: it is what every check reads,
+  // so that a role an owner changes is a role that changes.
+  await getDb()
+    .insert(schema.allowedEmails)
+    .values({ tenantId: tenant.id, email: session.email, role: session.role })
+    .onConflictDoNothing();
+
+  await getDb()
+    .insert(schema.memberships)
+    .values({ tenantId: tenant.id, userId: session.id, role: session.role })
+    .onConflictDoNothing();
 
   created.push(tenant.id);
   session.tenantId = tenant.id;
-  session.role = "owner";
 
   return tenant.id;
 }
@@ -170,8 +194,18 @@ describe.skipIf(!HAS_DB)("saving the period schedule", () => {
   }));
 
   it("refuses a role the owner has not given the schedule to", inRequest(async () => {
-    await asOwnerOfFreshTenant();
+    const tenantId = await asOwnerOfFreshTenant();
+
     session.role = "accountant";
+    await getDb()
+      .update(schema.allowedEmails)
+      .set({ role: "accountant" })
+      .where(
+        and(
+          eq(schema.allowedEmails.tenantId, tenantId),
+          eq(schema.allowedEmails.email, session.email),
+        ),
+      );
 
     const result = await savePeriodSchedule({
       month: true,

@@ -6,15 +6,8 @@ import Decimal from "decimal.js";
 import { classify } from "@/lib/ingest/classify";
 import { channelModule } from "@/modules/channels/registry";
 import { parseSpreadsheet } from "@/lib/ingest/parse";
-import {
-  ALLEGRO_CURRENCY_MAP,
-  CHANNEL_RULES,
-  IGNORED_SKUS,
-  RULES_EFFECTIVE_FROM,
-  SELLER_VAT_NUMBERS,
-  SKU_MAPPINGS,
-  VAT_RATES,
-} from "@/lib/reference/seed-data";
+import { ALLEGRO_CURRENCY_MAP, RULES_EFFECTIVE_FROM } from "@/lib/reference/seed-data";
+import { GEYSER } from "@/modules/companies/geyser";
 import type { LedgerRow, RulesSnapshot } from "@/lib/reports/types";
 
 export const CORPUS = path.resolve(
@@ -32,22 +25,34 @@ export const corpusAvailable = (() => {
   }
 })();
 
-/** The seeded rules, without a database — the generators only need the values. */
+/**
+ * The rules a fresh Geyser starts with, without a database.
+ *
+ * Read from the company profile rather than from the seed tables directly, so
+ * that these tests run against what `createCompany` actually writes. Taking
+ * them from anywhere else would let the two drift and leave the goldens
+ * passing against values production no longer seeds.
+ */
 export function seededRules(): RulesSnapshot {
+  const seeds = GEYSER.seeds;
+
   return {
-    vatRates: VAT_RATES.map((rate) => ({
+    vatRates: seeds.vatRates.map((rate) => ({
       country: rate.country,
       rate: rate.rate,
       validFrom: RULES_EFFECTIVE_FROM,
       validTo: null,
     })),
-    sellerVatNumbers: SELLER_VAT_NUMBERS.map((entry) => ({
+    sellerVatNumbers: seeds.sellerVatNumbers.map((entry) => ({
       country: entry.country,
+      scheme: entry.scheme,
       vatNumber: entry.vatNumber,
+      validFrom: RULES_EFFECTIVE_FROM,
+      validTo: null,
     })),
     skuMappings: [
-      ...SKU_MAPPINGS.map((mapping) => ({ ...mapping, sourceName: "", isIgnored: false })),
-      ...IGNORED_SKUS.map((sku) => ({
+      ...seeds.skuMappings.map((mapping) => ({ ...mapping, sourceName: "", isIgnored: false })),
+      ...seeds.ignoredSkus.map((sku) => ({
         channel: "amazon",
         sourceSku: sku,
         sourceName: "",
@@ -56,7 +61,7 @@ export function seededRules(): RulesSnapshot {
         isIgnored: true,
       })),
     ],
-    channelRules: CHANNEL_RULES.map((rule) => ({
+    channelRules: seeds.channelRules.map((rule) => ({
       channel: rule.channel,
       key: rule.key,
       value: rule.value,

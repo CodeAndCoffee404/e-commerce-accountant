@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LedgerRow, RulesSnapshot } from "@/lib/reports/types";
 import { amazonZohoInvoiceModule } from "@/modules/reports/amazon-zoho-invoice";
+import { GEYSER } from "@/modules/companies/geyser";
 
 /**
  * `unmappedSkus` is what stops a build on SKUs SKU mapping has never seen,
@@ -56,7 +57,7 @@ const unmappedSkus = (...args: Parameters<typeof askAbout>) =>
 
 describe("amazonZohoInvoiceModule.unmappedSkus", () => {
   it("flags a SKU that would invoice but has no mapping row", () => {
-    expect(unmappedSkus([row({ sku: "UNMAPPED-1" })], emptyRules)).toEqual(["UNMAPPED-1"]);
+    expect(unmappedSkus([row({ sku: "UNMAPPED-1" })], emptyRules, GEYSER)).toEqual(["UNMAPPED-1"]);
   });
 
   it("does not flag a SKU that is already mapped", () => {
@@ -67,7 +68,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
       ],
     };
 
-    expect(unmappedSkus([row({ sku: "MAPPED-1" })], rules)).toEqual([]);
+    expect(unmappedSkus([row({ sku: "MAPPED-1" })], rules, GEYSER)).toEqual([]);
   });
 
   it("does not flag a SKU that is explicitly ignored", () => {
@@ -78,7 +79,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
       ],
     };
 
-    expect(unmappedSkus([row({ sku: "IGNORED-1" })], rules)).toEqual([]);
+    expect(unmappedSkus([row({ sku: "IGNORED-1" })], rules, GEYSER)).toEqual([]);
   });
 
   it("only looks at the amazon channel's mapping, not another channel's row for the same code", () => {
@@ -89,7 +90,7 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
       ],
     };
 
-    expect(unmappedSkus([row({ sku: "SHARED-1" })], rules)).toEqual(["SHARED-1"]);
+    expect(unmappedSkus([row({ sku: "SHARED-1" })], rules, GEYSER)).toEqual(["SHARED-1"]);
   });
 
   it("ignores rows that would never invoice anyway, unmapped or not", () => {
@@ -105,12 +106,12 @@ describe("amazonZohoInvoiceModule.unmappedSkus", () => {
       row({ sku: "OTHER-CHANNEL", dataset: "allegro" }),
     ];
 
-    expect(unmappedSkus(rows, emptyRules)).toEqual([]);
+    expect(unmappedSkus(rows, emptyRules, GEYSER)).toEqual([]);
   });
 
   it("de-duplicates repeats and returns them sorted", () => {
     const rows = [row({ sku: "B-SKU" }), row({ sku: "A-SKU" }), row({ sku: "B-SKU" })];
 
-    expect(unmappedSkus(rows, emptyRules)).toEqual(["A-SKU", "B-SKU"]);
+    expect(unmappedSkus(rows, emptyRules, GEYSER)).toEqual(["A-SKU", "B-SKU"]);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BankOutlined,
   FileTextOutlined,
   HomeOutlined,
   InboxOutlined,
@@ -11,7 +12,7 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Layout, Menu, Space, Spin, theme, Tooltip, Typography } from "antd";
+import { Badge, Button, Layout, Menu, Space, Spin, Tag, theme, Tooltip, Typography } from "antd";
 import Image from "next/image";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
@@ -19,8 +20,9 @@ import type { ComponentType, ReactNode } from "react";
 
 import { HelpModal } from "@/components/layout/help-modal";
 import { UserMenu } from "@/components/layout/user-menu";
-import type { CurrentUser } from "@/lib/auth/session";
 import type { AccessMap } from "@/lib/access/sections";
+import type { Company } from "@/lib/auth/allowlist";
+import type { CurrentUser } from "@/lib/auth/session";
 import {
   NAV_ITEMS,
   landingRoute,
@@ -57,6 +59,8 @@ export function AppShell({
   user,
   access,
   needsAttention,
+  company,
+  companies,
 }: {
   children: ReactNode;
   user: CurrentUser;
@@ -64,6 +68,10 @@ export function AppShell({
   access: AccessMap;
   /** Rows a person has to look at. Zero hides the badge entirely. */
   needsAttention: number;
+  /** The company being worked in, named in the bar so it is never a guess. */
+  company: string;
+  /** Everything this person could switch to. One means no switcher. */
+  companies: Company[];
 }) {
   const pathname = usePathname();
   // Read from the theme rather than written as a hex value: a separator that
@@ -239,6 +247,14 @@ export function AppShell({
 
             {/* Where you are, for when the sidebar is collapsed to icons. */}
             <Typography.Text strong>{activeItem?.label ?? ""}</Typography.Text>
+
+            {/* Whose books these are. Always shown, not only when there are
+                several: the cost of an upload landing in the wrong company is
+                paid by whoever reconciles it a month later, and a name in the
+                bar is the cheapest thing standing between them and that. */}
+            <Tag icon={<BankOutlined />} style={{ marginInlineStart: 4 }}>
+              {company}
+            </Tag>
           </Space>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -253,7 +269,7 @@ export function AppShell({
               />
             </Tooltip>
 
-            <UserMenu user={user} />
+            <UserMenu user={user} company={company} companies={companies} />
           </div>
         </Header>
 

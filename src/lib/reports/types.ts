@@ -1,6 +1,7 @@
 import type Decimal from "decimal.js";
 
 import type { Period } from "@/lib/ingest/period";
+import type { CompanyProfile } from "@/modules/companies/types";
 
 /** One ledger row as a generator sees it. */
 export type LedgerRow = {
@@ -25,7 +26,6 @@ export type LedgerRow = {
 export type AllegroCurrencyRule = {
   country: string;
   scheme: string;
-  sellerVat: string;
 };
 
 /**
@@ -36,7 +36,14 @@ export type AllegroCurrencyRule = {
  */
 export type RulesSnapshot = {
   vatRates: { country: string; rate: string; validFrom: string; validTo: string | null }[];
-  sellerVatNumbers: { country: string; vatNumber: string }[];
+  sellerVatNumbers: {
+    country: string;
+    /** `REGULAR` or `UNION-OSS`: which regime this registration is used under. */
+    scheme: string;
+    vatNumber: string;
+    validFrom: string;
+    validTo: string | null;
+  }[];
   skuMappings: {
     channel: string;
     sourceSku: string;
@@ -58,6 +65,12 @@ export type ReportContext = {
   period: Period;
   rules: RulesSnapshot;
   fx: FxSnapshot;
+  /**
+   * The company these numbers belong to: where its goods ship from, what it
+   * calls its accounts in Zoho, which markets get their own VAT line. Code,
+   * not settings — see `src/modules/companies/types.ts`.
+   */
+  company: CompanyProfile;
   /** For reports built per tenant-defined variant: the stored definition. */
   variant?: { key: string; value: unknown };
   /**

@@ -1,5 +1,8 @@
 import type { SectionId } from "@/lib/access/sections";
 
+/** Where someone lands when the company in their session is not one of theirs. */
+export const SELECT_COMPANY = "/select-company";
+
 export type NavItem = {
   key: string;
   href: string;

@@ -2,10 +2,8 @@ import { get } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { auth } from "@/auth";
-import { loadAccessFor } from "@/lib/access/queries";
 import { allows } from "@/lib/access/sections";
-import { inRequest } from "@/lib/auth/session";
+import { apiUser, inRequest } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -34,15 +32,13 @@ async function downloadArtifact(
   _request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
 ): Promise<NextResponse> {
-  const session = await auth();
+  const user = await apiUser();
 
-  if (!session?.user?.id || !session.tenantId) {
+  if (!user) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const access = await loadAccessFor(session.tenantId, session.role);
-
-  if (!allows(access, "reports", "view")) {
+  if (!allows(user.access, "reports", "view")) {
     return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
 
@@ -60,7 +56,7 @@ async function downloadArtifact(
         eq(schema.reportArtifacts.id, artifactId),
         // Scoped by tenant: an artifact id alone must not reach another
         // tenant's report.
-        eq(schema.reportRuns.tenantId, session.tenantId),
+        eq(schema.reportRuns.tenantId, user.tenantId),
       ),
     )
     .limit(1);

@@ -1,6 +1,7 @@
 import type Decimal from "decimal.js";
 
-import type { LedgerRow } from "@/lib/reports/types";
+import type { LedgerRow, ReportContext } from "@/lib/reports/types";
+import type { ShopifyProfile } from "@/modules/companies/types";
 
 /**
  * Which Shopify orders are sales, shared by the two reports that read them.
@@ -10,28 +11,33 @@ import type { LedgerRow } from "@/lib/reports/types";
  * counted by one and not the other is a discrepancy nobody can reconcile.
  * So the test lives here once, and neither report gets to have its own idea.
  *
- * These are constants, not channel rules. A rule is for something the business
- * changes — which countries break out their own VAT line, what a currency
- * means. This is not that: it is what the shop's own workflow does, it must
- * hold for both reports at once, and an editable copy of it is a switch that
- * silently puts giveaways and unpaid orders into an invoice. Being unable to
- * edit it is the point.
+ * These are the company's own facts, not channel rules. A rule is for
+ * something the business changes month to month — which countries break out
+ * their own VAT line, what a currency means. This is not that: it is what the
+ * shop's own workflow does, it must hold for both reports at once, and an
+ * editable copy of it is a switch that silently puts giveaways and unpaid
+ * orders into an invoice. Being unable to edit it is the point.
+ *
+ * They live in the company profile now rather than in this file, which changes
+ * where they are written and nothing about how: a profile is code, changed by
+ * a pull request with a golden test. What it buys is a second company with its
+ * own answers, without either company's becoming a setting.
  */
 
 /**
- * Orders an employee wrote up by hand in the admin, through the draft-order
- * screen. Shopify shows them as ordinary orders once completed — only the
- * export still says where they came from. This is how a warranty replacement
- * and an adapter ship.
+ * The Shopify facts of the company this report is for.
+ *
+ * Throws rather than defaulting: a company with no shop has no answer to "what
+ * counts as a sale here", and inventing one would mean building a report from
+ * another company's workflow.
  */
-const HAND_MADE_SOURCES: readonly string[] = ["shopify_draft_order"];
+export function shopifyOf(context: ReportContext): ShopifyProfile {
+  if (!context.company.shopify) {
+    throw new Error(`${context.company.key} has no Shopify shop, so this report cannot be built.`);
+  }
 
-/**
- * The shop takes card payments only. An order marked paid by any of these was
- * not paid at all — it is the known mistake on a warranty replacement, which
- * should have been zeroed with a 100% discount and was marked paid instead.
- */
-const METHODS_THAT_ARE_NOT_PAYMENTS: readonly string[] = ["manual"];
+  return context.company.shopify;
+}
 
 /** The order-level columns this judgement needs; Shopify writes them on an order's first line. */
 export type ShopifyOrder = {
@@ -52,13 +58,13 @@ export type NotASale =
  * A hand-made order paid for by card is an ordinary sale that happens to have
  * been typed in by a person, and is billed like any other.
  */
-export function notASale(order: ShopifyOrder | undefined): NotASale | null {
+export function notASale(shop: ShopifyProfile, order: ShopifyOrder | undefined): NotASale | null {
   if (!order) return null;
 
   // Everything here is about orders somebody typed in by hand. An order nobody
   // typed by hand is a sale: it came through a checkout, which is the shop's
   // ordinary way of taking money.
-  if (!HAND_MADE_SOURCES.includes(order.source)) return null;
+  if (!shop.handMadeSources.includes(order.source)) return null;
 
   // An unreadable total counts as no money: the report says so elsewhere, and
   // guessing that it might have been a sale is the wrong way to be wrong.
@@ -67,7 +73,7 @@ export function notASale(order: ShopifyOrder | undefined): NotASale | null {
   // It claims money. The shop takes cards, so a hand-typed "paid" is the known
   // mistake on a warranty replacement: the 100% discount that should have
   // zeroed it was never applied.
-  return METHODS_THAT_ARE_NOT_PAYMENTS.includes(order.paymentMethod) ? "unpaid" : null;
+  return shop.methodsThatAreNotPayments.includes(order.paymentMethod) ? "unpaid" : null;
 }
 
 /**
@@ -107,36 +113,29 @@ export function notASaleReason(report: string, why: NotASale): string {
  * It lived in an editable rule while the invoice quietly hard-coded "ES" for
  * the domestic account. Moving the warehouse in Settings would then have sent
  * the new country's domestic VAT to Spain's account, silently. The country is
- * a fact about the business, not a monthly setting — so it is here, and both
- * uses read the same constant.
+ * a fact about the business, not a monthly setting — so it lives in the
+ * company profile, and both uses read it from there.
  * ------------------------------------------------------------------------ */
 
-/** Geyser's Shopify shop ships from Spain, always. */
-export const DEPARTURE_COUNTRY = "ES";
-
 /** Sold and shipped without leaving the departure country: the home regime. */
-export function isDomestic(arrival: string): boolean {
-  return arrival === DEPARTURE_COUNTRY;
+export function isDomestic(shop: ShopifyProfile, arrival: string): boolean {
+  return arrival === shop.departureCountry;
 }
-
-/** Shopify writes `UK`; reporting needs `GB`. */
-const COUNTRY_ALIASES: Readonly<Record<string, string>> = { UK: "GB" };
 
 /**
  * Where the order went. Shipping address first, billing as the fallback, and
- * whatever the ledger recorded last of all.
+ * whatever the ledger recorded last of all — then through the shop's aliases,
+ * because an export can spell a country differently from the reports.
  */
-export function arrivalCountryOf(row: LedgerRow): string {
+export function arrivalCountryOf(shop: ShopifyProfile, row: LedgerRow): string {
   const raw = row.raw["Shipping Country"] || row.raw["Billing Country"] || row.countryCode || "";
 
-  return COUNTRY_ALIASES[raw] ?? raw;
+  return shop.countryAliases[raw] ?? raw;
 }
 
-/** Switzerland is out of scope by agreement, and silently — no marker anywhere. */
-const SKIPPED_ARRIVAL_COUNTRIES: readonly string[] = ["CH"];
-
-export function isSkippedCountry(arrival: string): boolean {
-  return SKIPPED_ARRIVAL_COUNTRIES.includes(arrival);
+/** Out of scope by agreement, and silently — no marker anywhere. */
+export function isSkippedCountry(shop: ShopifyProfile, arrival: string): boolean {
+  return shop.skippedArrivalCountries.includes(arrival);
 }
 
 /**
@@ -145,8 +144,6 @@ export function isSkippedCountry(arrival: string): boolean {
  * from the order total instead. Everywhere else a zero means zero and must not
  * be filled in.
  */
-const RECOMPUTE_ZERO_TAX_COUNTRIES: readonly string[] = ["GB"];
-
-export function recomputesZeroTax(arrival: string): boolean {
-  return RECOMPUTE_ZERO_TAX_COUNTRIES.includes(arrival);
+export function recomputesZeroTax(shop: ShopifyProfile, arrival: string): boolean {
+  return shop.recomputeZeroTaxCountries.includes(arrival);
 }

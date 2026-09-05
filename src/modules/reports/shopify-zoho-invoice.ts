@@ -13,9 +13,10 @@ import type {
 } from "@/lib/reports/types";
 
 import { ZOHO_HEADERS } from "./amazon-zoho-invoice";
+import type { CompanyProfile, ShopifyProfile } from "@/modules/companies/types";
+
 import { parseShopifyTaxRate } from "./off-amazon-sales";
 import {
-  DEPARTURE_COUNTRY,
   arrivalCountryOf,
   isDomestic,
   isSkippedCountry,
@@ -23,6 +24,7 @@ import {
   notASaleReason,
   recomputesZeroTax,
   unpaidOrderWarning,
+  shopifyOf,
 } from "./shopify-orders";
 import type { ReportModule, UnmappedSku } from "./types";
 
@@ -69,13 +71,8 @@ function identify(row: LedgerRow): { key: string; name: string } | null {
 
 type ShopifyDefaults = {
   domesticScheme: string;
-  domesticSellerVat: string;
   exportScheme: string;
-  exportSellerVat: string;
 };
-
-/** Where the shop's goods post in Zoho. The name is the account, exactly. */
-const SALES_ACCOUNT = "Shopify Geyser Sales";
 
 /**
  * The Zoho account an order's VAT posts to: country in the middle, scheme
@@ -90,21 +87,22 @@ const SALES_ACCOUNT = "Shopify Geyser Sales";
  * place. Not the grouping a legacy-built invoice once used (Austria filed
  * under "DE", Slovenia under "FR") — that was a manual mistake, not a rule.
  */
-const OSS_BREAKOUT_COUNTRIES = ["DE", "FR", "IT", "PL"];
-const POOLED_VAT_ACCOUNT = "VAT OSS Other countries";
+function vatAccount(shop: ShopifyProfile, arrival: string): string {
+  if (isDomestic(shop, arrival)) return `VAT ${shop.departureCountry} Regular`;
 
-function vatAccount(arrival: string): string {
-  if (isDomestic(arrival)) return `VAT ${DEPARTURE_COUNTRY} Regular`;
-
-  return OSS_BREAKOUT_COUNTRIES.includes(arrival) ? `VAT ${arrival} OSS` : POOLED_VAT_ACCOUNT;
+  return shop.zoho.ossBreakout.includes(arrival)
+    ? `VAT ${arrival} OSS`
+    : shop.zoho.pooledVatAccount;
 }
 
 /** The order the accounts print in; only the ones with money in them show. */
-const VAT_ACCOUNT_ORDER = [
-  `VAT ${DEPARTURE_COUNTRY} Regular`,
-  ...OSS_BREAKOUT_COUNTRIES.map((country) => `VAT ${country} OSS`),
-  POOLED_VAT_ACCOUNT,
-];
+function vatAccountOrder(shop: ShopifyProfile): string[] {
+  return [
+    `VAT ${shop.departureCountry} Regular`,
+    ...shop.zoho.ossBreakout.map((country: string) => `VAT ${country} OSS`),
+    shop.zoho.pooledVatAccount,
+  ];
+}
 
 type OrderFacts = { source: string; total: Decimal | null; paymentMethod: string };
 
@@ -114,11 +112,11 @@ type OrderFacts = { source: string; total: Decimal | null; paymentMethod: string
  * Shopify writes on the first line only, and every line of the order is judged
  * by them.
  */
-function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
+function orderFactsMap(shop: ShopifyProfile, rows: readonly LedgerRow[]): Map<string, OrderFacts> {
   const map = new Map<string, OrderFacts>();
 
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
 
     const name = row.raw["Name"];
 
@@ -146,12 +144,13 @@ function orderFactsMap(rows: readonly LedgerRow[]): Map<string, OrderFacts> {
  * discount apart from a delivery charge when checking the order adds up.
  */
 function orderMoneyMap(
+  shop: ShopifyProfile,
   rows: readonly LedgerRow[],
 ): Map<string, { total: Decimal | null; subtotal: Decimal | null }> {
   const map = new Map<string, { total: Decimal | null; subtotal: Decimal | null }>();
 
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
 
     const name = row.raw["Name"];
 
@@ -178,21 +177,22 @@ function isExcludedRow(
   rules: RulesSnapshot,
   facts: ReadonlyMap<string, OrderFacts>,
   arrival: string,
+  shop: ShopifyProfile,
 ): string | null {
-  const why = notASale(facts.get(row.raw["Name"] ?? ""));
+  const why = notASale(shop, facts.get(row.raw["Name"] ?? ""));
 
   if (why) return notASaleReason("Shopify invoice", why);
 
-  if (isSkippedCountry(arrival)) return `Shopify invoice: delivered to ${arrival}`;
+  if (isSkippedCountry(shop, arrival)) return `Shopify invoice: delivered to ${arrival}`;
 
   return null;
 }
 
 /** `INV-GeyserWebsite-01.26` — the client's own numbering, taken from a real invoice. */
-function invoiceNumber(periodEnd: string): string {
+function invoiceNumber(shop: ShopifyProfile, periodEnd: string): string {
   const [year, month] = periodEnd.split("-");
 
-  return `INV-GeyserWebsite-${month}.${year.slice(2)}`;
+  return `${shop.zoho.invoicePrefix}${month}.${year.slice(2)}`;
 }
 
 type ProductLine = {
@@ -208,12 +208,13 @@ export function generateShopifyZohoInvoice(
   rows: readonly LedgerRow[],
   context: ReportContext,
 ): GeneratorResult {
+  const shop = shopifyOf(context);
   const skipped = new Map<string, number>();
   const warnings: string[] = [];
 
   const skip = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
-  const defaults = channelRule<ShopifyDefaults>(context.rules, "shopify_geyser", "defaults");
+  const defaults = channelRule<ShopifyDefaults>(context.rules, shop.dataset, "defaults");
 
   if (!defaults) {
     // Every figure below depends on it — departure country decides the whole
@@ -225,13 +226,13 @@ export function generateShopifyZohoInvoice(
     );
   }
 
-  const facts = orderFactsMap(rows);
+  const facts = orderFactsMap(shop, rows);
 
   // Named before anything is built, once per order rather than once per line:
   // an order claiming money the shop cannot have taken is somebody's mistake to
   // go and fix, and a count in the skipped list would never say which orders.
   for (const [orderName, order] of facts) {
-    if (notASale(order) === "unpaid") {
+    if (notASale(shop, order) === "unpaid") {
       warnings.push(unpaidOrderWarning("Shopify invoice", orderName, order));
     }
   }
@@ -261,16 +262,16 @@ export function generateShopifyZohoInvoice(
    * pushing it onto the items that are billed.
    * ------------------------------------------------------------------ */
 
-  const orderMoney = orderMoneyMap(rows);
+  const orderMoney = orderMoneyMap(shop, rows);
   const linesByOrder = new Map<string, LedgerRow[]>();
 
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
     if (row.gross === null || row.quantity === null || row.quantity.isZero()) continue;
 
-    const arrival = arrivalCountryOf(row);
+    const arrival = arrivalCountryOf(shop, row);
 
-    if (isExcludedRow(row, context.rules, facts, arrival)) continue;
+    if (isExcludedRow(row, context.rules, facts, arrival, shop)) continue;
 
     const order = row.raw["Name"] ?? "";
     const found = linesByOrder.get(order);
@@ -311,10 +312,10 @@ export function generateShopifyZohoInvoice(
   }
 
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
 
-    const arrival = arrivalCountryOf(row);
-    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
+    const arrival = arrivalCountryOf(shop, row);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival, shop);
 
     if (excludeReason) {
       skip(excludeReason);
@@ -343,7 +344,7 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const decision = decideSku(context.rules, "shopify_geyser", item.key, item.name);
+    const decision = decideSku(context.rules, shop.dataset, item.key, item.name);
 
     if (decision.kind === "ignore") {
       skip("Shopify invoice: item is on the ignore list");
@@ -390,14 +391,14 @@ export function generateShopifyZohoInvoice(
 
   const vatAgg = new Map<string, Decimal>();
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
 
     const orderTotal = row.raw["Total"];
 
     if (!orderTotal) continue; // a continuation line — the order total lives on the first row
 
-    const arrival = arrivalCountryOf(row);
-    const excludeReason = isExcludedRow(row, context.rules, facts, arrival);
+    const arrival = arrivalCountryOf(shop, row);
+    const excludeReason = isExcludedRow(row, context.rules, facts, arrival, shop);
 
     // Already tallied in `skipped` above, once per line, in the product
     // pass — this is the same order's first line, not a new row to count.
@@ -444,7 +445,7 @@ export function generateShopifyZohoInvoice(
 
     const computedVat = rate === null ? null : splitGross(total, rate).vat;
     const vat =
-      reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(arrival))
+      reportedVat === null || (reportedVat.isZero() && recomputesZeroTax(shop, arrival))
         ? computedVat
         : reportedVat;
 
@@ -454,7 +455,7 @@ export function generateShopifyZohoInvoice(
       continue;
     }
 
-    const account = vatAccount(arrival);
+    const account = vatAccount(shop, arrival);
 
     vatAgg.set(account, (vatAgg.get(account) ?? new Decimal(0)).plus(vat));
   }
@@ -464,7 +465,7 @@ export function generateShopifyZohoInvoice(
    * ------------------------------------------------------------------ */
 
   const invoiceDate = `${context.period.end} 00:00:00`;
-  const invoiceNo = invoiceNumber(context.period.end);
+  const invoiceNo = invoiceNumber(shop, context.period.end);
   const output: (string | number | null)[][] = [];
 
   const productRows = [...productAgg.values()].sort((a, b) => {
@@ -480,7 +481,7 @@ export function generateShopifyZohoInvoice(
       output.push([
         invoiceDate,
         invoiceNo,
-        "Geyser Website",
+        shop.zoho.customerName,
         "EUR",
         "1",
         product.itemName,
@@ -488,12 +489,12 @@ export function generateShopifyZohoInvoice(
         "",
         line.quantity.toFixed(),
         line.price.toFixed(2),
-        SALES_ACCOUNT,
+        shop.zoho.salesAccount,
       ]);
     }
   }
 
-  for (const account of VAT_ACCOUNT_ORDER) {
+  for (const account of vatAccountOrder(shop)) {
     const amount = vatAgg.get(account);
 
     // Omitted, not printed as zero: an account nothing sold under this period
@@ -503,7 +504,7 @@ export function generateShopifyZohoInvoice(
     output.push([
       invoiceDate,
       invoiceNo,
-      "Geyser Website",
+      shop.zoho.customerName,
       "EUR",
       "1",
       // Item Name and SKU stay empty, and the name goes in Item Desc: Zoho
@@ -542,16 +543,26 @@ export function generateShopifyZohoInvoice(
  * actually gets invoiced — and identifies a line the same way, so what is
  * asked about is precisely what would otherwise go out wrong.
  */
-function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): UnmappedSku[] {
+function unmappedSkus(
+  rows: readonly LedgerRow[],
+  rules: RulesSnapshot,
+  company: CompanyProfile,
+): UnmappedSku[] {
+  const shop = company.shopify;
+
+  // Nothing to ask about: this company has no shop, and `generate` refuses for
+  // the same reason before it builds anything.
+  if (!shop) return [];
+
   const found = new Map<string, UnmappedSku>();
-  const facts = orderFactsMap(rows);
+  const facts = orderFactsMap(shop, rows);
 
   for (const row of rows) {
-    if (row.dataset !== "shopify_geyser") continue;
+    if (row.dataset !== shop.dataset) continue;
 
-    const arrival = arrivalCountryOf(row);
+    const arrival = arrivalCountryOf(shop, row);
 
-    if (isExcludedRow(row, rules, facts, arrival)) continue;
+    if (isExcludedRow(row, rules, facts, arrival, shop)) continue;
 
     const item = identify(row);
 
@@ -559,7 +570,7 @@ function unmappedSkus(rows: readonly LedgerRow[], rules: RulesSnapshot): Unmappe
     if (row.gross === null) continue;
     if (row.quantity === null || row.quantity.isZero()) continue;
 
-    const decision = decideSku(rules, "shopify_geyser", item.key, item.name);
+    const decision = decideSku(rules, shop.dataset, item.key, item.name);
 
     if (decision.kind === "map" || decision.kind === "ignore") continue;
 

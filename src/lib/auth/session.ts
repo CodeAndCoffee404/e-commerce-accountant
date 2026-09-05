@@ -5,7 +5,9 @@ import { loadAccessFor } from "@/lib/access/queries";
 import { allows, type AccessLevel, type AccessMap, type SectionId } from "@/lib/access/sections";
 import type { MembershipRole } from "@/lib/db/schema";
 import { withTenant } from "@/lib/db/tenant";
-import { landingRoute } from "@/lib/navigation";
+
+import { DEFAULT_ROUTE, landingRoute, SELECT_COMPANY } from "@/lib/navigation";
+import { isSuperAdmin, roleFor } from "./allowlist";
 
 export type CurrentUser = {
   id: string;
@@ -14,6 +16,8 @@ export type CurrentUser = {
   image: string | null;
   tenantId: string;
   role: MembershipRole;
+  /** Above the companies. Not a role: it says nothing about this company. */
+  isSuperAdmin: boolean;
 };
 
 /**
@@ -22,8 +26,9 @@ export type CurrentUser = {
  *
  * It reads the session itself rather than taking the company as an argument,
  * because the company is not known until the session is read and the body
- * cannot enclose itself. Reading it twice — here and again in the body's own
- * `requireUser` — costs a JWT verification, not a query.
+ * cannot enclose itself. That means the session is read twice, here and again
+ * in the body's own `requireUser` — a JWT verification, and one small query
+ * for the role.
  *
  * Nobody signed in is left to the body: its own check redirects or refuses,
  * with the wording that belongs to it, and there is nothing to scope anyway.
@@ -46,11 +51,32 @@ export function inRequest<T>(body: () => Promise<T>): Promise<T> {
  * every page behind the dashboard has to come through here.
  */
 export async function requireUser(): Promise<CurrentUser> {
+  const user = await signedIn();
+
+  // Not signed in at all, or signed in and holding a company they are no
+  // longer in — an access that was withdrawn while the token was still valid.
+  // The second is why the role is read on every request rather than carried in
+  // the token: a withdrawal that takes effect at the next sign-in is not a
+  // withdrawal.
+  if (!user) redirect("/signin");
+  if (!user.role) redirect(SELECT_COMPANY);
+
+  return { ...user, role: user.role };
+}
+
+/**
+ * The signed-in person, or null — for route handlers, which answer the browser
+ * with a status rather than a redirect.
+ *
+ * `role` is null when the session names a company this person is not in.
+ */
+export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
+  role: MembershipRole | null;
+  isSuperAdmin: boolean;
+}) | null> {
   const session = await auth();
 
-  if (!session?.user?.id || !session.user.email || !session.tenantId) {
-    redirect("/signin");
-  }
+  if (!session?.user?.id || !session.user.email || !session.tenantId) return null;
 
   return {
     id: session.user.id,
@@ -58,8 +84,45 @@ export async function requireUser(): Promise<CurrentUser> {
     email: session.user.email,
     image: session.user.image ?? null,
     tenantId: session.tenantId,
-    role: session.role,
+    // From the database, not the token: a super-admin who has been stood down
+    // should stop being one on their next request, not at their next sign-in.
+    isSuperAdmin: await isSuperAdmin(session.user.id),
+    role: await roleFor(session.user.email, session.tenantId),
   };
+}
+
+/**
+ * The signed-in person and what they may do, for a route handler. Null covers
+ * both "not signed in" and "not on this company's access list"; what the
+ * caller does with that is its own business — most answer 401, the two Google
+ * routes send the browser back to sign-in.
+ */
+export async function apiUser(): Promise<UserWithAccess | null> {
+  const user = await signedIn();
+
+  if (!user?.role) return null;
+
+  return { ...user, role: user.role, access: await loadAccessFor(user.tenantId, user.role) };
+}
+
+/**
+ * Guards the admin area, which is above the companies rather than inside one.
+ *
+ * A separate check from `requireSection`: those ask what a role may do in the
+ * company being worked in, and this asks something the companies cannot answer
+ * about themselves. Anyone else is sent to their own dashboard rather than
+ * shown a refusal — a screen they are not meant to know about should not
+ * announce itself.
+ */
+export async function requireSuperAdmin(): Promise<
+  Omit<CurrentUser, "role"> & { role: MembershipRole | null; isSuperAdmin: true }
+> {
+  const user = await signedIn();
+
+  if (!user) redirect("/signin");
+  if (!user.isSuperAdmin) redirect(DEFAULT_ROUTE);
+
+  return { ...user, isSuperAdmin: true };
 }
 
 export type UserWithAccess = CurrentUser & { access: AccessMap };

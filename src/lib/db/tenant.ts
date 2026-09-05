@@ -24,9 +24,8 @@ import { rootDb, type Executor } from "./index";
 
 type Scope = {
   /**
-   * The company, or null in a scope that deliberately spans companies — the
-   * sign-in path, which has no company yet, and the nightly job, which walks
-   * all of them.
+   * The company, or null in a scope that deliberately spans companies — see
+   * `acrossTenants` below for who those are and why.
    */
   tenantId: string | null;
   /** The transaction this scope's queries run on, and which named the company. */
@@ -77,12 +76,18 @@ function conflict(current: string, wanted: string): Error {
  * gone when it ends. Without it the value would outlive the request on a
  * pooled connection, which is the one way this design could hand somebody
  * another company's rows.
+ *
+ * Naming a company also puts the bypass back down. The policy reads
+ * `tenant_id = … or bypass = 'on'`, so a scope that named a company while the
+ * bypass was still up would be labelled as one company and answer for all of
+ * them — which is what narrowing into a company inside `acrossTenants` looked
+ * like until this line existed.
  */
 async function announce(executor: Executor, tenantId: string | null): Promise<void> {
   await executor.execute(
     tenantId === null
       ? sql`select set_config('app.bypass_rls', 'on', true)`
-      : sql`select set_config('app.tenant_id', ${tenantId}, true)`,
+      : sql`select set_config('app.bypass_rls', 'off', true), set_config('app.tenant_id', ${tenantId}, true)`,
   );
 }
 
@@ -91,11 +96,23 @@ async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Prom
 
   // Already inside a transaction this module opened — the nightly job taking
   // one company's turn, or a page whose action re-enters. Re-announce on the
-  // same transaction rather than nesting another.
+  // same transaction rather than nesting another, and put the announcement
+  // back on the way out: the transaction outlives this scope, so leaving it
+  // narrowed would silently scope whatever the outer one does next.
   if (open) {
+    const outer = storage.getStore()?.tenantId ?? null;
+
     await announce(open, tenantId);
 
-    return storage.run({ tenantId, executor: open }, fn);
+    try {
+      return await storage.run({ tenantId, executor: open }, fn);
+    } finally {
+      // Best effort: if `fn` threw a database error the transaction is already
+      // aborted and this fails too. That direction is safe — the scope stays
+      // narrow, and every later statement in an aborted transaction fails
+      // anyway. Restoring is what matters when `fn` returned normally.
+      await announce(open, outer).catch(() => undefined);
+    }
   }
 
   return rootDb().transaction(async (executor) => {
@@ -127,12 +144,13 @@ export function withTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T
  * Runs `fn` with no company in scope, on purpose — and with row-level security
  * stood down for the duration.
  *
- * Three callers, and they are the whole list: signing in, which happens before
- * anyone knows which company the person belongs to and looks the invitation up
- * by email across all of them; the nightly job, which opens the month for every
- * company in turn; and tests, which build the rows the other two read. Spelling
- * it out is the point — this is the one door around the database's own check,
- * and a door nobody can name is a door nobody guards.
+ * Three kinds of caller, and they are the whole list: signing in and the
+ * switcher, which run before anyone knows which company is in play and look a
+ * person up by their address across all of them; the work that is genuinely
+ * about every company — the nightly job, and the admin screen above them; and
+ * tests, which build the rows the others read. Spelling it out is the point —
+ * this is the one door around the database's own check, and a door nobody can
+ * name is a door nobody guards.
  *
  * It refuses to open inside a company's scope. That direction is the dangerous
  * one: it would widen a request that had been narrowed, which is exactly the

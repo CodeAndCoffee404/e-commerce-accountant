@@ -169,6 +169,34 @@
       "when": 1788542689865,
       "tag": "0023_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788546598720,
+      "tag": "0024_memberships_across_companies",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788548301985,
+      "tag": "0025_company_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788553229085,
+      "tag": "0026_seller_vat_scheme",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788554186793,
+      "tag": "0027_company_identity",
+      "breakpoints": true
     }
   ]
 }
