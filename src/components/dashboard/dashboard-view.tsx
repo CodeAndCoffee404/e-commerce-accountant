@@ -24,13 +24,15 @@ import type {
   DashboardData,
   MatrixGroup,
 } from "@/lib/dashboard/queries";
+import { reportsBuilt } from "@/lib/dashboard/progress";
 import { describePeriodLabel, monthLabelShort, monthLabelWords } from "@/lib/ingest/period";
 import { republish } from "@/lib/reports/actions";
 import type { DeadlineDashboardRow } from "@/lib/reports/deadlines-queries";
+import { reportKey } from "@/lib/reports/target";
 
 import { useDrivePreview } from "@/components/common/drive-preview";
 import { useKindAccent } from "@/components/common/kind-accent";
-import { targetKey, useBuildQueue } from "@/components/reports/build-queue";
+import { useBuildQueue } from "@/components/reports/build-queue";
 
 import { MonthPicker } from "./month-picker";
 import { staleStyle } from "./stale-style";
@@ -92,8 +94,17 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { token } = theme.useToken();
-  const { startQueue, runningKey, queueTotal, queueDone, queueSource, busy, justBuilt, modals } =
-    useBuildQueue({ canEditSkuMappings, canEditCurrencyMappings });
+  const {
+    startQueue,
+    runningKey,
+    queueTotal,
+    queueDone,
+    queueSource,
+    busy,
+    justBuilt,
+    completed,
+    modals,
+  } = useBuildQueue({ canEditSkuMappings, canEditCurrencyMappings });
 
   // Switching months is a server round trip. Until the new page commits, the
   // month the user asked for is the one we show as chosen, with a spinner on
@@ -130,7 +141,7 @@ export function DashboardView({
   const requiredItems = data.items.filter((item) => item.requirement === "required");
   const requiredIn = requiredItems.filter((item) => item.uploaded).length;
   const missing = requiredItems.filter((item) => !item.uploaded);
-  const built = data.reports.filter((report) => report.state === "built" && !report.stale).length;
+  const built = reportsBuilt(data.reports, data.month, completed);
   const staleReports = data.reports.filter((report) => report.stale);
   const driveFailed = data.reports.reduce((total, report) => total + report.drive.failed, 0);
   const empty = data.months.length === 0;
@@ -345,9 +356,7 @@ export function DashboardView({
 
               <div style={{ padding: "4px 14px 8px", ...dim }}>
                 {data.reports.map((report) => {
-                  const key = data.month
-                    ? targetKey({ reportType: report.id, periodLabel: data.month, label: "" })
-                    : null;
+                  const key = data.month ? reportKey(report.id, data.month) : null;
 
                   return (
                     <ReportRow

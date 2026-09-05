@@ -37,11 +37,12 @@ import { restoreDefaults } from "@/lib/reference/actions";
 import { deleteRun, republish } from "@/lib/reports/actions";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
 import type { ReportAvailability, ReportPeriodRow, ReportRunCard } from "@/lib/reports/queries";
+import { targetKey } from "@/lib/reports/target";
 import { summariseWarnings } from "@/lib/reports/warnings";
 
 import { useDrivePreview } from "@/components/common/drive-preview";
 
-import { targetKey, useBuildQueue } from "./build-queue";
+import { useBuildQueue } from "./build-queue";
 
 const STATUS_TAG: Record<ReportPeriodRow["state"], { color: string; text: string }> = {
   built: { color: "green", text: "built" },
