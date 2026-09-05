@@ -124,7 +124,10 @@ export function UploadsTable({
       {/* One row: filters scroll horizontally in their own lane when they
           don't fit, but Upload files is the thing you came to press and
           never scrolls out of view with them. */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+      <div
+        className="ea-rise"
+        style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}
+      >
         <div style={{ display: "flex", gap: 8, alignItems: "center", overflowX: "auto", flex: 1, minWidth: 0, padding: "2px 2px" }}>
           <Input.Search
             allowClear
@@ -151,6 +154,7 @@ export function UploadsTable({
       />
 
       <Table<UploadRow>
+        className="ea-rise ea-rise-1"
         dataSource={rows}
         rowKey="id"
         size="middle"

@@ -13,7 +13,11 @@ export function PageHeader({
   extra?: ReactNode;
 }) {
   return (
+    // The same arrival as the dashboard's own blocks: a page settles into
+    // place from the top down rather than appearing all at once, and the
+    // header is the top of it.
     <div
+      className="ea-rise"
       style={{
         display: "flex",
         alignItems: "flex-start",

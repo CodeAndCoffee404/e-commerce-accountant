@@ -304,7 +304,7 @@ export function ReportsView({
 
           {selected ? (
             selected.placeholder ? (
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="ea-rise ea-rise-1" style={{ flex: 1, minWidth: 0 }}>
                 <Typography.Paragraph type="secondary">{selected.description}</Typography.Paragraph>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   No definitions yet. Make one under{" "}
@@ -677,6 +677,7 @@ function ReportRail({
 
   return (
     <div
+      className="ea-rise"
       style={{
         width: 280,
         flex: "none",
@@ -752,7 +753,10 @@ function ReportDetail({
   const readyCount = rows.filter((row) => row.state === "ready").length;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+    <div
+      className="ea-rise ea-rise-1"
+      style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}
+    >
       <div
         style={{
           background: token.colorBgContainer,

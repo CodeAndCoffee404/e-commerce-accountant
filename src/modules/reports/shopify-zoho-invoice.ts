@@ -606,7 +606,7 @@ export const shopifyZohoInvoiceModule: ReportModule = {
     requiresEveryDataset: true,
     description:
       "Shopify orders aggregated by item into invoice lines for Zoho, VAT split by market.",
-    needs: "One Geyser Shopify sales report for the month.",
+    needs: "One Shopify EU sales report for the month.",
     why:
       "Built without it, that month's Shopify revenue and VAT are simply missing from what Zoho " +
       "sees — not understated, absent.",
