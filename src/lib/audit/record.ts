@@ -50,6 +50,13 @@ export type AuditRow = {
   entity: string | null;
   entityId: string | null;
   userEmail: string | null;
+  /**
+   * What that address is called now, when it belongs to someone who has signed
+   * in. Read at display time rather than stored with the entry: somebody who
+   * corrects their name should be named correctly in everything they have
+   * done, not only in what they do next.
+   */
+  userName: string | null;
   payload: Record<string, unknown> | null;
   createdAt: Date;
 };
@@ -62,10 +69,15 @@ export async function listAudit(tenantId: string, limit = 200): Promise<AuditRow
       entity: schema.auditLog.entity,
       entityId: schema.auditLog.entityId,
       userEmail: schema.auditLog.userEmail,
+      userName: schema.users.name,
       payload: schema.auditLog.payload,
       createdAt: schema.auditLog.createdAt,
     })
     .from(schema.auditLog)
+    // By address, because that is what the entry kept. A left join: the log
+    // outlives the account, and an entry whose person is gone still has to
+    // render.
+    .leftJoin(schema.users, eq(schema.users.email, schema.auditLog.userEmail))
     .where(eq(schema.auditLog.tenantId, tenantId))
     .orderBy(desc(schema.auditLog.createdAt))
     .limit(limit);

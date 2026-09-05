@@ -499,7 +499,7 @@ export const offAmazonSalesModule: ReportModule = {
     granularity: ["month"],
     requiresEveryDataset: true,
     description: "Allegro, Cdiscount and Shopify normalised into one sheet.",
-    needs: "Allegro, Cdiscount and Shopify Geyser, all three for the same month.",
+    needs: "Allegro, Cdiscount and Shopify EU, all three for the same month.",
     why:
       "Built from whichever channels happen to be uploaded, the sheet looks complete and " +
       "understates revenue by exactly the ones nobody noticed were absent.",

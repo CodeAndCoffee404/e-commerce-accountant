@@ -24,7 +24,7 @@ export const SKU_MAPPING_CHANNEL: Partial<Record<ReportTypeId, string>> = {
 export const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = {
   amazon_zoho_invoice: "Amazon",
   allegro_zoho_invoice: "Allegro",
-  shopify_zoho_invoice: "Shopify Geyser",
+  shopify_zoho_invoice: "Shopify EU",
 };
 
 /** One (report, period) a build is requested for — the unit the build queue moves in. */

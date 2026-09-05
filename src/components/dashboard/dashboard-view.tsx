@@ -355,6 +355,10 @@ export function DashboardView({
                       driveConnected={driveConnected}
                       building={key !== null && runningKey === key}
                       buildDisabled={busy && runningKey !== key}
+                      // The only thing this month is waiting to be built, so
+                      // its own button is the obvious next move rather than
+                      // one plain button among several.
+                      soleBuild={data.buildable === 1}
                       onBuild={() => startQueue(targetsFor([report]))}
                     />
                   );
@@ -772,6 +776,11 @@ function FilesSection({
   // each row, and reads as two files of the same name.
   const onShow = new Set(missing.map((item) => item.key));
   const rest = items.filter((item) => !onShow.has(item.key));
+  // Nothing left to reveal — every file this month wants is already a chip on
+  // the line above, which is what a month where all of them are required and
+  // none has arrived looks like. The button was still there, and opened an
+  // empty space.
+  const canExpand = rest.length > 0;
 
   return (
     <>
@@ -811,27 +820,29 @@ function FilesSection({
           )}
         </span>
 
-        <Button
-          type="text"
-          size="small"
-          onClick={onToggle}
-          style={{ flex: "none", fontSize: 12.5, color: token.colorTextTertiary }}
-          icon={
-            <DownOutlined
-              style={{
-                fontSize: 10,
-                transition: "transform 150ms ease",
-                transform: expanded ? "rotate(180deg)" : undefined,
-              }}
-            />
-          }
-          iconPosition="end"
-        >
-          {expanded ? "Hide" : "All files"}
-        </Button>
+        {canExpand ? (
+          <Button
+            type="text"
+            size="small"
+            onClick={onToggle}
+            style={{ flex: "none", fontSize: 12.5, color: token.colorTextTertiary }}
+            icon={
+              <DownOutlined
+                style={{
+                  fontSize: 10,
+                  transition: "transform 150ms ease",
+                  transform: expanded ? "rotate(180deg)" : undefined,
+                }}
+              />
+            }
+            iconPosition="end"
+          >
+            {expanded ? "Hide" : "All files"}
+          </Button>
+        ) : null}
       </div>
 
-      {expanded ? (
+      {expanded && canExpand ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
           {rest.map((item) => (
             <FileChip key={item.key} item={item} />
@@ -901,6 +912,7 @@ function ReportRow({
   driveConnected,
   building,
   buildDisabled,
+  soleBuild,
   onBuild,
 }: {
   report: CloseReport;
@@ -911,6 +923,8 @@ function ReportRow({
   building: boolean;
   /** Something else is building: this row's button waits its turn. */
   buildDisabled: boolean;
+  /** True when this is the month's only buildable report. */
+  soleBuild: boolean;
   onBuild: () => void;
 }) {
   const { token } = theme.useToken();
@@ -1035,6 +1049,10 @@ function ReportRow({
               >
                 <Button
                   size="small"
+                  // Primary only when it is the single thing left to do: with
+                  // several rows offering a build, colouring them all makes
+                  // none of them the next step.
+                  type={soleBuild ? "primary" : "default"}
                   loading={building}
                   disabled={buildDisabled}
                   onClick={onBuild}
@@ -1139,7 +1157,12 @@ function ActivityRow({ row }: { row: AuditRow }) {
           whiteSpace: "nowrap",
         }}
       >
-        {row.userEmail ?? ""}
+        {/* The name, because that is who a colleague recognises. The address
+            stays reachable on hover: two people can share a first name, and
+            the log is a record of who did what. */}
+        <Tooltip title={row.userEmail ?? undefined}>
+          <span>{row.userName ?? row.userEmail ?? ""}</span>
+        </Tooltip>
       </span>
     </div>
   );

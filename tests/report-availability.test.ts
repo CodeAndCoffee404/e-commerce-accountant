@@ -40,7 +40,7 @@ const CHANNELS = [
   },
   {
     file: "tests/fixtures/from-csv/Geyser shopify sales report - 2026.07 July.csv",
-    name: "Shopify Geyser",
+    name: "Shopify EU",
   },
 ];
 

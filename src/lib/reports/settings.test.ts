@@ -51,7 +51,7 @@ describe("report settings", () => {
     expect(requiredDatasets(offAmazon, settings)).toEqual(["allegro", "shopify_geyser"]);
     // The needs text follows the configuration, so the card can never promise
     // one thing while the build demands another.
-    expect(describeNeeds(offAmazon, settings)).toContain("Allegro and Shopify Geyser");
+    expect(describeNeeds(offAmazon, settings)).toContain("Allegro and Shopify EU");
     expect(describeNeeds(offAmazon, settings)).toContain("Optional and included when present: Cdiscount");
   });
 

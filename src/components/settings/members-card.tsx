@@ -4,7 +4,7 @@ import { App, Button, Card, Form, Input, Select, Table, Tag, Tooltip, Typography
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { inviteMember, updateMember } from "@/lib/members/actions";
+import { inviteMember, saveUserName, updateMember } from "@/lib/members/actions";
 import type { Member } from "@/lib/members/queries";
 
 const ROLES = [
@@ -102,15 +102,31 @@ export function MembersCard({
             dataIndex: "email",
             render: (email: string, row) => (
               <div>
-                <Typography.Text>{email}</Typography.Text>
-                {row.name ? (
-                  <>
-                    <br />
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {row.name}
-                    </Typography.Text>
-                  </>
-                ) : null}
+                {/* The name leads, because that is what the activity log
+                    shows and what a colleague recognises. The address is
+                    underneath, because it is the thing that actually lets
+                    somebody in. */}
+                {row.joinedAt && (isOwner || isSelf(email)) ? (
+                  <Typography.Text
+                    editable={{
+                      onChange: (value) => run(() => saveUserName({ email, name: value })),
+                      text: row.name ?? "",
+                      tooltip: isSelf(email) ? "Your name" : `Rename ${email}`,
+                      triggerType: ["text", "icon"],
+                    }}
+                    type={row.name ? undefined : "secondary"}
+                  >
+                    {row.name ?? "Add a name"}
+                  </Typography.Text>
+                ) : (
+                  <Typography.Text type={row.name ? undefined : "secondary"}>
+                    {row.name ?? (row.joinedAt ? "—" : "not signed in yet")}
+                  </Typography.Text>
+                )}
+                <br />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {email}
+                </Typography.Text>
               </div>
             ),
           },

@@ -143,3 +143,95 @@ async function updateMemberInScope(input: unknown): Promise<MemberResult> {
 
   return { ok: true, message: `${target.email} updated.` };
 }
+
+const nameSchema = z.object({
+  /** Absent means the signed-in person's own name. */
+  email: z.string().trim().email().optional(),
+  name: z.string().trim().max(120),
+});
+
+/**
+ * What a person is called.
+ *
+ * Google supplies one at first sign-in, and it is often not what colleagues
+ * call them — or it is a personal account's name on a work address. So it is
+ * editable, by the person themselves and by the owner of a company they are
+ * in. Nobody else: a name is shown next to what somebody did, and a stranger
+ * rewriting it would be rewriting the record of their work.
+ *
+ * By address, not by account id, because that is how everything else here
+ * identifies a person: the access list is a list of addresses, and an
+ * invitation exists before the account does.
+ *
+ * Empty clears it and the address stands in again. That is a real choice, not
+ * a mistake to reject.
+ */
+export async function saveUserName(input: unknown): Promise<MemberResult> {
+  return inRequest(() => saveUserNameInScope(input));
+}
+
+async function saveUserNameInScope(input: unknown): Promise<MemberResult> {
+  const user = await requireAccess();
+  const parsed = nameSchema.safeParse(input);
+
+  if (!parsed.success) return { ok: false, message: "A name is at most 120 characters." };
+
+  const { name } = parsed.data;
+  const target = normaliseEmail(parsed.data.email ?? user.email);
+  const own = target === normaliseEmail(user.email);
+
+  if (!own && !can(user, "team", "edit")) {
+    return { ok: false, message: "Only an owner can rename somebody else." };
+  }
+
+  const db = getDb();
+
+  // Somebody else's name is the owner's to change only while that person is on
+  // this company's list. Without this the action would rename any account in
+  // the system by address.
+  if (!own) {
+    const [member] = await db
+      .select({ email: schema.allowedEmails.email })
+      .from(schema.allowedEmails)
+      .where(
+        and(
+          eq(schema.allowedEmails.tenantId, user.tenantId),
+          eq(schema.allowedEmails.email, target),
+        ),
+      )
+      .limit(1);
+
+    if (!member) return { ok: false, message: "That address is not on this company's list." };
+  }
+
+  const [updated] = await db
+    .update(schema.users)
+    .set({ name: name === "" ? null : name })
+    .where(eq(schema.users.email, target))
+    .returning({ email: schema.users.email });
+
+  // Invited, never arrived. There is no account to name yet, and saying so is
+  // better than a success that changes nothing.
+  if (!updated) {
+    return { ok: false, message: `${target} has not signed in yet, so there is nothing to name.` };
+  }
+
+  await record(
+    { id: user.id, email: user.email, tenantId: user.tenantId },
+    {
+      action: own ? "user.renamed_self" : "user.renamed",
+      entity: "user",
+      entityId: target,
+      payload: { name: name === "" ? null : name },
+    },
+  );
+
+  // The name is in the header and in every activity row, so the whole shell
+  // has to be rebuilt, not just the screen it was changed on.
+  revalidatePath("/", "layout");
+
+  return {
+    ok: true,
+    message: name === "" ? "Name cleared — the address is shown instead." : `Saved as ${name}.`,
+  };
+}
