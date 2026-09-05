@@ -75,6 +75,23 @@ try {
     }
   }
 
+  // What drizzle thinks has already been applied. When the failure is an
+  // object that "already exists", the answer is usually here: the journal is
+  // behind what the database actually has, so it starts again from the first
+  // migration. Reading it is the difference between knowing that and guessing.
+  try {
+    const journal = await client`
+      select count(*)::int as applied, max(created_at) as newest
+      from drizzle.__drizzle_migrations
+    `;
+    const [row] = journal;
+
+    console.error(`journal: ${row.applied} migrations recorded, newest ${row.newest ?? "none"}`);
+    console.error(`folder: ${new URL("../drizzle/meta/_journal.json", import.meta.url).pathname}`);
+  } catch (journalError) {
+    console.error(`journal: could not be read — ${journalError.message}`);
+  }
+
   process.exitCode = 1;
 } finally {
   await client.end();
