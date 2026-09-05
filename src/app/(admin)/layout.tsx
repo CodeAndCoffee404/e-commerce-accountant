@@ -1,6 +1,6 @@
-import { Layout } from "antd";
 import type { ReactNode } from "react";
 
+import { AdminShell } from "@/components/admin/admin-shell";
 import { requireSuperAdmin } from "@/lib/auth/session";
 
 /**
@@ -10,6 +10,9 @@ import { requireSuperAdmin } from "@/lib/auth/session";
  * menu, its badge, its company name in the bar — and this screen is above all
  * of them. Sharing a shell would mean showing a company while looking at the
  * list of companies.
+ *
+ * The frame itself lives in a client component. See `AdminShell` for why that
+ * is not a matter of taste.
  */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   // The guard sits here as well as on the page: a layout is what a future
@@ -17,11 +20,5 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   // remember.
   await requireSuperAdmin();
 
-  return (
-    <Layout style={{ minHeight: "100dvh" }}>
-      <Layout.Content style={{ padding: "clamp(16px, 4vw, 40px)", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
-        {children}
-      </Layout.Content>
-    </Layout>
-  );
+  return <AdminShell>{children}</AdminShell>;
 }
