@@ -22,7 +22,7 @@ import {
   Upload,
 } from "antd";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatSize } from "@/lib/format";
 import { MAX_UPLOAD_BYTES, UPLOAD_ACCEPT } from "@/lib/uploads/constants";
@@ -35,11 +35,26 @@ type Item = {
   id: string;
   file: File;
   stage: Stage;
-  /** Per cent of bytes sent. Only meaningful while uploading. */
+  /**
+   * What the bar shows. Not a measurement.
+   *
+   * Only part of this is knowable. The transfer reports real percentages, and
+   * on a small file it reports them once — 0, then 100 — so nothing appears to
+   * move; the server then parses the file and stores its rows, which is the
+   * longer half on a big export and reports nothing at all.
+   *
+   * So the number creeps on a timer and the real figures only ever push it
+   * higher. It is deliberately fake, and honest in the one way that matters:
+   * it never reaches 100 until the work is actually finished, so a stalled
+   * upload cannot look like a finished one.
+   */
   progress: number;
   summary?: string;
   error?: string;
 };
+
+/** Where the creep stops and waits, per stage. */
+const CEILING: Partial<Record<Stage, number>> = { uploading: 92, processing: 99 };
 
 export function UploadDialog({ tenantId }: { tenantId: string }) {
   const router = useRouter();
@@ -49,9 +64,63 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
   const counter = useRef(0);
+  const creeps = useRef(new Map<string, ReturnType<typeof setInterval>>());
 
   const patch = useCallback((id: string, change: Partial<Item>) => {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...change } : item)));
+  }, []);
+
+  const stopCreep = useCallback((id: string) => {
+    const timer = creeps.current.get(id);
+
+    if (timer) {
+      clearInterval(timer);
+      creeps.current.delete(id);
+    }
+  }, []);
+
+  /**
+   * Moves the number along while nothing else is reporting.
+   *
+   * Decelerating, so it slows as it approaches the stage's ceiling instead of
+   * arriving and sitting still: the point is to look like work in progress,
+   * and a bar parked at its maximum reads exactly like a hang.
+   */
+  const startCreep = useCallback(
+    (id: string) => {
+      stopCreep(id);
+
+      const timer = setInterval(() => {
+        setItems((current) =>
+          current.map((item) => {
+            if (item.id !== id) return item;
+
+            const ceiling = CEILING[item.stage];
+
+            if (ceiling === undefined || item.progress >= ceiling) return item;
+
+            return {
+              ...item,
+              progress: Math.min(ceiling, item.progress + Math.max(0.3, (ceiling - item.progress) / 14)),
+            };
+          }),
+        );
+      }, 220);
+
+      creeps.current.set(id, timer);
+    },
+    [stopCreep],
+  );
+
+  // Nothing may outlive the dialog: a closed modal that is still ticking would
+  // keep re-rendering a list nobody is looking at.
+  useEffect(() => {
+    const timers = creeps.current;
+
+    return () => {
+      for (const timer of timers.values()) clearInterval(timer);
+      timers.clear();
+    };
   }, []);
 
   const add = (file: File) => {
@@ -75,6 +144,7 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
 
   const uploadOne = async (item: Item): Promise<boolean> => {
     patch(item.id, { stage: "uploading", progress: 0 });
+    startCreep(item.id);
 
     try {
       // Straight to Blob storage over a presigned URL. A Server Action would
@@ -89,11 +159,21 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
           access: "private",
           handleUploadUrl: "/api/uploads/blob",
           contentType: item.file.type || undefined,
-          onUploadProgress: ({ percentage }) => patch(item.id, { progress: percentage }),
+          // Upwards only. The creep may already be ahead of the transfer on a
+          // small file, and a number that jumped backwards would be worse
+          // than one that is approximate.
+          onUploadProgress: ({ percentage }) =>
+            setItems((current) =>
+              current.map((row) =>
+                row.id === item.id ? { ...row, progress: Math.max(row.progress, percentage) } : row,
+              ),
+            ),
         },
       );
 
-      patch(item.id, { stage: "processing", progress: 100 });
+      // Not 100: the bytes have arrived, the work has not finished. The creep
+      // carries on from wherever it is, up to the processing ceiling.
+      patch(item.id, { stage: "processing" });
 
       const result = await registerUpload({
         pathname: blob.pathname,
@@ -103,6 +183,7 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
       });
 
       if (!result.ok) {
+        stopCreep(item.id);
         patch(item.id, { stage: "error", error: result.message });
 
         return false;
@@ -113,10 +194,12 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
       if (result.supersededRows > 0) parts.push(`replaced ${result.supersededRows}`);
       if (result.needsAttention > 0) parts.push(`${result.needsAttention} to review`);
 
-      patch(item.id, { stage: "done", summary: parts.join(" · ") });
+      stopCreep(item.id);
+      patch(item.id, { stage: "done", progress: 100, summary: parts.join(" · ") });
 
       return true;
     } catch (error) {
+      stopCreep(item.id);
       patch(item.id, {
         stage: "error",
         error: error instanceof Error ? error.message : "The file could not be uploaded.",
@@ -289,31 +372,22 @@ export function UploadDialog({ tenantId }: { tenantId: string }) {
                         </Space>
                       }
                       description={
-                        item.stage === "uploading" ? (
-                          <Progress
-                            percent={Math.round(item.progress)}
-                            size="small"
-                            status="active"
-                            style={{ marginBottom: 0 }}
-                          />
-                        ) : item.stage === "processing" ? (
-                          // The half nobody could see. The bytes are up; the
-                          // server is now reading the file and storing its
-                          // rows, which on a large export is the longer half,
-                          // and the dialog sat still through all of it. A
-                          // filled bar rather than a percentage: there is no
-                          // honest number here, and `active` keeps the sweep
-                          // running so it reads as working rather than stuck.
+                        item.stage === "uploading" || item.stage === "processing" ? (
                           <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                            {/* No number. It would be a made-up one — see
+                                `progress` — and what the bar is for is the
+                                single fact that something is happening. */}
                             <Progress
-                              percent={100}
+                              percent={item.progress}
                               size="small"
                               status="active"
                               showInfo={false}
                               style={{ marginBottom: 0 }}
                             />
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                              Recognising the file and storing its rows…
+                              {item.stage === "uploading"
+                                ? "Sending the file…"
+                                : "Recognising the file and storing its rows…"}
                             </Typography.Text>
                           </Space>
                         ) : (

@@ -90,7 +90,7 @@ export function DashboardView({
 }) {
   const router = useRouter();
   const { token } = theme.useToken();
-  const { startQueue, runningKey, queueTotal, queueDone, queueSource, busy, modals } =
+  const { startQueue, runningKey, queueTotal, queueDone, queueSource, busy, justBuilt, modals } =
     useBuildQueue({ canEditSkuMappings, canEditCurrencyMappings });
 
   // Switching months is a server round trip. Until the new page commits, the
@@ -359,6 +359,7 @@ export function DashboardView({
                       // its own button is the obvious next move rather than
                       // one plain button among several.
                       soleBuild={data.buildable === 1}
+                      justBuilt={key !== null && justBuilt.has(key)}
                       onBuild={() => startQueue(targetsFor([report]))}
                     />
                   );
@@ -452,6 +453,7 @@ export function DashboardView({
           </Panel>
         )}
       </div>
+      <BuiltAnimation />
       {modals}
     </>
   );
@@ -913,6 +915,7 @@ function ReportRow({
   building,
   buildDisabled,
   soleBuild,
+  justBuilt,
   onBuild,
 }: {
   report: CloseReport;
@@ -925,6 +928,8 @@ function ReportRow({
   buildDisabled: boolean;
   /** True when this is the month's only buildable report. */
   soleBuild: boolean;
+  /** This queue has just built it, so the row can say which one changed. */
+  justBuilt: boolean;
   onBuild: () => void;
 }) {
   const { token } = theme.useToken();
@@ -973,7 +978,7 @@ function ReportRow({
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
         <span style={{ marginTop: 6 }}>
-          <Dot color={dot} />
+          <Dot color={dot} celebrate={justBuilt} />
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -1384,7 +1389,16 @@ function HistoryGroup({ group }: { group: MatrixGroup }) {
  * Small shared pieces
  * ------------------------------------------------------------------ */
 
-function Dot({ color, size = 7 }: { color: string; size?: number }) {
+function Dot({
+  color,
+  size = 7,
+  celebrate = false,
+}: {
+  color: string;
+  size?: number;
+  /** Just built: the marker arrives with a ring rather than simply being green. */
+  celebrate?: boolean;
+}) {
   return (
     <span
       aria-hidden
@@ -1395,8 +1409,33 @@ function Dot({ color, size = 7 }: { color: string; size?: number }) {
         background: color,
         display: "inline-block",
         flex: "none",
+        // One ring outward, once. Enough to tell the eye which row changed
+        // among five that look alike; short enough not to become scenery.
+        animation: celebrate ? "ea-built 700ms ease-out" : undefined,
       }}
     />
+  );
+}
+
+/**
+ * The one keyframe this screen uses.
+ *
+ * Inline rather than in a stylesheet because it belongs to the row it
+ * animates, and honours the reader's own setting: somebody who has asked for
+ * less motion gets the colour change and nothing else.
+ */
+function BuiltAnimation() {
+  return (
+    <style>{`
+      @keyframes ea-built {
+        0% { box-shadow: 0 0 0 0 currentColor; transform: scale(1); }
+        35% { transform: scale(1.55); }
+        100% { box-shadow: 0 0 0 7px transparent; transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes ea-built { from { transform: none; } to { transform: none; } }
+      }
+    `}</style>
   );
 }
 
