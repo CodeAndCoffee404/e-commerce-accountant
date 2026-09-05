@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { saveAllegroCurrency, saveSkuMapping } from "@/lib/reference/actions";
 import { buildReport } from "@/lib/reports/actions";
 import type { ReportTypeId } from "@/lib/reports/definitions";
+import { type Target, targetKey } from "@/lib/reports/target";
 import type { UnmappedSku } from "@/modules/reports/types";
 
 /**
@@ -26,12 +27,6 @@ export const SKU_MAPPING_CHANNEL_LABEL: Partial<Record<ReportTypeId, string>> = 
   allegro_zoho_invoice: "Allegro",
   shopify_zoho_invoice: "Shopify EU",
 };
-
-/** One (report, period) a build is requested for — the unit the build queue moves in. */
-export type Target = { reportType: ReportTypeId; periodLabel: string; variant?: string; label: string };
-
-export const targetKey = (target: Target) =>
-  `${target.reportType}:${target.variant ?? ""}|${target.periodLabel}`;
 
 /**
  * Drives a queue of builds one at a time — the same machinery for a single
@@ -66,6 +61,17 @@ export function useBuildQueue({
    * for a minute is simply built.
    */
   const [justBuilt, setJustBuilt] = useState<ReadonlySet<string>>(new Set());
+  /**
+   * The same builds, kept for as long as the screen has not caught up.
+   *
+   * `justBuilt` marks a moment and expires on its own timer, which makes it
+   * the wrong thing to count with: a screen that counts reports built would
+   * lose them again four seconds later. This set is cleared by the refresh
+   * instead — at the moment the server's own count includes them — so a
+   * count that adds it to what the page says never double-counts and never
+   * goes backwards.
+   */
+  const [completed, setCompleted] = useState<ReadonlySet<string>>(new Set());
   const [queueTotal, setQueueTotal] = useState(0);
   const [queueDone, setQueueDone] = useState(0);
   // Which control asked for the work now in the queue. A row's Build and a
@@ -125,6 +131,8 @@ export function useBuildQueue({
     setQueueTotal(0);
     setQueueDone(0);
     setQueueSource(null);
+    // The refreshed page counts these itself now.
+    setCompleted(new Set());
   }, [refreshing]);
 
   async function runTarget(target: Target): Promise<void> {
@@ -142,6 +150,7 @@ export function useBuildQueue({
         // Marked before the refresh, so that when the row comes back as built
         // it can say which build was this one.
         setJustBuilt((current) => new Set(current).add(targetKey(target)));
+        setCompleted((current) => new Set(current).add(targetKey(target)));
       } else if (result.needsSkuMapping && result.needsSkuMapping.length > 0) {
         // A form to fill in, not an error to read — the queue pauses here
         // until it is saved, then re-attempts this same target.
@@ -175,6 +184,7 @@ export function useBuildQueue({
       queueRef.current = targets.slice(1);
       setQueueTotal(targets.length);
       setQueueDone(0);
+      setCompleted(new Set());
       setQueueSource(source ?? null);
       void runTarget(targets[0]);
       return;
@@ -202,6 +212,7 @@ export function useBuildQueue({
     setQueueTotal(0);
     setQueueDone(0);
     setQueueSource(null);
+    setCompleted(new Set());
   };
 
   // Leaves this one target unbuilt — nothing is saved, nothing is mapped —
@@ -308,6 +319,7 @@ export function useBuildQueue({
 
   return {
     justBuilt,
+    completed,
     startQueue,
     runningKey,
     queueTotal,
