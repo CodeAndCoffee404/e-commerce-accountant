@@ -1,17 +1,19 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+
+import { del } from "@vercel/blob";
 
 import { unstable_update } from "@/auth";
 import { record } from "@/lib/audit/record";
 import { normaliseEmail } from "@/lib/auth/allowlist";
 import { requireSuperAdmin } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
-import { acrossTenants, withTenant } from "@/lib/db/tenant";
+import { log } from "@/lib/log";
+import { acrossTenants } from "@/lib/db/tenant";
 import { seedReferenceData } from "@/lib/reference/seed";
-import { companyProfile } from "@/modules/companies/registry";
 
 /**
  * What the person above the companies can do to them: make one, and step into
@@ -24,8 +26,10 @@ import { companyProfile } from "@/modules/companies/registry";
 
 export type AdminResult = { ok: true; message: string } | { ok: false; message: string };
 
+/** A company is a uuid. Anything else is not a company that got away — it is a typo. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const newCompanySchema = z.object({
-  profileKey: z.string().trim().min(1),
   // Not unique, and nothing is keyed to it: the company's own owner renames it
   // afterwards. What tells two companies apart is the id the row is given.
   name: z.string().trim().min(2).max(120),
@@ -38,17 +42,7 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
 
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
-  const { name, adminEmail, profileKey } = parsed.data;
-
-  // Before anything is written: a company whose profile does not exist cannot
-  // have reports built, and would be seeded from somebody else's values.
-  let profile;
-
-  try {
-    profile = companyProfile(profileKey);
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "Unknown profile." };
-  }
+  const { name, adminEmail } = parsed.data;
 
   return acrossTenants(async () => {
     const db = getDb();
@@ -56,24 +50,14 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
     // No check that two companies do not share a name: the name is a label its
     // owner may change, and two companies called the same thing are still two
     // companies, told apart by the id this insert returns.
-    //
-    // A profile, on the other hand, should belong to one company — it carries
-    // the Zoho customer name and invoice prefixes, so two companies sharing one
-    // would number their invoices in the same series. That is not refused here
-    // yet, and cannot usefully be until a second profile exists: every row and
-    // every fixture today is on `geyser` by default, so a refusal keyed on
-    // "already in use" would refuse the first legitimate company too. The
-    // screen shows which profile each company is built from so the collision
-    // is at least visible. See docs/EXTENDING.md.
     const [company] = await db
       .insert(schema.tenants)
-      .values({ name, profileKey })
+      .values({ name })
       .returning({ id: schema.tenants.id });
 
-    // Reference data comes with the company, and from its own profile — an
-    // empty rate table lets the first report run and quietly produce nothing,
-    // and somebody else's rates are worse than an empty one.
-    await seedReferenceData(company.id, profile);
+    // Reference data comes with the company — an empty rate table lets the
+    // first report run and quietly produce nothing.
+    await seedReferenceData(company.id);
 
     await db.insert(schema.allowedEmails).values({
       tenantId: company.id,
@@ -87,7 +71,7 @@ export async function createCompany(input: unknown): Promise<AdminResult> {
         action: "company.created",
         entity: "tenant",
         entityId: company.id,
-        payload: { name, profileKey, admin: normaliseEmail(adminEmail) },
+        payload: { name, admin: normaliseEmail(adminEmail) },
       },
     );
 
@@ -131,7 +115,11 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
 
   if (!company) return { ok: false, message: "No such company." };
 
-  await withTenant(company.id, async () => {
+  // Above the companies, like creating one: `withTenant` would open a scope on
+  // the company itself, and a closed company's scope is read-only — which is
+  // the point of closing it, and would leave the one person who is meant to be
+  // able to look inside unable to get in.
+  await acrossTenants(async () => {
     // Read before writing, so the record says what was overwritten. Forcing
     // ownership is defensible; doing it to a row the company's owner had
     // deliberately scoped — a viewer, or a suspension — without saying so is
@@ -180,4 +168,147 @@ export async function enterCompany(tenantId: unknown): Promise<AdminResult> {
   revalidatePath("/", "layout");
 
   return { ok: true, message: `Working in ${company.name}.` };
+}
+
+/**
+ * Closes a company, or opens it again.
+ *
+ * Closed is read-only: its people still sign in and read what is already
+ * there, nothing writes, and the nightly job passes it by. The refusal is
+ * Postgres's, not a check in forty places — see `closeToWrites` in
+ * `src/lib/db/tenant.ts`.
+ *
+ * Recorded in the company's own log, so its owner can see when it happened and
+ * who did it rather than discovering that saving no longer works.
+ */
+export async function setCompanyBlocked(tenantId: string, blocked: boolean): Promise<AdminResult> {
+  const admin = await requireSuperAdmin();
+
+  if (!UUID.test(tenantId)) return { ok: false, message: "No such company." };
+
+  return acrossTenants(async () => {
+    const db = getDb();
+
+    const [company] = await db
+      .update(schema.tenants)
+      .set({ blockedAt: blocked ? new Date() : null })
+      .where(eq(schema.tenants.id, tenantId))
+      .returning({ id: schema.tenants.id, name: schema.tenants.name });
+
+    if (!company) return { ok: false, message: "No such company." };
+
+    await record(
+      { id: admin.id, email: admin.email, tenantId: company.id },
+      {
+        action: blocked ? "company.blocked" : "company.unblocked",
+        entity: "tenant",
+        entityId: company.id,
+      },
+    );
+
+    revalidatePath("/", "layout");
+
+    return {
+      ok: true,
+      message: blocked
+        ? `${company.name} is closed. It can be read, and nothing can be changed.`
+        : `${company.name} is open again.`,
+    };
+  });
+}
+
+/**
+ * Removes a company: its rows, its files, and the company itself.
+ *
+ * Two things guard it, and both are deliberate. It has to be closed first —
+ * two decisions at two different moments, which is not something anybody does
+ * by accident — and the name has to be typed, because a list of companies is a
+ * place where the wrong row is one pixel away.
+ *
+ * The rows go by the foreign keys that already cascade from the company. The
+ * files have to be named first: once the rows are gone, nothing knows which
+ * bytes belonged to whom, so the keys are read while they still exist and the
+ * storage is emptied afterwards. A file that fails to delete leaves bytes
+ * nobody can reach rather than a half-deleted company, and says so in the log.
+ */
+export async function deleteCompany(tenantId: string, typedName: string): Promise<AdminResult> {
+  const admin = await requireSuperAdmin();
+
+  if (!UUID.test(tenantId)) return { ok: false, message: "No such company." };
+
+  const keys = await acrossTenants(async () => {
+    const db = getDb();
+
+    const [company] = await db
+      .select({
+        id: schema.tenants.id,
+        name: schema.tenants.name,
+        blockedAt: schema.tenants.blockedAt,
+      })
+      .from(schema.tenants)
+      .where(eq(schema.tenants.id, tenantId))
+      .limit(1);
+
+    if (!company) return { ok: false as const, message: "No such company." };
+
+    if (!company.blockedAt) {
+      return {
+        ok: false as const,
+        message: `${company.name} is still open. Close it first — deleting a company that is in use should take two decisions, not one.`,
+      };
+    }
+
+    if (typedName.trim() !== company.name) {
+      return { ok: false as const, message: "The name does not match. Nothing was deleted." };
+    }
+
+    const [uploads, artifacts] = await Promise.all([
+      db
+        .select({ key: schema.sourceFiles.blobKey })
+        .from(schema.sourceFiles)
+        .where(eq(schema.sourceFiles.tenantId, company.id)),
+      db
+        .select({ key: schema.reportArtifacts.blobKey })
+        .from(schema.reportArtifacts)
+        .where(and(eq(schema.reportArtifacts.tenantId, company.id), isNotNull(schema.reportArtifacts.blobKey))),
+    ]);
+
+    await db.delete(schema.tenants).where(eq(schema.tenants.id, company.id));
+
+    // In the platform log rather than the company's own: that one went with it.
+    log.info("company.deleted", {
+      tenantId: company.id,
+      name: company.name,
+      by: admin.email,
+      files: uploads.length + artifacts.length,
+    });
+
+    return {
+      ok: true as const,
+      name: company.name,
+      keys: [...uploads, ...artifacts].map((row) => row.key).filter((key): key is string => !!key),
+    };
+  });
+
+  if (!keys.ok) return keys;
+
+  const failed: string[] = [];
+
+  for (const key of keys.keys) {
+    try {
+      await del(key);
+    } catch (error) {
+      failed.push(key);
+      log.error("company.delete_blob_failed", error, { blobKey: key });
+    }
+  }
+
+  revalidatePath("/", "layout");
+
+  return {
+    ok: true,
+    message: failed.length
+      ? `${keys.name} is gone. ${failed.length} of its ${keys.keys.length} files could not be removed from storage and are listed in the log.`
+      : `${keys.name} is gone, with its ${keys.keys.length} files.`,
+  };
 }

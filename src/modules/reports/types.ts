@@ -1,4 +1,4 @@
-import type { CompanyProfile } from "@/modules/companies/types";
+import type { CompanyRules } from "@/modules/companies/types";
 import type { schema } from "@/lib/db";
 import type { PeriodGranularity } from "@/lib/db/schema";
 import type { DatasetId } from "@/lib/ingest/datasets";
@@ -132,7 +132,7 @@ export type ReportModule = {
   unmappedSkus?: (
     rows: readonly LedgerRow[],
     rules: RulesSnapshot,
-    company: CompanyProfile,
+    company: CompanyRules,
   ) => UnmappedSku[];
   /**
    * Distinct currencies this period's rows would carry into the report that

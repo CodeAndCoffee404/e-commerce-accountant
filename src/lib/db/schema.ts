@@ -136,12 +136,22 @@ export const tenants = pgTable("tenants", {
   name: text("name").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /**
-   * Which company profile in `src/modules/companies` this one is built from.
+   * When this company was closed, or null while it is open.
    *
-   * The database holds the key and nothing else: the values themselves are
-   * code, reviewed and covered by a golden test, because they are what the
-   * reports are computed from — see the profile's own comment for why that is
-   * not a settings screen.
+   * Closed means read-only: its people sign in and read what is already there,
+   * and nothing writes — no uploads, no reports built, no settings changed,
+   * and the nightly job passes it by. A date rather than a flag because the
+   * useful question a year later is when, not whether.
+   */
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  /**
+   * No longer read by anything.
+   *
+   * It named a set of rules in `src/modules/companies`, which was a second
+   * identifier for something that already had one. The rules are found by the
+   * company's own id now. The column stays for one deploy so that the version
+   * running during the switchover still finds it — see docs/SETUP.md §1.8 —
+   * and is dropped by the next migration.
    */
   profileKey: text("profile_key").notNull().default("geyser"),
 });

@@ -1,35 +1,35 @@
 import { GEYSER } from "./geyser";
-import type { CompanyProfile } from "./types";
+import type { CompanyRules } from "./types";
 
 /**
- * Every company shape this application knows how to build reports for.
+ * The values a company's reports are computed from.
  *
- * The company row stores only the key. Adding a company is therefore two
- * steps, in this order: a profile here, reviewed like any other code, and then
- * the company itself in the admin screen. Doing it the other way round would
- * create a company whose reports cannot be built — a loud failure, and the one
- * to prefer: the quiet one is a company whose reports build and carry another
- * company's Zoho account names and invoice numbers.
+ * Every company gets the same set today. That is a deliberate stopping point,
+ * not an oversight: what differs between companies is known only once there is
+ * a second one, and inventing the difference in advance would mean guessing at
+ * somebody's Zoho account names.
+ *
+ * The seam is the company's identifier. `rulesFor` takes it and ignores it,
+ * so the day a second company needs its own answers, this function grows a
+ * branch and nothing above it changes. Nothing is stored in the database to
+ * say which rules a company uses — that was the profile, and a column naming
+ * a set of rules is a second identifier for something that already has one.
  */
-export const PROFILES: readonly CompanyProfile[] = [GEYSER];
+export function rulesFor(tenantId: string): CompanyRules {
+  // Deliberately unused. Taking the identifier and ignoring it is what makes
+  // every caller already correct for the day a second company needs its own
+  // answers; a function that took nothing would have to be found and changed
+  // in a dozen places first.
+  void tenantId;
 
-export const COMPANY_KEYS = PROFILES.map((profile) => profile.key);
-
-export class UnknownCompanyError extends Error {
-  constructor(key: string) {
-    super(
-      `No company profile named "${key}". Its reports cannot be built until one is added ` +
-        "in src/modules/companies, which is a code change with a golden test — deliberately, " +
-        "because these are the values reports are computed from.",
-    );
-    this.name = "UnknownCompanyError";
-  }
+  return GEYSER;
 }
 
-export function companyProfile(key: string): CompanyProfile {
-  const profile = PROFILES.find((candidate) => candidate.key === key);
-
-  if (!profile) throw new UnknownCompanyError(key);
-
-  return profile;
+/**
+ * What every company currently starts life with. Named apart from `rulesFor`
+ * because seeding is a different question from reporting: this is the first
+ * day's contents of the tables somebody then edits.
+ */
+export function seedsFor(tenantId: string): CompanyRules["seeds"] {
+  return rulesFor(tenantId).seeds;
 }

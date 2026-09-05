@@ -1,27 +1,36 @@
-import { count, eq, max } from "drizzle-orm";
+import { max } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
 import { acrossTenants } from "@/lib/db/tenant";
+import type { MembershipRole } from "@/lib/db/schema";
 
 /**
  * What the admin area knows about the companies.
  *
  * Every question here spans companies by definition — that is what the screen
  * is — so it says `acrossTenants` and stands row-level security down for the
- * length of the read. Kept to counts and dates on purpose: the list is for
- * deciding which company to step into, not for reading anyone's books from
- * outside. Nothing here returns a row of a company's own data.
+ * length of the read. Kept to counts, dates and the access list on purpose:
+ * the screen is for deciding which company to step into and who is in it, not
+ * for reading anyone's books from outside. Nothing here returns a row of a
+ * company's own data.
  */
+
+export type CompanyPerson = {
+  email: string;
+  role: MembershipRole;
+  /** False when the company's owner has suspended them but not removed them. */
+  isActive: boolean;
+};
 
 export type CompanySummary = {
   id: string;
   name: string;
-  /** Which profile it is built from — the one thing about it that cannot change. */
-  profileKey: string;
-  /** How many addresses may currently come in — the access list, not arrivals. */
-  people: number;
+  /** When it was closed, or null while it is open. Closed means read-only. */
+  blockedAt: Date | null;
   lastUploadAt: Date | null;
   lastReportAt: Date | null;
+  /** Everyone on its access list — who may come in, not who has been. */
+  people: CompanyPerson[];
 };
 
 export async function allCompanies(): Promise<CompanySummary[]> {
@@ -33,20 +42,23 @@ export async function allCompanies(): Promise<CompanySummary[]> {
         .select({
           id: schema.tenants.id,
           name: schema.tenants.name,
-          profileKey: schema.tenants.profileKey,
+          blockedAt: schema.tenants.blockedAt,
         })
         .from(schema.tenants)
         .orderBy(schema.tenants.name),
 
-      // The access list, not the memberships: "people" on this screen means
-      // who may get in, and a membership is only a record that somebody once
-      // did. Counting memberships would leave out anyone invited since their
-      // last sign-in and count everyone suspended.
+      // The access list, not the memberships: a membership is only a record
+      // that somebody once signed in. Counting those would leave out anyone
+      // invited since and include everyone suspended.
       db
-        .select({ tenantId: schema.allowedEmails.tenantId, n: count() })
+        .select({
+          tenantId: schema.allowedEmails.tenantId,
+          email: schema.allowedEmails.email,
+          role: schema.allowedEmails.role,
+          isActive: schema.allowedEmails.isActive,
+        })
         .from(schema.allowedEmails)
-        .where(eq(schema.allowedEmails.isActive, true))
-        .groupBy(schema.allowedEmails.tenantId),
+        .orderBy(schema.allowedEmails.email),
 
       db
         .select({ tenantId: schema.sourceFiles.tenantId, at: max(schema.sourceFiles.uploadedAt) })
@@ -59,13 +71,20 @@ export async function allCompanies(): Promise<CompanySummary[]> {
         .groupBy(schema.reportRuns.tenantId),
     ]);
 
-    const peopleCount = new Map(people.map((row) => [row.tenantId, row.n]));
     const lastUpload = new Map(uploads.map((row) => [row.tenantId, row.at]));
     const lastReport = new Map(reports.map((row) => [row.tenantId, row.at]));
+    const byCompany = new Map<string, CompanyPerson[]>();
+
+    for (const row of people) {
+      const list = byCompany.get(row.tenantId) ?? [];
+
+      list.push({ email: row.email, role: row.role, isActive: row.isActive });
+      byCompany.set(row.tenantId, list);
+    }
 
     return companies.map((company) => ({
       ...company,
-      people: peopleCount.get(company.id) ?? 0,
+      people: byCompany.get(company.id) ?? [],
       lastUploadAt: lastUpload.get(company.id) ?? null,
       lastReportAt: lastReport.get(company.id) ?? null,
     }));

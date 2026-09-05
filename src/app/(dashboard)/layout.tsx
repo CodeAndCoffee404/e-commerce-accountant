@@ -30,6 +30,7 @@ async function dashboardLayout(
       access={user.access}
       needsAttention={needsAttention}
       company={current?.name ?? "This company"}
+      companyBlocked={user.companyBlocked}
       companies={companies}
     >
       {children}

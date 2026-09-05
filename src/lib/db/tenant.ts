@@ -91,6 +91,29 @@ async function announce(executor: Executor, tenantId: string | null): Promise<vo
   );
 }
 
+/**
+ * Closes a blocked company's transaction to writes, using Postgres rather than
+ * a check somebody has to remember.
+ *
+ * `transaction_read_only` refuses every INSERT, UPDATE and DELETE for the rest
+ * of the transaction, so a page still reads and nothing writes — which is what
+ * "closed" means here. One statement, and no way past it: a forgotten guard in
+ * one action out of forty would otherwise be invisible until somebody used it.
+ *
+ * It is one-way. Postgres refuses to put a transaction back into read-write
+ * once a query has run, which is why this is only ever done on a transaction
+ * this scope opened for itself — see `runScoped`.
+ */
+async function closeToWrites(executor: Executor, tenantId: string): Promise<void> {
+  const blocked = await executor.execute(
+    sql`select 1 from tenants where id = ${tenantId}::uuid and blocked_at is not null`,
+  );
+
+  if ((blocked as unknown as unknown[]).length > 0) {
+    await executor.execute(sql`select set_config('transaction_read_only', 'on', true)`);
+  }
+}
+
 async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Promise<T> {
   const open = currentExecutor();
 
@@ -117,6 +140,13 @@ async function runScoped<T>(tenantId: string | null, fn: () => Promise<T>): Prom
 
   return rootDb().transaction(async (executor) => {
     await announce(executor, tenantId);
+
+    // Only here, never in the nested branch above. The enclosing transaction
+    // there belongs to a caller that deliberately spans companies — signing
+    // in, the admin stepping into a company, the nightly job — and read-only
+    // cannot be undone once set, so switching it on would leave that caller
+    // unable to finish its own work.
+    if (tenantId !== null) await closeToWrites(executor, tenantId);
 
     return storage.run({ tenantId, executor }, fn);
   });

@@ -5,7 +5,6 @@ import type { Period } from "@/lib/ingest/period";
 import { sellerVatOn } from "@/lib/reports/rules";
 import type { LedgerRow, ReportContext, RulesSnapshot } from "@/lib/reports/types";
 import { GEYSER } from "@/modules/companies/geyser";
-import { PROFILES } from "@/modules/companies/registry";
 import { generateOffAmazonSales, OFF_AMAZON_HEADERS } from "@/modules/reports/off-amazon-sales";
 
 /**
@@ -171,37 +170,25 @@ describe("Off-Amazon Sales and the seller's number", () => {
 
 describe("what a new company is seeded with", () => {
   it("carries no VAT number in its channel-rule seeds", () => {
-    // The guarantee the profile is written to make, checked rather than argued.
     // The numbers a report prints used to live in the channel-rule seeds, which
-    // every profile hands over wholesale — so a second profile inherited the
-    // first company's registrations and nothing said so. Every number any
-    // profile knows is looked for in every profile's seeded rules, so putting
-    // one back into a channel module fails here rather than in a client's books.
-    const known = PROFILES.flatMap((profile) =>
-      profile.seeds.sellerVatNumbers.map((entry) => entry.vatNumber),
-    );
+    // every company is handed wholesale on its first day — so a second company
+    // inherited the first one's registrations and nothing said so. Every number
+    // the seeds know is looked for in the seeded rules, so putting one back
+    // into a channel module fails here rather than in a client's books.
+    const known = GEYSER.seeds.sellerVatNumbers.map((entry) => entry.vatNumber);
 
     expect(known.length).toBeGreaterThan(0);
 
-    for (const profile of PROFILES) {
-      const seeded = JSON.stringify(profile.seeds.channelRules);
+    const seeded = JSON.stringify(GEYSER.seeds.channelRules);
 
-      for (const number of known) {
-        expect(
-          seeded.includes(number),
-          `${profile.key}: its channel-rule seeds carry the registration ${number}`,
-        ).toBe(false);
-      }
+    for (const number of known) {
+      expect(seeded.includes(number), `the channel-rule seeds carry ${number}`).toBe(false);
     }
   });
 
   it("gives every registration a scheme, since that is half of what finds it", () => {
-    for (const profile of PROFILES) {
-      for (const entry of profile.seeds.sellerVatNumbers) {
-        expect(["REGULAR", "UNION-OSS"], `${profile.key}: ${entry.vatNumber}`).toContain(
-          entry.scheme,
-        );
-      }
+    for (const entry of GEYSER.seeds.sellerVatNumbers) {
+      expect(["REGULAR", "UNION-OSS"], entry.vatNumber).toContain(entry.scheme);
     }
   });
 });

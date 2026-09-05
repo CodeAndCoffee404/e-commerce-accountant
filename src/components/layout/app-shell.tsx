@@ -12,7 +12,7 @@ import {
   SunOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Layout, Menu, Space, Spin, Tag, theme, Tooltip, Typography } from "antd";
+import { Alert, Badge, Button, Layout, Menu, Space, Spin, Tag, theme, Tooltip, Typography } from "antd";
 import Image from "next/image";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
@@ -60,6 +60,7 @@ export function AppShell({
   access,
   needsAttention,
   company,
+  companyBlocked,
   companies,
 }: {
   children: ReactNode;
@@ -70,6 +71,8 @@ export function AppShell({
   needsAttention: number;
   /** The company being worked in, named in the bar so it is never a guess. */
   company: string;
+  /** Closed: readable, and nothing in it changeable. Said once, at the top. */
+  companyBlocked: boolean;
   /** Everything this person could switch to. One means no switcher. */
   companies: Company[];
 }) {
@@ -276,7 +279,21 @@ export function AppShell({
         {/* A max width so a wide table stays readable, and breathing room on a
             phone where 24px of padding costs a column. */}
         <Content style={{ padding: "clamp(12px, 3vw, 24px)" }}>
-          <div style={{ maxWidth: 1600, margin: "0 auto" }}>{children}</div>
+          <div style={{ maxWidth: 1600, margin: "0 auto" }}>
+            {/* Above the page, not beside a button: every screen in a closed
+                company behaves this way, and finding out by having a save
+                refused is the version of this worth avoiding. */}
+            {companyBlocked ? (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="This company is closed"
+                description="Everything here can be read. Nothing can be uploaded, built or changed until it is opened again."
+              />
+            ) : null}
+            {children}
+          </div>
         </Content>
       </Layout>
     </Layout>

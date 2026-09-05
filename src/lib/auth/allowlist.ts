@@ -4,7 +4,6 @@ import { getDb, schema } from "@/lib/db";
 import { acrossTenants, withTenant } from "@/lib/db/tenant";
 import type { MembershipRole } from "@/lib/db/schema";
 import { seedReferenceData } from "@/lib/reference/seed";
-import { GEYSER } from "@/modules/companies/geyser";
 
 /**
  * The MVP serves one client, so a sign-in that is bootstrapped rather than
@@ -204,30 +203,30 @@ export async function roleFor(email: string, tenantId: string): Promise<Membersh
 }
 
 /**
- * Found by its profile, not by its name: the name is the company's own to
- * change, and a bootstrap sign-in that could not find the company because
- * somebody renamed it would make a second one beside it.
+ * Where a bootstrap sign-in lands when nobody has invited it.
+ *
+ * The oldest company, not one found by name: a name is its owner's to change,
+ * and a lookup that missed because somebody renamed the company would quietly
+ * make a second one beside it. Only when there is no company at all is one
+ * created.
  */
 async function ensureDefaultTenant(): Promise<string> {
   const [existing] = await getDb()
     .select({ id: schema.tenants.id })
     .from(schema.tenants)
-    .where(eq(schema.tenants.profileKey, GEYSER.key))
+    .orderBy(asc(schema.tenants.createdAt))
     .limit(1);
 
   if (existing) return existing.id;
 
   const [created] = await getDb()
     .insert(schema.tenants)
-    .values({
-      name: DEFAULT_TENANT.name,
-      profileKey: GEYSER.key,
-    })
+    .values({ name: DEFAULT_TENANT.name })
     .returning({ id: schema.tenants.id });
 
   // Reference data comes with the tenant. An empty rate table would let the
   // first report run and quietly produce nothing.
-  await seedReferenceData(created.id, GEYSER);
+  await seedReferenceData(created.id);
 
   return created.id;
 }
@@ -255,4 +254,25 @@ export async function isSuperAdmin(userId: string): Promise<boolean> {
     .limit(1);
 
   return row?.isSuperAdmin ?? false;
+}
+
+/**
+ * Whether a company is closed — readable, and nothing in it changeable.
+ *
+ * Read on every request, like the role, and for the same reason: closing a
+ * company that somebody is in the middle of using should take effect on their
+ * next click, not at their next sign-in.
+ */
+export async function isCompanyBlocked(tenantId: string): Promise<boolean> {
+  // No scope of its own, in either direction. `tenants` carries no company
+  // column and no row-level security, so the read works inside a company's
+  // scope and outside one alike — and `acrossTenants` would refuse to open
+  // inside one, which is exactly where this is called from.
+  const [row] = await getDb()
+    .select({ blockedAt: schema.tenants.blockedAt })
+    .from(schema.tenants)
+    .where(eq(schema.tenants.id, tenantId))
+    .limit(1);
+
+  return Boolean(row?.blockedAt);
 }

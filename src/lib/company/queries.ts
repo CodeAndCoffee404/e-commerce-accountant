@@ -8,8 +8,8 @@ export type CompanyIdentity = {
   /** The identifier. Everything a company owns points here, and it never changes. */
   id: string;
   name: string;
-  /** Which profile its reports are built from — code, not a setting. */
-  profileKey: string;
+  /** When it was closed, or null while it is open. Closed means read-only. */
+  blockedAt: Date | null;
 };
 
 export async function companyIdentity(): Promise<CompanyIdentity | null> {
@@ -17,7 +17,7 @@ export async function companyIdentity(): Promise<CompanyIdentity | null> {
     .select({
       id: schema.tenants.id,
       name: schema.tenants.name,
-      profileKey: schema.tenants.profileKey,
+      blockedAt: schema.tenants.blockedAt,
     })
     .from(schema.tenants)
     .where(eq(schema.tenants.id, requireTenantId()))
