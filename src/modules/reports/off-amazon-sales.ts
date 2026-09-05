@@ -58,10 +58,37 @@ export const OFF_AMAZON_HEADERS = [
 
 type Skipped = Map<string, number>;
 
+/** Registrations the period asked for and the company does not hold. */
+type Missing = Set<string>;
+
 function skip(skipped: Skipped, reason: string): null {
   skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
   return null;
+}
+
+/**
+ * A row that cannot name the seller.
+ *
+ * Recorded twice on purpose: in `skipped`, where it reads as one more refused
+ * row, and in `missing`, which the run turns into a refusal. Only the second
+ * stops the report — a sheet that is short by every export sale looks exactly
+ * like a quiet month.
+ */
+function skipUnregistered(
+  skipped: Skipped,
+  warnings: string[],
+  missing: Missing,
+  channel: string,
+  registration: SellerRegistration,
+  where = "",
+): null {
+  const described = describeRegistration(registration);
+
+  missing.add(described);
+  warnings.push(`${channel}: this company has no ${described}${where}`);
+
+  return skip(skipped, `${channel}: no ${described}`);
 }
 
 /** Legacy writes dates into the sheet as a timestamp at midnight. */
@@ -94,16 +121,17 @@ export function generateOffAmazonSales(
   const shop = shopifyOf(context);
   const skipped: Skipped = new Map();
   const warnings: string[] = [];
+  const missing: Missing = new Set();
   const output: (string | number | null)[][] = [];
 
   for (const row of rows) {
     const mapped =
       row.dataset === "allegro"
-        ? allegroRow(row, context, skipped, warnings)
+        ? allegroRow(row, context, skipped, warnings, missing)
         : row.dataset === "cdiscount"
-          ? cdiscountRow(row, context, skipped, warnings)
+          ? cdiscountRow(row, context, skipped, warnings, missing)
           : row.dataset === shop.dataset
-            ? shopifyRow(shop, row, context, skipped, warnings)
+            ? shopifyRow(shop, row, context, skipped, warnings, missing)
             : skip(skipped, `Channel ${row.dataset} is not part of this report`);
 
     if (mapped) output.push(mapped);
@@ -117,6 +145,7 @@ export function generateOffAmazonSales(
 
   return {
     sheets: [sheet],
+    missingRegistrations: [...missing],
     skipped: [...skipped.entries()].map(([reason, count]) => ({ reason, count })),
     warnings,
   };
@@ -131,6 +160,7 @@ function allegroRow(
   context: ReportContext,
   skipped: Skipped,
   warnings: string[],
+  missing: Missing,
 ): (string | number | null)[] | null {
   // Only lines with a buyer are sales. The rest are Allegro's own fees, and
   // the statement mixes them into the same list.
@@ -178,11 +208,7 @@ function allegroRow(
   const registration = registrationFor(rule.scheme, rule.country);
   const sellerVat = sellerVatOn(context.rules, registration, on);
 
-  if (!sellerVat) {
-    warnings.push(`Allegro: this company has no ${describeRegistration(registration)}`);
-
-    return skip(skipped, `Allegro: no ${describeRegistration(registration)}`);
-  }
+  if (!sellerVat) return skipUnregistered(skipped, warnings, missing, "Allegro", registration);
 
   // A refund is negative, whatever sign the statement used. Single rule across
   // every channel, agreed in PLAN §1.
@@ -239,6 +265,7 @@ function cdiscountRow(
   context: ReportContext,
   skipped: Skipped,
   warnings: string[],
+  missing: Missing,
 ): (string | number | null)[] | null {
   const types = channelRule<Record<string, string>>(context.rules, "cdiscount", "invoice_types");
   const invoiceType = row.raw["Invoice type"] ?? row.transactionType ?? "";
@@ -277,11 +304,7 @@ function cdiscountRow(
   const registration = registrationFor(defaults.scheme, defaults.arrivalCountry);
   const sellerVat = sellerVatOn(context.rules, registration, row.occurredOn ?? context.period.end);
 
-  if (!sellerVat) {
-    warnings.push(`Cdiscount: this company has no ${describeRegistration(registration)}`);
-
-    return skip(skipped, `Cdiscount: no ${describeRegistration(registration)}`);
-  }
+  if (!sellerVat) return skipUnregistered(skipped, warnings, missing, "Cdiscount", registration);
 
   const total = type === "REFUND" ? row.gross.abs().negated() : row.gross;
   // Cdiscount reports its own VAT column as zero, so it is recomputed from the
@@ -333,6 +356,7 @@ function shopifyRow(
   context: ReportContext,
   skipped: Skipped,
   warnings: string[],
+  missing: Missing,
 ): (string | number | null)[] | null {
   // One row per order, not per line item.
   //
@@ -405,11 +429,14 @@ function shopifyRow(
   const sellerVat = sellerVatOn(context.rules, registration, row.occurredOn ?? context.period.end);
 
   if (!sellerVat) {
-    warnings.push(
-      `Shopify: this company has no ${describeRegistration(registration)}, row ${row.sourceRowNumber}`,
+    return skipUnregistered(
+      skipped,
+      warnings,
+      missing,
+      "Shopify",
+      registration,
+      `, row ${row.sourceRowNumber}`,
     );
-
-    return skip(skipped, `Shopify: no ${describeRegistration(registration)}`);
   }
 
   const labelled = parseShopifyTaxRate(row.raw["Tax 1 Name"]);

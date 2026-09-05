@@ -38,6 +38,7 @@ const { getDb, schema } = await import("@/lib/db");
 const { classify } = await import("@/lib/ingest/classify");
 const { parseSpreadsheet } = await import("@/lib/ingest/parse");
 const { seedReferenceData } = await import("@/lib/reference/seed");
+const { giveRegistrations } = await import("./helpers/registrations");
 const { buildReport } = await import("@/lib/reports/actions");
 const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { periodContaining } = await import("@/lib/periods/calendar");
@@ -83,6 +84,8 @@ describe.skipIf(!HAS_DB)("the dashboard", () => {
       .onConflictDoNothing();
 
     await seedReferenceData(session.tenantId);
+    // Registrations are entered, not seeded — see the helper.
+    await giveRegistrations(session.tenantId);
 
     for (const relative of [
       "tests/fixtures/from-csv/Allegro sales report - 2026.07 July.csv",

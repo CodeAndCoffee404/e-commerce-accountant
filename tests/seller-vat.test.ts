@@ -153,6 +153,22 @@ describe("Off-Amazon Sales and the seller's number", () => {
     expect(result.sheets[0].rows[0][VAT_COLUMN]).toBe("PL5263307678");
   });
 
+  it("names every registration the month wanted and did not find", () => {
+    // What the run reads to refuse. The list is what the period actually
+    // needed, which the settings alone cannot say: it depends on where the
+    // sales went. Two channels wanting the same registration name it once.
+    const none = rules({ sellerVatNumbers: [] });
+    const result = generateOffAmazonSales([allegroRow()], context(none));
+
+    expect(result.missingRegistrations).toEqual(["REGULAR VAT registration in PL"]);
+  });
+
+  it("says nothing is missing when every row found its number", () => {
+    const result = generateOffAmazonSales([allegroRow()], context(rules()));
+
+    expect(result.missingRegistrations).toEqual([]);
+  });
+
   it("stops the row rather than printing somebody else's number", () => {
     // A company that holds no Polish registration: the row is refused, by name,
     // instead of falling back to whichever number the seed data happened to
@@ -168,14 +184,14 @@ describe("Off-Amazon Sales and the seller's number", () => {
   });
 });
 
-describe("what a new company is seeded with", () => {
+describe("what a company carries", () => {
   it("carries no VAT number in its channel-rule seeds", () => {
     // The numbers a report prints used to live in the channel-rule seeds, which
     // every company is handed wholesale on its first day — so a second company
     // inherited the first one's registrations and nothing said so. Every number
     // the seeds know is looked for in the seeded rules, so putting one back
     // into a channel module fails here rather than in a client's books.
-    const known = GEYSER.seeds.sellerVatNumbers.map((entry) => entry.vatNumber);
+    const known = GEYSER.registrations.map((entry) => entry.vatNumber);
 
     expect(known.length).toBeGreaterThan(0);
 
@@ -186,8 +202,29 @@ describe("what a new company is seeded with", () => {
     }
   });
 
+  it("hands a new company no registration at all", () => {
+    // The leak this closes, and the one the earlier test in this file missed:
+    // it checked that no VAT number sat in the channel-rule seeds, while the
+    // seeds carried a `sellerVatNumbers` list of their own — four real numbers,
+    // inserted into every company created. The second company would have
+    // printed the first one's registrations on its own invoices, and the only
+    // way to notice would have been reading them.
+    //
+    // A registration is now a row somebody enters, never a row somebody is
+    // given. `seedReferenceData` has no registration branch left to take, and
+    // this holds it that way: what a new company is seeded with is checked for
+    // every number this company holds.
+    const seeded = JSON.stringify(GEYSER.seeds);
+
+    for (const entry of GEYSER.registrations) {
+      expect(seeded.includes(entry.vatNumber), `the seeds carry ${entry.vatNumber}`).toBe(false);
+    }
+
+    expect("sellerVatNumbers" in GEYSER.seeds).toBe(false);
+  });
+
   it("gives every registration a scheme, since that is half of what finds it", () => {
-    for (const entry of GEYSER.seeds.sellerVatNumbers) {
+    for (const entry of GEYSER.registrations) {
       expect(["REGULAR", "UNION-OSS"], entry.vatNumber).toContain(entry.scheme);
     }
   });

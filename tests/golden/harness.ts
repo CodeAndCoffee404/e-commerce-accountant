@@ -36,6 +36,10 @@ export const corpusAvailable = (() => {
 export function seededRules(): RulesSnapshot {
   const seeds = GEYSER.seeds;
 
+  // Registrations come from the company, not from the seeds: they name a legal
+  // entity, so nothing copies them into a database any more. Live, Geyser's own
+  // rows carry these same numbers, entered in Settings.
+
   return {
     vatRates: seeds.vatRates.map((rate) => ({
       country: rate.country,
@@ -43,7 +47,7 @@ export function seededRules(): RulesSnapshot {
       validFrom: RULES_EFFECTIVE_FROM,
       validTo: null,
     })),
-    sellerVatNumbers: seeds.sellerVatNumbers.map((entry) => ({
+    sellerVatNumbers: GEYSER.registrations.map((entry) => ({
       country: entry.country,
       scheme: entry.scheme,
       vatNumber: entry.vatNumber,

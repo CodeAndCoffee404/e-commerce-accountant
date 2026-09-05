@@ -162,6 +162,30 @@ describe.skipIf(!HAS_DB)("the VAT registrations screen", () => {
     expect(after.note).toBe("the one-stop registration");
   });
 
+  it("hands the screen the pair, so a wrong one can be seen", async () => {
+    const id = await company();
+
+    await acrossTenants(() =>
+      getDb().insert(schema.sellerVatNumbers).values({
+        tenantId: id,
+        country: "EE",
+        scheme: "UNION-OSS",
+        vatNumber: "EE102013089",
+        validFrom: "2020-01-01",
+      }),
+    );
+
+    // The pair is not editable, but it has to reach the screen: shown as a
+    // label it is the only place a one-stop registration reading as a local
+    // one becomes visible before a month of export sales goes missing.
+    const [row] = (await withTenant(id, () => loadReferenceData(id))).sellerVatNumbers;
+
+    expect({ country: row.country, scheme: row.scheme }).toEqual({
+      country: "EE",
+      scheme: "UNION-OSS",
+    });
+  });
+
   it("refuses a scheme sent from the browser", async () => {
     const id = await company();
 

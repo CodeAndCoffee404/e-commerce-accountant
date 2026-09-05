@@ -403,12 +403,11 @@ export async function restoreDefaults(): Promise<ActionResult> {
 
 async function restoreDefaultsInScope(): Promise<ActionResult> {
   const user = await requireEditor();
-  // This company's own profile, not a default: restoring "the defaults" from
-  // somebody else's profile is how a company ends up printing another's VAT
-  // registrations, which is the failure the profile exists to prevent.
+  // Rates, mappings and channel defaults — never VAT registrations. Those name
+  // a legal entity, so they are entered in Settings and restored by nobody:
+  // seeding them is how a company ends up printing another's numbers.
   const result = await seedReferenceData(user.tenantId);
-  const added =
-    result.vatRates + result.sellerVatNumbers + result.skuMappings + result.channelRules;
+  const added = result.vatRates + result.skuMappings + result.channelRules;
 
   await audit(user, "reference.restored", "reference", undefined, result);
   revalidatePath("/settings");

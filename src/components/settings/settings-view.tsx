@@ -739,6 +739,22 @@ function SellerVat({
         pagination={false}
         loading={pending}
         columns={[
+          {
+            // Not a field: a label. Which country and regime a report looks a
+            // number up by is not the company's to set, but it is very much
+            // theirs to see — a one-stop registration reading as a local one
+            // takes every export sale out of Off-Amazon Sales, and with the
+            // pair off the screen there was nowhere left to notice.
+            title: "Used for",
+            key: "pair",
+            width: 210,
+            render: (_, row) => (
+              <Space size={6}>
+                <Typography.Text strong>{row.country}</Typography.Text>
+                <Tag>{row.scheme}</Tag>
+              </Space>
+            ),
+          },
           { title: "VAT number", dataIndex: "vatNumber" },
           { title: "From", dataIndex: "validFrom", width: 140 },
           {
