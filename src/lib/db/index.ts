@@ -27,13 +27,25 @@ export type Executor = Database | Transaction;
  * the HTTP driver cannot do multi-statement transactions, and superseding a
  * period's transactions has to be atomic.
  *
- * `max: 1` because serverless functions each hold their own connection; the
- * pooling belongs to Neon's pooler endpoint, not to the process.
+ * The real pooling belongs to Neon's pooler endpoint, not to this process, so
+ * these numbers are about one function instance and not about the database.
+ *
+ * `max: 4` rather than 1. A page renders its layout and its content at the
+ * same time, and each opens its own transaction: on a single connection the
+ * second waited for the first, which is what made the skeleton arrive after
+ * the content it was meant to stand in for. Under Vercel's concurrent
+ * execution one instance also serves several requests at once, and they queued
+ * behind each other for the same reason. Four is enough to stop the queue
+ * without a function instance holding a handful of pooler slots idle.
+ *
+ * `idle_timeout: 120` rather than 20. Twenty seconds is shorter than a pause
+ * for a cup of tea, so the next click paid for a fresh TCP handshake, TLS and
+ * authentication before its first query.
  */
 function createClient() {
   return postgres(databaseUrl(), {
-    max: 1,
-    idle_timeout: 20,
+    max: 4,
+    idle_timeout: 120,
     prepare: false,
   });
 }

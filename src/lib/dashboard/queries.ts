@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { log } from "@/lib/log";
 import { currentlyClosed } from "@/lib/db/tenant";
+import { periodsOf } from "@/lib/periods/rows";
 import { ensurePeriods } from "@/lib/periods/ensure";
 import { amazonMonthlyLabel, type AmazonCountry } from "@/lib/ingest/datasets";
 import { REPORT_DEFINITIONS, type ReportTypeId } from "@/lib/reports/definitions";
@@ -91,6 +92,18 @@ export type DashboardData = {
     months: string[];
     groups: MatrixGroup[];
   };
+  /**
+   * What this pass already read, for the caller that needs the same rows.
+   *
+   * The deadlines block asks the same two questions — which reports are on,
+   * which periods exist — and used to ask the database again for both. Not
+   * part of what the screen renders; handed over so nothing is fetched twice
+   * within one page.
+   */
+  loaded: {
+    settings: Awaited<ReturnType<typeof loadReportSettings>>;
+    periods: { label: string; granularity: string; startDate: string; endDate: string }[];
+  };
 };
 
 /**
@@ -109,18 +122,7 @@ export async function loadDashboard(
   const settings = await loadReportSettings(tenantId);
   const today = new Date().toISOString().slice(0, 10);
   const [initialPeriods, files, availability] = await Promise.all([
-    db
-      .select({
-        label: schema.periods.label,
-        granularity: schema.periods.granularity,
-        startDate: schema.periods.startDate,
-        endDate: schema.periods.endDate,
-      })
-      .from(schema.periods)
-      .where(eq(schema.periods.tenantId, tenantId))
-      // By when they start, never by their label: '2026.Y' sorts before
-      // '2026.07 July' as text.
-      .orderBy(desc(schema.periods.startDate)),
+    periodsOf(tenantId),
     db
       .select({
         dataset: schema.sourceFiles.dataset,
@@ -159,6 +161,8 @@ export async function loadDashboard(
     try {
       await ensurePeriods(tenantId, today);
 
+      // Not `periodsOf`: that is cached for the request and would hand back
+      // the same list that was just found wanting.
       openPeriods = await db
         .select({
           label: schema.periods.label,
@@ -347,6 +351,7 @@ export async function loadDashboard(
     buildable: reports.filter((report) => report.state === "ready" || report.stale).length,
     currentMonth: reportingMonth,
     matrix,
+    loaded: { settings, periods: openPeriods },
   };
 }
 

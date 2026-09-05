@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
+import { periodsOf } from "@/lib/periods/rows";
 import type { PeriodGranularity } from "@/lib/db/schema";
 
 import { REPORT_DEFINITIONS, type ReportTypeId } from "./definitions";
@@ -218,19 +219,17 @@ export async function availablePeriods(
   const today = new Date().toISOString().slice(0, 10);
 
   const [periods, files, settings, variantRows] = await Promise.all([
-    getDb()
-      .select({
-        label: schema.periods.label,
-        granularity: schema.periods.granularity,
-        start: schema.periods.startDate,
-        end: schema.periods.endDate,
-      })
-      .from(schema.periods)
-      .where(eq(schema.periods.tenantId, tenantId))
-      // By when they start, never by their label: '2026.Y' and '2026.Q3' sort
-      // before '2026.07 July' as text, which would interleave a year with the
-      // months inside it.
-      .orderBy(desc(schema.periods.startDate)),
+    // Ordering and shape live in `periodsOf`, which every reader on the page
+    // shares — this used to be the first of four separate reads of one small
+    // table.
+    periodsOf(tenantId).then((rows) =>
+      rows.map((row) => ({
+        label: row.label,
+        granularity: row.granularity,
+        start: row.startDate,
+        end: row.endDate,
+      })),
+    ),
 
     getDb()
       .select({
@@ -458,15 +457,13 @@ export async function allReportPeriodRows(
   const db = getDb();
 
   const [allPeriods, runs] = await Promise.all([
-    db
-      .select({
-        label: schema.periods.label,
-        granularity: schema.periods.granularity,
-        start: schema.periods.startDate,
-      })
-      .from(schema.periods)
-      .where(eq(schema.periods.tenantId, tenantId))
-      .orderBy(desc(schema.periods.startDate)),
+    periodsOf(tenantId).then((rows) =>
+      rows.map((row) => ({
+        label: row.label,
+        granularity: row.granularity,
+        start: row.startDate,
+      })),
+    ),
 
     db
       .select({

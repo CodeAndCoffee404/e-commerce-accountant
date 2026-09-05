@@ -83,39 +83,40 @@ export async function listTransactions(
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(200, Math.max(10, filters.pageSize ?? DEFAULT_PAGE_SIZE));
 
-  const [{ value: total }] = await db
-    .select({ value: count() })
-    .from(schema.transactions)
-    .where(where);
-
-  const rows = await db
-    .select({
-      id: schema.transactions.id,
-      sourceFileId: schema.transactions.sourceFileId,
-      sourceRowNumber: schema.transactions.sourceRowNumber,
-      sourceFilename: schema.sourceFiles.originalFilename,
-      dataset: schema.transactions.dataset,
-      countryCode: schema.transactions.countryCode,
-      periodLabel: schema.transactions.periodLabel,
-      occurredOn: schema.transactions.occurredOn,
-      transactionType: schema.transactions.transactionType,
-      currency: schema.transactions.currency,
-      gross: schema.transactions.gross,
-      vatAmount: schema.transactions.vatAmount,
-      netAmount: schema.transactions.netAmount,
-      sku: schema.transactions.sku,
-      quantity: schema.transactions.quantity,
-      naturalKey: schema.transactions.naturalKey,
-      needsAttention: schema.transactions.needsAttention,
-      attentionReason: schema.transactions.attentionReason,
-      isCurrent: schema.transactions.isCurrent,
-    })
-    .from(schema.transactions)
-    .leftJoin(schema.sourceFiles, eq(schema.sourceFiles.id, schema.transactions.sourceFileId))
-    .where(where)
-    .orderBy(desc(schema.transactions.occurredOn), desc(schema.transactions.sourceRowNumber))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+  // Counted and fetched at once. Neither answer depends on the other, and on a
+  // ledger of any size the count is the slower of the two — waiting for it
+  // before asking for the page doubled the wait for nothing.
+  const [[{ value: total }], rows] = await Promise.all([
+    db.select({ value: count() }).from(schema.transactions).where(where),
+    db
+      .select({
+        id: schema.transactions.id,
+        sourceFileId: schema.transactions.sourceFileId,
+        sourceRowNumber: schema.transactions.sourceRowNumber,
+        sourceFilename: schema.sourceFiles.originalFilename,
+        dataset: schema.transactions.dataset,
+        countryCode: schema.transactions.countryCode,
+        periodLabel: schema.transactions.periodLabel,
+        occurredOn: schema.transactions.occurredOn,
+        transactionType: schema.transactions.transactionType,
+        currency: schema.transactions.currency,
+        gross: schema.transactions.gross,
+        vatAmount: schema.transactions.vatAmount,
+        netAmount: schema.transactions.netAmount,
+        sku: schema.transactions.sku,
+        quantity: schema.transactions.quantity,
+        naturalKey: schema.transactions.naturalKey,
+        needsAttention: schema.transactions.needsAttention,
+        attentionReason: schema.transactions.attentionReason,
+        isCurrent: schema.transactions.isCurrent,
+      })
+      .from(schema.transactions)
+      .leftJoin(schema.sourceFiles, eq(schema.sourceFiles.id, schema.transactions.sourceFileId))
+      .where(where)
+      .orderBy(desc(schema.transactions.occurredOn), desc(schema.transactions.sourceRowNumber))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+  ]);
 
   return { rows, total, page, pageSize };
 }

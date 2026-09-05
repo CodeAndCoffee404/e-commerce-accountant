@@ -104,6 +104,8 @@ export async function loadReportDeadlines(
   tenantId: string,
   month: string,
   preloadedSettings?: AllReportSettings,
+  /** The period rows the caller has already read — the dashboard always has them. */
+  preloadedPeriods?: { label: string; granularity: string; startDate: string; endDate: string }[],
 ): Promise<DeadlineDashboardRow[]> {
   const settings = preloadedSettings ?? (await loadReportSettings(tenantId));
   const rules = await loadDeadlineRules(tenantId, settings);
@@ -112,15 +114,17 @@ export async function loadReportDeadlines(
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const periods = await getDb()
-    .select({
-      label: schema.periods.label,
-      granularity: schema.periods.granularity,
-      startDate: schema.periods.startDate,
-      endDate: schema.periods.endDate,
-    })
-    .from(schema.periods)
-    .where(eq(schema.periods.tenantId, tenantId));
+  const periods =
+    preloadedPeriods ??
+    (await getDb()
+      .select({
+        label: schema.periods.label,
+        granularity: schema.periods.granularity,
+        startDate: schema.periods.startDate,
+        endDate: schema.periods.endDate,
+      })
+      .from(schema.periods)
+      .where(eq(schema.periods.tenantId, tenantId)));
 
   const monthPeriod = periods.find((p) => p.granularity === "month" && p.label === month);
 

@@ -30,7 +30,9 @@ async function dashboardPage({ searchParams }: PageProps<"/dashboard">) {
     // the card renders nothing at all rather than a locked panel.
     can(user, "activity", "view") ? listAudit(user.tenantId, 10) : Promise.resolve([]),
     countNeedsAttention(user.tenantId),
-    data.month ? loadReportDeadlines(user.tenantId, data.month) : Promise.resolve([]),
+    data.month
+      ? loadReportDeadlines(user.tenantId, data.month, data.loaded.settings, data.loaded.periods)
+      : Promise.resolve([]),
     // Whether a built report that is not in Drive is *waiting* to go or was
     // never going anywhere. Without this the screen cannot tell the two
     // apart, and says "not in Drive yet" to a tenant that never connected it.
