@@ -218,13 +218,6 @@
       "when": 1788617793894,
       "tag": "0030_attention_index",
       "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1788626312904,
-      "tag": "0031_seller_vat_oss_scheme",
-      "breakpoints": true
     }
   ]
 }
