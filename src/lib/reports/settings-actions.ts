@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { ensurePeriods } from "@/lib/periods/ensure";
 import { record } from "@/lib/audit/record";
 import { can, inRequest, requireAccess } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
@@ -206,6 +207,13 @@ async function saveReportStartDateInScope(
       target: [schema.channelRules.tenantId, schema.channelRules.channel, schema.channelRules.key],
       set: { value },
     });
+
+  // A report that begins in June needs June to exist. A company set up in
+  // September has periods from September and no way to reach further back, so
+  // saying "this report starts in June" has to open the months it names —
+  // otherwise the dashboard offers one month and the setting looks ignored.
+  // Idempotent, and it never closes a period that is already open.
+  await ensurePeriods(user.tenantId, new Date().toISOString().slice(0, 10));
 
   await record(
     { id: user.id, email: user.email, tenantId: user.tenantId },
