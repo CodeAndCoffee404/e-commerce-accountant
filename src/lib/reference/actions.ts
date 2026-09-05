@@ -229,6 +229,109 @@ async function saveSellerVatNumberInScope(input: unknown): Promise<ActionResult>
   return { ok: true, message: `${values.vatNumber} saved.` };
 }
 
+const newSellerVatSchema = z.object({
+  country: z.string().trim().length(2, "A country code is two letters.").toUpperCase(),
+  scheme: z.enum(["REGULAR", "UNION-OSS"]),
+  vatNumber: z
+    .string()
+    .trim()
+    .min(4, "A VAT number has at least 4 characters")
+    .max(24)
+    .regex(/^[A-Za-z0-9 -]+$/, "A VAT number is letters, digits, spaces and dashes"),
+  validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A start date is required."),
+});
+
+/**
+ * Adding a registration a company holds.
+ *
+ * The one place the pair is chosen rather than inherited, and it exists because
+ * without it there was nowhere at all: seeding stopped handing registrations
+ * out — a VAT number names a legal entity and is not a default — and the only
+ * other insert copies an existing row. A company created after that had no
+ * registrations and no way to enter any, so its first report refused to build
+ * and told it to add a number on a screen that could not.
+ *
+ * A select for the scheme is safe here in a way it was not on the edit form.
+ * There it sat beside a note and a date, so an edit made for something else
+ * re-sent it, and turning the one-stop registration local took every export
+ * sale out of Off-Amazon Sales silently. Here there is no existing row to
+ * turn: the choice is the whole point of the action, and getting it wrong
+ * leaves a row that can be closed with a date rather than a report that
+ * quietly changed shape.
+ */
+export async function createSellerVatNumber(input: unknown): Promise<ActionResult> {
+  return inRequest(() => createSellerVatNumberInScope(input));
+}
+
+async function createSellerVatNumberInScope(input: unknown): Promise<ActionResult> {
+  const user = await requireEditor();
+  const parsed = newSellerVatSchema.safeParse(input);
+
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+
+  const { country, scheme, vatNumber, validFrom } = parsed.data;
+  const db = getDb();
+
+  const existing = await db
+    .select({
+      country: schema.sellerVatNumbers.country,
+      scheme: schema.sellerVatNumbers.scheme,
+      vatNumber: schema.sellerVatNumbers.vatNumber,
+      validTo: schema.sellerVatNumbers.validTo,
+    })
+    .from(schema.sellerVatNumbers)
+    .where(eq(schema.sellerVatNumbers.tenantId, user.tenantId));
+
+  const open = existing.filter((row) => row.validTo === null);
+
+  // One-stop is registered in a single member state and covers every distance
+  // sale, so two of them in force at once is not a company with options — it
+  // is a company whose reports cannot say which number is theirs. The unique
+  // index does not catch this: it is per country, and the second one could be
+  // registered somewhere else.
+  if (scheme === "UNION-OSS" && open.some((row) => row.scheme === "UNION-OSS")) {
+    return {
+      ok: false,
+      message:
+        "This company already has a one-stop registration in force. Close that one with an end date first — a company reports every distance sale under one.",
+    };
+  }
+
+  if (open.some((row) => row.country === country && row.scheme === scheme)) {
+    return {
+      ok: false,
+      message: `A ${scheme} registration in ${country} is already in force. Close it with an end date before adding another.`,
+    };
+  }
+
+  await db.insert(schema.sellerVatNumbers).values({
+    tenantId: user.tenantId,
+    country,
+    scheme,
+    vatNumber,
+    validFrom,
+  });
+
+  await audit(user, "seller_vat.created", "seller_vat_number", undefined, {
+    country,
+    scheme,
+    vatNumber,
+    validFrom,
+  });
+  revalidatePath("/settings");
+  // A report that was refusing to build for want of this can build now.
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+
+  return {
+    ok: true,
+    message:
+      scheme === "UNION-OSS"
+        ? `${vatNumber} added as the one-stop registration, in force from ${validFrom}.`
+        : `${vatNumber} added for ${country}, in force from ${validFrom}.`,
+  };
+}
+
 const skuSchema = z.object({
   id: z.string().uuid().optional(),
   channel: z.string().trim().min(1),

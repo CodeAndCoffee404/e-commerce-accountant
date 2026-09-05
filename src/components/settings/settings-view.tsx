@@ -29,6 +29,7 @@ import {
   restoreDefaults,
   saveAllegroCurrency,
   saveChannelRule,
+  createSellerVatNumber,
   saveSellerVatNumber,
   saveSkuMapping,
   saveVatRate,
@@ -706,9 +707,11 @@ function Rules({
  * change the scheme of the one-stop registration from a select and take every
  * export sale out of Off-Amazon Sales, with no error anywhere.
  *
- * Nothing is added or deleted here for the same reason: which registrations a
- * company needs follows from the reports it runs, so a fifth country is a
- * change to the rules rather than a row somebody types in.
+ * Adding one is its own action, with its own dialog, because it is the one
+ * moment the pair is chosen rather than inherited — and there was no such
+ * moment for a while, which left a company created after seeding stopped
+ * handing registrations out unable to build anything and unable to say why.
+ * Nothing is deleted here: a registration that ends is closed with a date.
  */
 function SellerVat({
   data,
@@ -722,9 +725,16 @@ function SellerVat({
   pending: boolean;
 }) {
   const [editing, setEditing] = useState<SellerVatNumber | null>(null);
+  const [adding, setAdding] = useState(false);
 
   return (
     <>
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Button type="primary" disabled={!canEdit} onClick={() => setAdding(true)}>
+          Add registration
+        </Button>
+      </Space>
+
       <Typography.Paragraph type="secondary">
         The numbers reports quote as the seller. Correct one that was entered wrongly, give it an
         end date once the registration lapses, or move its start date forward to say the number
@@ -775,6 +785,33 @@ function SellerVat({
               </Button>
             ),
           },
+        ]}
+      />
+
+      <EditModal
+        title="Add a VAT registration"
+        open={adding}
+        initial={{ scheme: "REGULAR", validFrom: new Date().toISOString().slice(0, 10) }}
+        onClose={() => setAdding(false)}
+        onSubmit={(values) => run(() => createSellerVatNumber(values))}
+        fields={[
+          {
+            name: "country",
+            label: "Country code",
+            required: true,
+            placeholder: "PL",
+            help: "For one-stop, the country the registration was made in — not where the goods go.",
+          },
+          {
+            name: "scheme",
+            label: "Scheme",
+            required: true,
+            type: "select",
+            options: SCHEME_OPTIONS,
+            help: "REGULAR is a registration held in one country for sales taxed there. UNION-OSS is the single one-stop registration every distance sale is reported under.",
+          },
+          { name: "vatNumber", label: "VAT number", required: true, placeholder: "PL5263307678" },
+          { name: "validFrom", label: "Valid from", required: true, placeholder: "2026-01-01" },
         ]}
       />
 
