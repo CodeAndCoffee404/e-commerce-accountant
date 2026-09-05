@@ -39,6 +39,7 @@ vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
 const { getDb, schema } = await import("@/lib/db");
 const { acrossTenants, withTenant } = await import("@/lib/db/tenant");
 const { ensurePeriods } = await import("@/lib/periods/ensure");
+const { ANCHOR_KEY, PERIODS_CHANNEL } = await import("@/lib/periods/schedule");
 const { loadDashboard } = await import("@/lib/dashboard/queries");
 const { inRequest } = await import("./helpers/request-scope");
 
@@ -103,9 +104,27 @@ describe.skipIf(!HAS_DB)("a company that files from an earlier month", () => {
     expect(data.month).toBe("2026.08 August");
   });
 
+  it("agrees with itself about which months exist", inRequest(async () => {
+    const id = await companyFilingFromJune();
+
+    const data = await withTenant(id, () => loadDashboard(id));
+
+    // The picker, the history matrix and the checklist are three views of one
+    // list, and a month opened during this very load has to be in all of them
+    // — not in the picker on this load and the rest on the next.
+    expect(data.months).toContain("2026.06 June");
+    expect(data.matrix.months).toEqual(data.months);
+    expect(data.reports.length).toBeGreaterThan(0);
+  }));
+
   it("catches a company already anchored too late", async () => {
     const id = await companyFilingFromJune();
 
+    // The keys come from the module rather than being spelled out: this test
+    // was first written with "anchors" for a column whose key is "anchor",
+    // which meant no anchor was stored at all and it passed by taking the
+    // first-anchoring path — the one case it was not meant to cover.
+    //
     // The state the fix has to reach, not just prevent: the company was
     // created, the anchor was written at September, and only then were the
     // reports told they begin in June. Opening periods again has to move the
@@ -113,8 +132,8 @@ describe.skipIf(!HAS_DB)("a company that files from an earlier month", () => {
     await acrossTenants(() =>
       getDb().insert(schema.channelRules).values({
         tenantId: id,
-        channel: "periods",
-        key: "anchors",
+        channel: PERIODS_CHANNEL,
+        key: ANCHOR_KEY,
         value: { month: "2026-09-01", quarter: "2026-07-01" },
       }),
     );
