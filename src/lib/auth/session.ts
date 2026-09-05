@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { auth } from "@/auth";
 import { loadAccessFor } from "@/lib/access/queries";
@@ -78,8 +79,14 @@ export async function requireUser(): Promise<CurrentUser> {
  * with a status rather than a redirect.
  *
  * `role` is null when the session names a company this person is not in.
+ *
+ * Cached for the request. Five independent paths ask this on a single page —
+ * the layout, the page, the access check, the section guard — and each used to
+ * pay for the same three database reads over again. Per request, so nothing is
+ * remembered between them: somebody stood down is still stood down on their
+ * very next click.
  */
-export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
+export const signedIn = cache(async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
   role: MembershipRole | null;
   isSuperAdmin: boolean;
 }) | null> {
@@ -87,19 +94,27 @@ export async function signedIn(): Promise<(Omit<CurrentUser, "role"> & {
 
   if (!session?.user?.id || !session.user.email || !session.tenantId) return null;
 
+  // From the database, not the token: a super-admin who has been stood down,
+  // a role that changed, a company that was closed — all should take effect on
+  // this person's next request rather than at their next sign-in. Three
+  // questions with no bearing on each other, so they are asked together.
+  const [superAdmin, role, blocked] = await Promise.all([
+    isSuperAdmin(session.user.id),
+    roleFor(session.user.email, session.tenantId),
+    isCompanyBlocked(session.tenantId),
+  ]);
+
   return {
     id: session.user.id,
     name: session.user.name ?? null,
     email: session.user.email,
     image: session.user.image ?? null,
     tenantId: session.tenantId,
-    // From the database, not the token: a super-admin who has been stood down
-    // should stop being one on their next request, not at their next sign-in.
-    isSuperAdmin: await isSuperAdmin(session.user.id),
-    role: await roleFor(session.user.email, session.tenantId),
-    companyBlocked: await isCompanyBlocked(session.tenantId),
+    isSuperAdmin: superAdmin,
+    role,
+    companyBlocked: blocked,
   };
-}
+});
 
 /**
  * The signed-in person and what they may do, for a route handler. Null covers

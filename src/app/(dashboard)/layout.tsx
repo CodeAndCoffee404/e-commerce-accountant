@@ -21,7 +21,11 @@ async function dashboardLayout(
 ) {
   // proxy.ts only checks that a cookie exists. This is the check that counts.
   const user = await requireAccess();
-  const needsAttention = await countNeedsAttention(user.tenantId);
+  // Started, not awaited. The badge is a count over the whole ledger and the
+  // shell has no reason to wait for it: the sidebar, the header and the page's
+  // own skeleton can all be on screen while it is still being counted. It used
+  // to be the last thing between a person and any pixel at all.
+  const needsAttention = countNeedsAttention(user.tenantId);
   const current = companies.find((company) => company.id === user.tenantId);
 
   return (

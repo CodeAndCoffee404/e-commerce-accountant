@@ -16,6 +16,7 @@ import { Alert, Badge, Button, Layout, Menu, Space, Spin, Tag, theme, Tooltip, T
 import Image from "next/image";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense, use } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 import { HelpModal } from "@/components/layout/help-modal";
@@ -67,8 +68,14 @@ export function AppShell({
   user: CurrentUser;
   /** What this person's role may see. Sections closed to it are not in the menu. */
   access: AccessMap;
-  /** Rows a person has to look at. Zero hides the badge entirely. */
-  needsAttention: number;
+  /**
+   * Rows a person has to look at, still being counted.
+   *
+   * A promise rather than a number so the shell renders without it: the count
+   * reads the whole ledger, and nobody should look at a blank screen for it.
+   * Zero hides the badge entirely.
+   */
+  needsAttention: Promise<number>;
   /** The company being worked in, named in the bar so it is never a guess. */
   company: string;
   /** Closed: readable, and nothing in it changeable. Said once, at the top. */
@@ -104,8 +111,12 @@ export function AppShell({
     // seen and acted on — one expander below the file that produced it. Without
     // it a flagged row waits until somebody happens to look.
     const badge =
-      item.key === "uploads" && needsAttention > 0 ? (
-        <Badge count={needsAttention} size="small" offset={[6, -2]} />
+      item.key === "uploads" ? (
+        // No fallback: a badge that is not there yet should be nothing, not a
+        // placeholder that shifts the menu item when the number arrives.
+        <Suspense fallback={null}>
+          <AttentionBadge count={needsAttention} />
+        </Suspense>
       ) : null;
 
     return {
@@ -298,4 +309,13 @@ export function AppShell({
       </Layout>
     </Layout>
   );
+}
+
+/** The count, once it has arrived. Nothing at all while it has not, or when it is zero. */
+function AttentionBadge({ count }: { count: Promise<number> }) {
+  const needsAttention = use(count);
+
+  if (needsAttention === 0) return null;
+
+  return <Badge count={needsAttention} size="small" offset={[6, -2]} />;
 }

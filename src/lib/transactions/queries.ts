@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { and, count, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
@@ -204,7 +206,16 @@ export async function transactionTotals(
 }
 
 /** Current rows a person still has to look at. Drives the sidebar badge. */
-export async function countNeedsAttention(tenantId: string): Promise<number> {
+/**
+ * Rows this company still has to look at — the number on the sidebar badge.
+ *
+ * Cached for the request: the layout asks for the badge and the dashboard asks
+ * again for its own checklist, and there is no reading of this that wants two
+ * different answers within one render.
+ */
+export const countNeedsAttention = cache(async function countNeedsAttention(
+  tenantId: string,
+): Promise<number> {
   const [row] = await getDb()
     .select({ value: count() })
     .from(schema.transactions)
@@ -217,4 +228,4 @@ export async function countNeedsAttention(tenantId: string): Promise<number> {
     );
 
   return row?.value ?? 0;
-}
+});
